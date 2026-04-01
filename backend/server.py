@@ -832,9 +832,23 @@ async def delete_template(template_id: str, user: User = Depends(get_current_use
     await db.templates.delete_one({"template_id": template_id, "user_id": user.user_id})
     return {"message": "Template deleted"}
 
+def _build_images_html(images: list) -> str:
+    """Build HTML img tags from a list of image objects with base64 dataUrl."""
+    if not images:
+        return ""
+    html = ""
+    for i, img in enumerate(images):
+        if not img:
+            continue
+        data_url = img.get("dataUrl", "") if isinstance(img, dict) else ""
+        name = img.get("name", f"Image {i+1}") if isinstance(img, dict) else f"Image {i+1}"
+        if data_url:
+            html += f'<div class="img-container"><img src="{data_url}" alt="{name}" style="max-width:100%;height:auto;border:1px solid #e2e8f0;border-radius:6px;" /><div class="img-caption">{name}</div></div>'
+    return html
+
 @api_router.post("/templates/{template_id}/export")
 async def export_template(template_id: str, request: Request, user: User = Depends(get_current_user)):
-    """Export a template as Word-compatible HTML document"""
+    """Export a template as Word-compatible HTML document with embedded images"""
     from fastapi.responses import Response as FastAPIResponse
     
     data = await request.json()
@@ -847,6 +861,7 @@ async def export_template(template_id: str, request: Request, user: User = Depen
     subject = content.get("subject", "General")
     category = content.get("category", "General")
     body = content.get("body", "")
+    images = content.get("images", [])
     
     meta = f'<strong>Subject:</strong> {subject} | <strong>Category:</strong> {category} | <strong>Created:</strong> {current_date}'
     if user_name:
@@ -854,22 +869,32 @@ async def export_template(template_id: str, request: Request, user: User = Depen
     
     styles = """body{font-family:'Segoe UI',Tahoma,sans-serif;margin:20px;line-height:1.6;color:#374151}
     h1{color:#1f2937;border-bottom:2px solid #e5e7eb;padding-bottom:10px;margin-bottom:20px}
-    .meta{color:#6b7280;font-size:14px;margin-bottom:20px}.content{line-height:1.8}"""
+    h3{color:#2D5A27;margin:18px 0 8px}
+    .meta{color:#6b7280;font-size:14px;margin-bottom:20px}.content{line-height:1.8}
+    .img-container{margin:12px 0;text-align:center}
+    .img-container img{max-width:100%;height:auto;border:1px solid #e2e8f0;border-radius:6px}
+    .img-caption{color:#6b7280;font-size:11px;margin-top:4px;text-align:center}
+    .question-block{margin:10px 0;padding:12px 16px;background:#f8fafc;border-left:3px solid #4B0082;font-size:11pt}"""
+    
+    # Build images HTML
+    images_html = _build_images_html(images)
     
     if template_type == "scientific":
         body_html = f"""<div style="display:table;width:100%">
-            <div style="display:table-cell;width:30%;vertical-align:top;padding:15px;background:#f8fafc;border:1px solid #e2e8f0">
-                <h4>Images</h4><p style="color:#9ca3af">(Attach images when editing)</p>
+            <div style="display:table-cell;width:35%;vertical-align:top;padding:15px;background:#f8fafc;border:1px solid #e2e8f0">
+                <h3 style="margin-top:0">Diagrams &amp; Photos</h3>
+                {images_html or '<p style="color:#9ca3af;font-size:12px">No images uploaded</p>'}
             </div>
-            <div style="display:table-cell;width:70%;vertical-align:top;padding-left:20px">
+            <div style="display:table-cell;width:65%;vertical-align:top;padding-left:20px">
                 <h1>{title}</h1><div class="meta">{meta}</div><div class="content">{body}</div>
             </div></div>"""
     elif template_type == "geography":
         questions = content.get("questions", [])
-        q_html = "".join(f'<p style="margin:10px 0;padding:10px;background:#f8fafc;border-left:3px solid #4B0082"><strong>Q{i+1}:</strong> {q}</p>' for i, q in enumerate(questions) if q)
+        q_html = "".join(f'<div class="question-block"><strong>Q{i+1}:</strong> {q}</div>' for i, q in enumerate(questions) if q)
         body_html = f"""<h1>{title}</h1><div class="meta">{meta}</div>
-            <h3>Images</h3><p style="color:#9ca3af">(Attach geography/map images when editing)</p>
-            <h3>Questions</h3>{q_html or '<p>No questions added</p>'}"""
+            <h3>Geography Images / Maps</h3>
+            {images_html or '<p style="color:#9ca3af;font-size:12px">No images uploaded</p>'}
+            <h3>Questions</h3>{q_html or '<p style="color:#9ca3af">No questions added</p>'}"""
     elif template_type in ("mathematics", "physics", "chemistry"):
         styles += " .content{white-space:pre-wrap;font-family:'Courier New',monospace}"
         body_html = f'<h1>{title}</h1><div class="meta">{meta}</div><div class="content">{body}</div>'
@@ -1290,31 +1315,56 @@ def build_download_content(resource_type: str, resource: dict) -> tuple:
         subject = content.get("subject", "")
         category = content.get("category", "")
         tpl_type = resource.get("type", "basic")
+        images = content.get("images", [])
 
         extra_style = ""
         if tpl_type in ("mathematics", "physics", "chemistry"):
             extra_style = " .content { white-space: pre-wrap; font-family: 'Courier New', monospace; }"
+
+        extra_style += """
+        .img-container{margin:12px 0;text-align:center}
+        .img-container img{max-width:100%;height:auto;border:1px solid #e2e8f0;border-radius:6px}
+        .img-caption{color:#6b7280;font-size:9pt;margin-top:4px;text-align:center}
+        """
 
         meta_line = f'<strong>Subject:</strong> {subject}'
         if category:
             meta_line += f' | <strong>Category:</strong> {category}'
         meta_line += f' | <strong>Type:</strong> {tpl_type.title()}'
 
-        questions_html = ""
-        if tpl_type == "geography":
+        images_html = _build_images_html(images)
+
+        if tpl_type == "scientific":
+            body_html = f"""<div style="display:table;width:100%">
+                <div style="display:table-cell;width:35%;vertical-align:top;padding:15px;background:#f8fafc;border:1px solid #e2e8f0">
+                    <h2 style="margin-top:0;font-size:12pt">Diagrams &amp; Photos</h2>
+                    {images_html or '<p style="color:#9ca3af;font-size:10pt">No images uploaded</p>'}
+                </div>
+                <div style="display:table-cell;width:65%;vertical-align:top;padding-left:20px">
+                    <div class="content">{body}</div>
+                </div></div>"""
+        elif tpl_type == "geography":
             questions = content.get("questions", [])
+            q_html = ""
             if questions:
-                questions_html = '<h2>Questions</h2>'
+                q_html = '<h2>Questions</h2>'
                 for i, q in enumerate(questions):
                     if q:
-                        questions_html += f'<div class="section"><p><strong>Q{i+1}:</strong> {q}</p></div>'
+                        q_html += f'<div class="section" style="border-left:3px solid #7C3AED"><p><strong>Q{i+1}:</strong> {q}</p></div>'
+
+            body_html = f"""<h2>Geography Images / Maps</h2>
+                {images_html or '<p style="color:#9ca3af;font-size:10pt">No images uploaded</p>'}
+                {q_html}"""
+        else:
+            body_html = f'<div class="content">{body}</div>'
+            if images_html:
+                body_html += f'<h2>Images</h2>{images_html}'
 
         html = f"""<html {word_ns}>
         <head><meta charset="utf-8"><style>{doc_styles}{extra_style}</style></head><body>
         <h1>{title}</h1>
         <p class="subtitle">{meta_line}</p>
-        <div class="content">{body}</div>
-        {questions_html}
+        {body_html}
         <div class="footer">Shared via MiLesson Plan</div>
         </body></html>"""
         filename = f"{title.replace(' ','_')}_{tpl_type}.doc"

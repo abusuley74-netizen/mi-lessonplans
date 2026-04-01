@@ -66,13 +66,10 @@ const ScientificTemplate = ({ template, onBack, onSaved }) => {
 
   const handleExport = async () => {
     setExporting(true);
-    const imgNote = uploadedImages.filter(Boolean).length > 0
-      ? `[${uploadedImages.filter(Boolean).length} image(s) attached - see template editor]\n\n`
-      : '';
     await fetchAndDownload(
       `${API_URL}/api/templates/${template.template_id}/export`,
       `${(title || 'scientific').replace(/\s+/g, '_')}_scientific.doc`,
-      { type: template.type, content: { title, subject, category, body: imgNote + content } }
+      { type: template.type, content: { title, subject, category, body: content, images: uploadedImages.filter(Boolean) } }
     );
     setExporting(false);
   };

@@ -83,7 +83,7 @@ const GeographyTemplate = ({ template, onBack, onSaved }) => {
     await fetchAndDownload(
       `${API_URL}/api/templates/${template.template_id}/export`,
       `${(title || 'geography').replace(/\s+/g, '_')}_geography.doc`,
-      { type: template.type, content: { title, subject, category, body: buildExportBody() } }
+      { type: template.type, content: { title, subject, category, body: '', images: uploadedImages.filter(Boolean), questions } }
     );
     setExporting(false);
   };
