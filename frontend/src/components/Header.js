@@ -60,14 +60,15 @@ const Header = () => {
             {user && (
               <>
                 <div className="flex items-center gap-3">
-                  {user.picture ? (
+                  {(user.custom_picture || user.picture) ? (
                     <img 
-                      src={user.picture} 
+                      src={user.custom_picture || user.picture} 
                       alt={user.name} 
-                      className="w-8 h-8 rounded-full border-2 border-[#E4DFD5]"
+                      className="w-8 h-8 rounded-full border-2 border-[#E4DFD5] object-cover"
+                      data-testid="header-profile-pic"
                     />
                   ) : (
-                    <div className="w-8 h-8 rounded-full bg-[#2D5A27] flex items-center justify-center text-white font-medium">
+                    <div className="w-8 h-8 rounded-full bg-[#2D5A27] flex items-center justify-center text-white font-medium" data-testid="header-profile-avatar">
                       {user.name?.charAt(0) || 'U'}
                     </div>
                   )}

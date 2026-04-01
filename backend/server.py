@@ -207,8 +207,11 @@ async def create_session(request: Request, response: Response):
 
 @api_router.get("/auth/me")
 async def get_me(user: User = Depends(get_current_user)):
-    """Get current authenticated user"""
-    return user.model_dump()
+    """Get current authenticated user including custom picture"""
+    user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
+    if not user_doc:
+        return user.model_dump()
+    return user_doc
 
 @api_router.post("/auth/logout")
 async def logout(request: Request, response: Response):
@@ -730,6 +733,65 @@ async def delete_upload(upload_id: str, user: User = Depends(get_current_user)):
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Upload not found")
     return {"message": "Upload deleted"}
+
+# ==================== PROFILE ROUTES ====================
+
+@api_router.post("/profile/upload-picture")
+async def upload_profile_picture(request: Request, user: User = Depends(get_current_user)):
+    """Upload a profile picture (stores as base64 in MongoDB)"""
+    import base64
+    
+    form = await request.form()
+    file = form.get("file")
+    
+    if not file:
+        raise HTTPException(status_code=400, detail="No file uploaded")
+    
+    contents = await file.read()
+    
+    # Limit to 2MB
+    if len(contents) > 2 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File too large. Max 2MB.")
+    
+    # Detect content type
+    content_type = file.content_type or "image/jpeg"
+    if content_type not in ["image/jpeg", "image/png", "image/webp", "image/gif"]:
+        raise HTTPException(status_code=400, detail="Only JPEG, PNG, WebP, GIF images allowed")
+    
+    # Store as data URI
+    b64 = base64.b64encode(contents).decode('utf-8')
+    picture_data_uri = f"data:{content_type};base64,{b64}"
+    
+    await db.users.update_one(
+        {"user_id": user.user_id},
+        {"$set": {"custom_picture": picture_data_uri}}
+    )
+    
+    return {"picture": picture_data_uri, "message": "Profile picture updated"}
+
+@api_router.get("/profile")
+async def get_profile(user: User = Depends(get_current_user)):
+    """Get full profile including custom picture"""
+    user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
+    if not user_doc:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user_doc
+
+@api_router.put("/profile")
+async def update_profile(request: Request, user: User = Depends(get_current_user)):
+    """Update profile fields"""
+    data = await request.json()
+    allowed_fields = {"name", "school", "location", "bio"}
+    update_data = {k: v for k, v in data.items() if k in allowed_fields}
+    
+    if update_data:
+        await db.users.update_one(
+            {"user_id": user.user_id},
+            {"$set": update_data}
+        )
+    
+    user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
+    return user_doc
 
 # ==================== UTILITY ROUTES ====================
 
