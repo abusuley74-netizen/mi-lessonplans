@@ -1170,8 +1170,10 @@ def build_resource_preview(resource_type: str, resource: dict) -> dict:
     if resource_type == "lesson":
         return {"subject": resource.get("subject", ""), "grade": resource.get("grade", ""), "topic": resource.get("topic", ""), "syllabus": resource.get("syllabus", "")}
     elif resource_type == "note":
+        import re
         content = resource.get("content", "")
-        return {"title": resource.get("title", ""), "preview": content[:200] if content else ""}
+        plain = re.sub(r'<[^>]+>', '', content) if content else ""
+        return {"title": resource.get("title", ""), "preview": plain[:200] if plain else ""}
     elif resource_type == "scheme":
         return {"subject": resource.get("subject", ""), "syllabus": resource.get("syllabus", ""), "school": resource.get("school", ""), "term": resource.get("term", ""), "competency_count": len(resource.get("competencies", []))}
     elif resource_type == "template":
