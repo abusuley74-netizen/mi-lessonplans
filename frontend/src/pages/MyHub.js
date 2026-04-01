@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { 
   Upload, FileText, Layout, Mic, FolderOpen, Calendar, 
   BarChart3, CreditCard, User, ChevronRight, Plus,
-  BookOpen, Trash2, Eye, Download, Search, PanelLeftClose, PanelLeftOpen
+  BookOpen, Trash2, Eye, Download, Search, PanelLeftClose, PanelLeftOpen, Link2
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import MyFiles from '../components/MyFiles';
@@ -17,6 +17,7 @@ import ProfileSettings from '../components/ProfileSettings';
 import UploadMaterials from '../components/UploadMaterials';
 import SchemeOfWorkForm from '../components/SchemeOfWorkForm';
 import Templates from '../components/Templates';
+import MySharedLinks from '../components/MySharedLinks';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -32,6 +33,7 @@ const MyHub = () => {
     { id: 'templates', label: 'Templates', icon: Layout, emoji: '📋' },
     { id: 'dictation', label: 'Dictation', icon: Mic, emoji: '📝' },
     { id: 'my-files', label: 'My Files', icon: FolderOpen, emoji: '📁' },
+    { id: 'shared-links', label: 'Shared Links', icon: Link2, emoji: '🔗' },
     { id: 'scheme-of-work', label: 'Scheme of Work', icon: Calendar, emoji: '📅' },
     { id: 'my-activities', label: 'My Activities', icon: BarChart3, emoji: '📊' },
     { id: 'payment-settings', label: 'Payment Settings', icon: CreditCard, emoji: '💰' },
@@ -48,6 +50,8 @@ const MyHub = () => {
         return <Dictation />;
       case 'my-files':
         return <MyFiles />;
+      case 'shared-links':
+        return <MySharedLinks />;
       case 'my-activities':
         return <MyActivities />;
       case 'payment-settings':

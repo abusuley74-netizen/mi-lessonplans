@@ -6,6 +6,7 @@ import LoginPage from './pages/LoginPage';
 import Dashboard from './pages/Dashboard';
 import MyHub from './pages/MyHub';
 import SubscribePage from './pages/SubscribePage';
+import SharedView from './components/SharedView';
 import { Toaster } from './components/ui/sonner';
 import './index.css';
 
@@ -50,6 +51,7 @@ const AppRouter = () => {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/shared/:code" element={<SharedView />} />
       <Route 
         path="/dashboard" 
         element={

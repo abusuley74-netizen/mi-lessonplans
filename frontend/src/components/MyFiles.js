@@ -2,9 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { 
   BookOpen, Trash2, Eye, Download, Search,
-  Printer, X, FileText, Mic, Upload, FolderOpen, Play, Volume2, Calendar
+  Printer, X, FileText, Mic, Upload, FolderOpen, Play, Volume2, Calendar, Link2
 } from 'lucide-react';
 import { toast } from 'sonner';
+import ShareModal from './ShareModal';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -48,6 +49,7 @@ const MyFiles = () => {
   const [dictations, setDictations] = useState([]);
   const [uploads, setUploads] = useState([]);
   const [schemes, setSchemes] = useState([]);
+  const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
@@ -57,6 +59,7 @@ const MyFiles = () => {
   const [generatingAudio, setGeneratingAudio] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null); // {type, id, name}
   const [viewHtml, setViewHtml] = useState(null); // HTML string for scheme/lesson view
+  const [shareTarget, setShareTarget] = useState(null); // {type, id, name}
   const audioRef = useRef(null);
   const printRef = useRef(null);
 
@@ -66,18 +69,21 @@ const MyFiles = () => {
 
   const fetchAllFiles = async () => {
     try {
-      const [lessonsRes, notesRes, dictationsRes, uploadsRes, schemesRes] = await Promise.all([
+      const [lessonsRes, notesRes, dictationsRes, uploadsRes, schemesRes, templatesRes] = await Promise.all([
         axios.get(`${API_URL}/api/lessons`, { withCredentials: true }),
         axios.get(`${API_URL}/api/notes`, { withCredentials: true }),
         axios.get(`${API_URL}/api/dictations`, { withCredentials: true }),
         axios.get(`${API_URL}/api/uploads`, { withCredentials: true }),
         axios.get(`${API_URL}/api/schemes`, { withCredentials: true }),
+        axios.get(`${API_URL}/api/templates`, { withCredentials: true }),
       ]);
       setLessons(lessonsRes.data.lessons || []);
       setNotes(notesRes.data.notes || []);
       setDictations(dictationsRes.data.dictations || []);
       setUploads(uploadsRes.data.uploads || []);
       setSchemes(schemesRes.data.schemes || []);
+      // Only show user-saved templates (not defaults)
+      setTemplates((templatesRes.data.templates || []).filter(t => !t.is_default));
     } catch (error) {
       console.error('Error fetching files:', error);
     } finally {
@@ -130,6 +136,14 @@ const MyFiles = () => {
     setConfirmDelete(null);
   };
 
+  const handleDeleteTemplate = async (templateId) => {
+    try {
+      await axios.delete(`${API_URL}/api/templates/${templateId}`, { withCredentials: true });
+      setTemplates(templates.filter(t => t.template_id !== templateId));
+    } catch (error) { console.error('Error deleting template:', error); }
+    setConfirmDelete(null);
+  };
+
   const executeDelete = () => {
     if (!confirmDelete) return;
     const { type, id } = confirmDelete;
@@ -138,6 +152,7 @@ const MyFiles = () => {
     else if (type === 'dictation') handleDeleteDictation(id);
     else if (type === 'upload') handleDeleteUpload(id);
     else if (type === 'scheme') handleDeleteScheme(id);
+    else if (type === 'template') handleDeleteTemplate(id);
   };
 
   const handlePlayDictation = async (dictation) => {
@@ -300,9 +315,10 @@ const MyFiles = () => {
     ...dictations.map(d => ({ ...d, _type: 'dictation', _name: d.title, _date: d.created_at })),
     ...uploads.map(u => ({ ...u, _type: 'upload', _name: u.name, _date: u.created_at })),
     ...schemes.map(s => ({ ...s, _type: 'scheme', _name: `${s.subject || 'Scheme'} - ${s.syllabus}`, _date: s.created_at })),
+    ...templates.map(t => ({ ...t, _type: 'template', _name: t.name || t.content?.title || 'Template', _date: t.updated_at || t.created_at })),
   ].filter(file => {
     const matchesSearch = (file._name || '').toLowerCase().includes(searchTerm.toLowerCase());
-    const typeMap = { lessons: 'lesson', notes: 'note', dictations: 'dictation', uploads: 'upload', schemes: 'scheme' };
+    const typeMap = { lessons: 'lesson', notes: 'note', dictations: 'dictation', uploads: 'upload', schemes: 'scheme', templates: 'template' };
     const matchesType = filterType === 'all' || file._type === (typeMap[filterType] || filterType);
     return matchesSearch && matchesType;
   }).sort((a, b) => new Date(b._date) - new Date(a._date));
@@ -327,6 +343,9 @@ const MyFiles = () => {
           <div className="flex items-center justify-between pt-3 border-t border-[#E4DFD5]">
             <span className="text-xs text-[#7A8A76]">{new Date(file.created_at).toLocaleDateString()}</span>
             <div className="flex items-center gap-3">
+              <button onClick={() => setShareTarget({ type: 'lesson', id: file.lesson_id, name: file.topic })} className="flex items-center gap-1 text-sm text-[#3498db] font-medium hover:text-[#2176ad]" data-testid={`share-lesson-${file.lesson_id}`}>
+                <Link2 className="w-4 h-4" />Share
+              </button>
               <button onClick={() => fetchAndView(`${API_URL}/api/lessons/${file.lesson_id}/view`, setViewHtml)} className="flex items-center gap-1 text-sm text-[#2D5A27] font-medium hover:text-[#21441C]" data-testid={`view-lesson-${file.lesson_id}`}>
                 <Eye className="w-4 h-4" />View
               </button>
@@ -353,9 +372,14 @@ const MyFiles = () => {
           <div className="text-sm text-[#7A8A76] mb-4 line-clamp-2" dangerouslySetInnerHTML={{ __html: file.content?.substring(0, 100) }} />
           <div className="flex items-center justify-between pt-3 border-t border-[#E4DFD5]">
             <span className="text-xs text-[#7A8A76]">{new Date(file.created_at).toLocaleDateString()}</span>
-            <button onClick={() => setSelectedNote(file)} className="flex items-center gap-1 text-sm text-[#2D5A27] font-medium hover:text-[#21441C]" data-testid={`view-note-${file.note_id}`}>
-              <Eye className="w-4 h-4" />View
-            </button>
+            <div className="flex items-center gap-3">
+              <button onClick={() => setShareTarget({ type: 'note', id: file.note_id, name: file.title })} className="flex items-center gap-1 text-sm text-[#3498db] font-medium hover:text-[#2176ad]" data-testid={`share-note-${file.note_id}`}>
+                <Link2 className="w-4 h-4" />Share
+              </button>
+              <button onClick={() => setSelectedNote(file)} className="flex items-center gap-1 text-sm text-[#2D5A27] font-medium hover:text-[#21441C]" data-testid={`view-note-${file.note_id}`}>
+                <Eye className="w-4 h-4" />View
+              </button>
+            </div>
           </div>
         </div>
       );
@@ -378,7 +402,11 @@ const MyFiles = () => {
           <p className="text-sm text-[#7A8A76] mb-4 line-clamp-2">{file.text}</p>
           <div className="flex items-center justify-between pt-3 border-t border-[#E4DFD5]">
             <span className="text-xs text-[#7A8A76]">{new Date(file.created_at).toLocaleDateString()}</span>
-            <button
+            <div className="flex items-center gap-3">
+              <button onClick={() => setShareTarget({ type: 'dictation', id: file.dictation_id, name: file.title })} className="flex items-center gap-1 text-sm text-[#3498db] font-medium hover:text-[#2176ad]" data-testid={`share-dictation-${file.dictation_id}`}>
+                <Link2 className="w-4 h-4" />Share
+              </button>
+              <button
               onClick={() => handlePlayDictation(file)}
               disabled={isGenerating}
               className={`flex items-center gap-1 text-sm font-medium transition-colors ${isPlaying ? 'text-[#D95D39]' : 'text-[#2D5A27] hover:text-[#21441C]'}`}
@@ -392,6 +420,7 @@ const MyFiles = () => {
                 <><Play className="w-4 h-4" />Play</>
               )}
             </button>
+            </div>
           </div>
         </div>
       );
@@ -412,6 +441,30 @@ const MyFiles = () => {
           <div className="text-sm text-[#7A8A76] mb-4">{file.type}</div>
           <div className="pt-3 border-t border-[#E4DFD5]">
             <span className="text-xs text-[#7A8A76]">{new Date(file.created_at).toLocaleDateString()}</span>
+          </div>
+        </div>
+      );
+    }
+
+    // Template
+    if (file._type === 'template') {
+      const TYPE_COLORS = { basic: 'bg-gray-100 text-gray-700', scientific: 'bg-teal-100 text-teal-700', geography: 'bg-indigo-100 text-indigo-700', mathematics: 'bg-blue-100 text-blue-700', physics: 'bg-orange-100 text-orange-700', chemistry: 'bg-rose-100 text-rose-700' };
+      return (
+        <div key={file.template_id} className="bg-white border border-[#E4DFD5] rounded-xl p-5 hover:shadow-lg transition-shadow" data-testid={`file-template-${file.template_id}`}>
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <FileText className="w-4 h-4 text-[#2D5A27]" />
+              <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${TYPE_COLORS[file.type] || 'bg-gray-100 text-gray-700'}`}>{(file.type || 'basic').charAt(0).toUpperCase() + (file.type || 'basic').slice(1)} Template</span>
+            </div>
+            <button onClick={() => setConfirmDelete({ type: 'template', id: file.template_id, name: file.name || 'Template' })} className="text-[#7A8A76] hover:text-[#D95D39]" data-testid={`delete-template-${file.template_id}`}><Trash2 className="w-4 h-4" /></button>
+          </div>
+          <h3 className="font-heading font-semibold text-[#1A2E16] mb-2 line-clamp-2">{file.name || file.content?.title || 'Untitled Template'}</h3>
+          {file.description && <p className="text-sm text-[#7A8A76] mb-4 line-clamp-2">{file.description}</p>}
+          <div className="flex items-center justify-between pt-3 border-t border-[#E4DFD5]">
+            <span className="text-xs text-[#7A8A76]">{new Date(file.updated_at || file.created_at).toLocaleDateString()}</span>
+            <button onClick={() => setShareTarget({ type: 'template', id: file.template_id, name: file.name || 'Template' })} className="flex items-center gap-1 text-sm text-[#3498db] font-medium hover:text-[#2176ad]" data-testid={`share-template-${file.template_id}`}>
+              <Link2 className="w-4 h-4" />Share
+            </button>
           </div>
         </div>
       );
@@ -438,6 +491,9 @@ const MyFiles = () => {
         <div className="flex items-center justify-between pt-3 border-t border-[#E4DFD5]">
           <span className="text-xs text-[#7A8A76]">{new Date(file.created_at).toLocaleDateString()}</span>
           <div className="flex items-center gap-3">
+            <button onClick={() => setShareTarget({ type: 'scheme', id: file.scheme_id, name: file.subject || 'Scheme' })} className="flex items-center gap-1 text-sm text-[#3498db] font-medium hover:text-[#2176ad]" data-testid={`share-scheme-${file.scheme_id}`}>
+              <Link2 className="w-4 h-4" />Share
+            </button>
             <button onClick={() => fetchAndView(`${API_URL}/api/schemes/${file.scheme_id}/view`, setViewHtml)}
               className="flex items-center gap-1 text-sm text-[#2D5A27] font-medium hover:text-[#21441C]" data-testid={`view-scheme-${file.scheme_id}`}>
               <Eye className="w-4 h-4" />View
@@ -460,7 +516,7 @@ const MyFiles = () => {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-6 gap-4 mb-6">
         <div className="bg-white border border-[#E4DFD5] rounded-xl p-4" data-testid="stat-lessons">
           <p className="text-2xl font-bold text-[#1A2E16]">{lessons.length}</p>
           <p className="text-sm text-[#7A8A76]">Lesson Plans</p>
@@ -476,6 +532,10 @@ const MyFiles = () => {
         <div className="bg-white border border-[#E4DFD5] rounded-xl p-4" data-testid="stat-dictations">
           <p className="text-2xl font-bold text-[#1A2E16]">{dictations.length}</p>
           <p className="text-sm text-[#7A8A76]">Dictations</p>
+        </div>
+        <div className="bg-white border border-[#E4DFD5] rounded-xl p-4" data-testid="stat-templates">
+          <p className="text-2xl font-bold text-[#1A2E16]">{templates.length}</p>
+          <p className="text-sm text-[#7A8A76]">Templates</p>
         </div>
         <div className="bg-white border border-[#E4DFD5] rounded-xl p-4" data-testid="stat-uploads">
           <p className="text-2xl font-bold text-[#1A2E16]">{uploads.length}</p>
@@ -497,6 +557,7 @@ const MyFiles = () => {
           <option value="schemes">Schemes of Work</option>
           <option value="notes">Notes</option>
           <option value="dictations">Dictations</option>
+          <option value="templates">Templates</option>
           <option value="uploads">Uploads</option>
         </select>
       </div>
@@ -621,6 +682,15 @@ const MyFiles = () => {
           </div>
         </div>
       )}
+
+      {/* Share Modal */}
+      <ShareModal
+        isOpen={!!shareTarget}
+        onClose={() => setShareTarget(null)}
+        resourceType={shareTarget?.type || ''}
+        resourceId={shareTarget?.id || ''}
+        resourceName={shareTarget?.name || ''}
+      />
     </div>
   );
 };
