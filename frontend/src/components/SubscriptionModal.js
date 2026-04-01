@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import { X, Check, Crown, Zap, Star } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { toast } from 'sonner';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -54,10 +55,10 @@ const SubscriptionModal = ({ isOpen, onClose }) => {
       );
       await refreshUser();
       onClose();
-      alert('Subscription activated! (Demo Mode - Real payment will use PesaPal)');
+      toast.success('Subscription activated! (Demo Mode - Real payment will use PesaPal)');
     } catch (error) {
       console.error('Subscription error:', error);
-      alert('Subscription failed. Please try again.');
+      toast.error('Subscription failed. Please try again.');
     } finally {
       setLoading(false);
     }

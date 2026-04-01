@@ -6,6 +6,7 @@ import {
   FileText, Check, Undo, Redo, Type, Palette, Strikethrough,
   Minus
 } from 'lucide-react';
+import { toast } from 'sonner';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -67,13 +68,13 @@ const CreateNotes = () => {
 
   const handleSave = async () => {
     if (!title.trim()) {
-      alert('Please enter a title for your note');
+      toast.warning('Please enter a title for your note');
       return;
     }
     
     const content = editorRef.current?.innerHTML || '';
     if (!content.trim() || content === '<br>') {
-      alert('Please write some content');
+      toast.warning('Please write some content');
       return;
     }
 
@@ -92,7 +93,7 @@ const CreateNotes = () => {
       if (editorRef.current) editorRef.current.innerHTML = '';
     } catch (error) {
       console.error('Error saving note:', error);
-      alert('Failed to save note. Please try again.');
+      toast.error('Failed to save note. Please try again.');
     } finally {
       setSaving(false);
     }

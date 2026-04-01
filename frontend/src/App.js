@@ -6,6 +6,7 @@ import LoginPage from './pages/LoginPage';
 import Dashboard from './pages/Dashboard';
 import MyHub from './pages/MyHub';
 import SubscribePage from './pages/SubscribePage';
+import { Toaster } from './components/ui/sonner';
 import './index.css';
 
 // Protected Route Component
@@ -84,6 +85,7 @@ function App() {
     <AuthProvider>
       <BrowserRouter>
         <AppRouter />
+        <Toaster position="top-right" richColors closeButton />
       </BrowserRouter>
     </AuthProvider>
   );

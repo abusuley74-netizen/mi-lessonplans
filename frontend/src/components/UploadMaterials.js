@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import axios from 'axios';
 import { Upload, File, X, Check, AlertCircle } from 'lucide-react';
+import { toast } from 'sonner';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -25,11 +26,11 @@ const UploadMaterials = () => {
     const selectedFiles = Array.from(e.target.files);
     const validFiles = selectedFiles.filter(file => {
       if (!ALLOWED_TYPES.includes(file.type)) {
-        alert(`${file.name} is not a supported file type`);
+        toast.warning(`${file.name} is not a supported file type`);
         return false;
       }
       if (file.size > MAX_SIZE) {
-        alert(`${file.name} is too large. Maximum size is 10MB`);
+        toast.warning(`${file.name} is too large. Maximum size is 10MB`);
         return false;
       }
       return true;

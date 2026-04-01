@@ -4,6 +4,9 @@ import {
   FileText, FlaskConical, Globe, Calculator, Atom, TestTubes,
   Download, Save, Check, X, ChevronLeft, Loader2, Lock
 } from 'lucide-react';
+import MathTemplate from './MathTemplate';
+import PhysicsTemplate from './PhysicsTemplate';
+import ChemistryTemplate from './ChemistryTemplate';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -211,6 +214,11 @@ const Templates = () => {
   useEffect(() => { fetchTemplates(); }, []);
 
   if (editing) {
+    const specialEditors = { mathematics: MathTemplate, physics: PhysicsTemplate, chemistry: ChemistryTemplate };
+    const SpecialEditor = specialEditors[editing.type];
+    if (SpecialEditor) {
+      return <SpecialEditor template={editing} onBack={() => setEditing(null)} onSaved={fetchTemplates} />;
+    }
     return <TemplateEditor template={editing} onBack={() => setEditing(null)} onSaved={fetchTemplates} />;
   }
 

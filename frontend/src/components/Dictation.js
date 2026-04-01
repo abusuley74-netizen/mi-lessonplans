@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import { Volume2, Languages, Loader2, Save, Play, Download } from 'lucide-react';
+import { toast } from 'sonner';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -34,11 +35,11 @@ const Dictation = () => {
 
   const handleGenerate = async () => {
     if (!text.trim()) {
-      alert('Please enter some text to convert to speech');
+      toast.warning('Please enter some text to convert to speech');
       return;
     }
     if (isOverLimit) {
-      alert(`Please reduce your text to ${MAX_WORDS} words or less`);
+      toast.warning(`Please reduce your text to ${MAX_WORDS} words or less`);
       return;
     }
 
@@ -56,7 +57,7 @@ const Dictation = () => {
       setAudioUrl(url);
     } catch (error) {
       console.error('Error generating audio:', error);
-      alert('Failed to generate audio. Please try again.');
+      toast.error('Failed to generate audio. Please try again.');
     } finally {
       setIsGenerating(false);
     }
@@ -64,11 +65,11 @@ const Dictation = () => {
 
   const handleSave = async () => {
     if (!audioUrl) {
-      alert('Please generate audio first');
+      toast.warning('Please generate audio first');
       return;
     }
     if (!title.trim()) {
-      alert('Please enter a title for this dictation');
+      toast.warning('Please enter a title for this dictation');
       return;
     }
 
@@ -88,7 +89,7 @@ const Dictation = () => {
       setTimeout(() => setSaved(false), 3000);
     } catch (error) {
       console.error('Error saving dictation:', error);
-      alert('Failed to save dictation. Please try again.');
+      toast.error('Failed to save dictation. Please try again.');
     }
   };
 

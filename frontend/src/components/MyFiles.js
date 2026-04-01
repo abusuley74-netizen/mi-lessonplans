@@ -4,6 +4,7 @@ import {
   BookOpen, Trash2, Eye, Download, Search,
   Printer, X, FileText, Mic, Upload, FolderOpen, Play, Volume2, Calendar
 } from 'lucide-react';
+import { toast } from 'sonner';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -170,7 +171,7 @@ const MyFiles = () => {
       };
     } catch (error) {
       console.error('Error generating audio:', error);
-      alert('Failed to play dictation audio.');
+      toast.error('Failed to play dictation audio.');
     } finally {
       setGeneratingAudio(null);
     }

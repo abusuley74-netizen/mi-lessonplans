@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import { Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 import './LessonForm.css';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
@@ -229,7 +230,7 @@ const TanzaniaMainlandLessonForm = ({ onLessonGenerated }) => {
       }
     } else {
       await navigator.clipboard.writeText(window.location.href);
-      alert('Link copied to clipboard!');
+      toast.success('Link copied to clipboard!');
     }
   };
 

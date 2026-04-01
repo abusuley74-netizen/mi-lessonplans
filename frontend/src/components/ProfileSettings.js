@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import axios from 'axios';
 import { User, Mail, School, MapPin, Save, Check, LogOut, Camera, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -64,7 +65,7 @@ const ProfileSettings = () => {
       setTimeout(() => setSaved(false), 3000);
     } catch (error) {
       console.error('Error saving profile:', error);
-      alert('Failed to save profile.');
+      toast.error('Failed to save profile.');
     } finally {
       setSaving(false);
     }
@@ -75,7 +76,7 @@ const ProfileSettings = () => {
     if (!file) return;
 
     if (file.size > 2 * 1024 * 1024) {
-      alert('Image too large. Maximum size is 2MB.');
+      toast.warning('Image too large. Maximum size is 2MB.');
       return;
     }
 
@@ -93,7 +94,7 @@ const ProfileSettings = () => {
       setUser(prev => prev ? { ...prev, custom_picture: res.data.picture } : prev);
     } catch (error) {
       console.error('Error uploading picture:', error);
-      alert('Failed to upload picture. Please try again.');
+      toast.error('Failed to upload picture. Please try again.');
     } finally {
       setUploading(false);
     }

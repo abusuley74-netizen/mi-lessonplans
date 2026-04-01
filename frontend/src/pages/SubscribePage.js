@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import Header from '../components/Header';
 import { useAuth } from '../contexts/AuthContext';
+import { toast } from 'sonner';
 import { Crown, Check, Zap, ArrowLeft } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
@@ -55,11 +56,11 @@ const SubscribePage = () => {
         { withCredentials: true }
       );
       await refreshUser();
-      alert('Subscription activated! (Demo Mode)');
+      toast.success('Subscription activated! (Demo Mode)');
       navigate('/dashboard');
     } catch (error) {
       console.error('Subscription error:', error);
-      alert('Subscription failed. Please try again.');
+      toast.error('Subscription failed. Please try again.');
     } finally {
       setLoading(false);
     }

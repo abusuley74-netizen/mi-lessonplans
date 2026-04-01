@@ -1,5 +1,6 @@
 import React, { useRef } from 'react';
 import { Printer, Download, Share2, Check } from 'lucide-react';
+import { toast } from 'sonner';
 
 const LessonPreview = ({ lessonData }) => {
   const printRef = useRef();
@@ -37,7 +38,7 @@ const LessonPreview = ({ lessonData }) => {
     } else {
       // Fallback: copy to clipboard
       await navigator.clipboard.writeText(`${shareData.title}\n${shareData.text}\n${shareData.url}`);
-      alert('Lesson plan info copied to clipboard!');
+      toast.success('Lesson plan info copied to clipboard!');
     }
   };
 
