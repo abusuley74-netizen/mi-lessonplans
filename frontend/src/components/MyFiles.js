@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { 
   BookOpen, Trash2, Eye, Download, Search,
-  Printer, X, FileText, Mic, Upload, FolderOpen, Play, Volume2
+  Printer, X, FileText, Mic, Upload, FolderOpen, Play, Volume2, Calendar
 } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
@@ -12,6 +12,7 @@ const MyFiles = () => {
   const [notes, setNotes] = useState([]);
   const [dictations, setDictations] = useState([]);
   const [uploads, setUploads] = useState([]);
+  const [schemes, setSchemes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
@@ -28,16 +29,18 @@ const MyFiles = () => {
 
   const fetchAllFiles = async () => {
     try {
-      const [lessonsRes, notesRes, dictationsRes, uploadsRes] = await Promise.all([
+      const [lessonsRes, notesRes, dictationsRes, uploadsRes, schemesRes] = await Promise.all([
         axios.get(`${API_URL}/api/lessons`, { withCredentials: true }),
         axios.get(`${API_URL}/api/notes`, { withCredentials: true }),
         axios.get(`${API_URL}/api/dictations`, { withCredentials: true }),
         axios.get(`${API_URL}/api/uploads`, { withCredentials: true }),
+        axios.get(`${API_URL}/api/schemes`, { withCredentials: true }),
       ]);
       setLessons(lessonsRes.data.lessons || []);
       setNotes(notesRes.data.notes || []);
       setDictations(dictationsRes.data.dictations || []);
       setUploads(uploadsRes.data.uploads || []);
+      setSchemes(schemesRes.data.schemes || []);
     } catch (error) {
       console.error('Error fetching files:', error);
     } finally {
@@ -72,6 +75,22 @@ const MyFiles = () => {
         if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
       }
     } catch (error) { console.error('Error deleting dictation:', error); }
+  };
+
+  const handleDeleteUpload = async (uploadId) => {
+    if (!window.confirm('Delete this upload?')) return;
+    try {
+      await axios.delete(`${API_URL}/api/uploads/${uploadId}`, { withCredentials: true });
+      setUploads(uploads.filter(u => u.upload_id !== uploadId));
+    } catch (error) { console.error('Error deleting upload:', error); }
+  };
+
+  const handleDeleteScheme = async (schemeId) => {
+    if (!window.confirm('Delete this scheme of work?')) return;
+    try {
+      await axios.delete(`${API_URL}/api/schemes/${schemeId}`, { withCredentials: true });
+      setSchemes(schemes.filter(s => s.scheme_id !== schemeId));
+    } catch (error) { console.error('Error deleting scheme:', error); }
   };
 
   const handlePlayDictation = async (dictation) => {
@@ -233,9 +252,10 @@ const MyFiles = () => {
     ...notes.map(n => ({ ...n, _type: 'note', _name: n.title, _date: n.created_at })),
     ...dictations.map(d => ({ ...d, _type: 'dictation', _name: d.title, _date: d.created_at })),
     ...uploads.map(u => ({ ...u, _type: 'upload', _name: u.name, _date: u.created_at })),
+    ...schemes.map(s => ({ ...s, _type: 'scheme', _name: `${s.subject || 'Scheme'} - ${s.syllabus}`, _date: s.created_at })),
   ].filter(file => {
     const matchesSearch = (file._name || '').toLowerCase().includes(searchTerm.toLowerCase());
-    const typeMap = { lessons: 'lesson', notes: 'note', dictations: 'dictation', uploads: 'upload' };
+    const typeMap = { lessons: 'lesson', notes: 'note', dictations: 'dictation', uploads: 'upload', schemes: 'scheme' };
     const matchesType = filterType === 'all' || file._type === (typeMap[filterType] || filterType);
     return matchesSearch && matchesType;
   }).sort((a, b) => new Date(b._date) - new Date(a._date));
@@ -326,16 +346,43 @@ const MyFiles = () => {
     }
 
     // Upload
-    return (
-      <div key={file.upload_id} className="bg-white border border-[#E4DFD5] rounded-xl p-5 hover:shadow-lg transition-shadow" data-testid={`file-upload-${file.upload_id}`}>
-        <div className="flex items-start justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <Upload className="w-4 h-4 text-[#8E44AD]" />
-            <span className="text-xs px-2.5 py-1 rounded-full font-medium bg-purple-100 text-purple-700">Upload</span>
+    if (file._type === 'upload') {
+      return (
+        <div key={file.upload_id} className="bg-white border border-[#E4DFD5] rounded-xl p-5 hover:shadow-lg transition-shadow" data-testid={`file-upload-${file.upload_id}`}>
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Upload className="w-4 h-4 text-[#8E44AD]" />
+              <span className="text-xs px-2.5 py-1 rounded-full font-medium bg-purple-100 text-purple-700">Upload</span>
+            </div>
+            <button onClick={() => handleDeleteUpload(file.upload_id)} className="text-[#7A8A76] hover:text-[#D95D39]" data-testid={`delete-upload-${file.upload_id}`}><Trash2 className="w-4 h-4" /></button>
+          </div>
+          <h3 className="font-heading font-semibold text-[#1A2E16] mb-2 line-clamp-2">{file.name}</h3>
+          <div className="text-sm text-[#7A8A76] mb-4">{file.type}</div>
+          <div className="pt-3 border-t border-[#E4DFD5]">
+            <span className="text-xs text-[#7A8A76]">{new Date(file.created_at).toLocaleDateString()}</span>
           </div>
         </div>
-        <h3 className="font-heading font-semibold text-[#1A2E16] mb-2 line-clamp-2">{file.name}</h3>
-        <div className="text-sm text-[#7A8A76] mb-4">{file.type}</div>
+      );
+    }
+
+    // Scheme of Work
+    return (
+      <div key={file.scheme_id} className="bg-white border border-[#E4DFD5] rounded-xl p-5 hover:shadow-lg transition-shadow" data-testid={`file-scheme-${file.scheme_id}`}>
+        <div className="flex items-start justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-[#3498db]" />
+            <span className="text-xs px-2.5 py-1 rounded-full font-medium bg-blue-100 text-blue-700">Scheme</span>
+            <span className="text-xs text-[#7A8A76]">{file.syllabus}</span>
+          </div>
+          <button onClick={() => handleDeleteScheme(file.scheme_id)} className="text-[#7A8A76] hover:text-[#D95D39]" data-testid={`delete-scheme-${file.scheme_id}`}><Trash2 className="w-4 h-4" /></button>
+        </div>
+        <h3 className="font-heading font-semibold text-[#1A2E16] mb-2 line-clamp-2">{file.subject || 'Untitled Scheme'}</h3>
+        <div className="flex items-center gap-4 text-sm text-[#7A8A76] mb-4">
+          {file.class_name && <span>Class {file.class_name}</span>}
+          {file.term && <span>Term {file.term}</span>}
+          {file.school && <span>{file.school}</span>}
+        </div>
+        <div className="text-xs text-[#7A8A76] mb-4">{(file.competencies || []).length} competencies</div>
         <div className="pt-3 border-t border-[#E4DFD5]">
           <span className="text-xs text-[#7A8A76]">{new Date(file.created_at).toLocaleDateString()}</span>
         </div>
@@ -351,10 +398,14 @@ const MyFiles = () => {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-6">
         <div className="bg-white border border-[#E4DFD5] rounded-xl p-4" data-testid="stat-lessons">
           <p className="text-2xl font-bold text-[#1A2E16]">{lessons.length}</p>
           <p className="text-sm text-[#7A8A76]">Lesson Plans</p>
+        </div>
+        <div className="bg-white border border-[#E4DFD5] rounded-xl p-4" data-testid="stat-schemes">
+          <p className="text-2xl font-bold text-[#1A2E16]">{schemes.length}</p>
+          <p className="text-sm text-[#7A8A76]">Schemes</p>
         </div>
         <div className="bg-white border border-[#E4DFD5] rounded-xl p-4" data-testid="stat-notes">
           <p className="text-2xl font-bold text-[#1A2E16]">{notes.length}</p>
@@ -381,6 +432,7 @@ const MyFiles = () => {
           className="bg-white border border-[#E4DFD5] rounded-lg px-4 py-2.5 text-[#1A2E16]" data-testid="filter-type">
           <option value="all">All Files</option>
           <option value="lessons">Lesson Plans</option>
+          <option value="schemes">Schemes of Work</option>
           <option value="notes">Notes</option>
           <option value="dictations">Dictations</option>
           <option value="uploads">Uploads</option>

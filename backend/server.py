@@ -734,6 +734,49 @@ async def delete_upload(upload_id: str, user: User = Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Upload not found")
     return {"message": "Upload deleted"}
 
+# ==================== SCHEME OF WORK ROUTES ====================
+
+@api_router.post("/schemes")
+async def save_scheme(request: Request, user: User = Depends(get_current_user)):
+    """Save a scheme of work"""
+    data = await request.json()
+    
+    scheme = {
+        "scheme_id": f"scheme_{uuid.uuid4().hex[:12]}",
+        "user_id": user.user_id,
+        "syllabus": data.get("syllabus", "Zanzibar"),
+        "school": data.get("school", ""),
+        "teacher": data.get("teacher", ""),
+        "subject": data.get("subject", ""),
+        "year": data.get("year", ""),
+        "term": data.get("term", ""),
+        "class_name": data.get("class", ""),
+        "competencies": data.get("competencies", []),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.schemes.insert_one(scheme)
+    scheme.pop("_id", None)
+    return scheme
+
+@api_router.get("/schemes")
+async def get_schemes(user: User = Depends(get_current_user)):
+    """Get all schemes for the current user"""
+    schemes = await db.schemes.find(
+        {"user_id": user.user_id}, {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    return {"schemes": schemes}
+
+@api_router.delete("/schemes/{scheme_id}")
+async def delete_scheme(scheme_id: str, user: User = Depends(get_current_user)):
+    """Delete a scheme of work"""
+    result = await db.schemes.delete_one({"scheme_id": scheme_id, "user_id": user.user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Scheme not found")
+    return {"message": "Scheme deleted"}
+
+
 # ==================== PROFILE ROUTES ====================
 
 @api_router.post("/profile/upload-picture")
