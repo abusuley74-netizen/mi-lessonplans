@@ -4,88 +4,85 @@
 MiLesson Plan is an AI-powered lesson plan generator for teachers in Tanzania, supporting both Zanzibar and Tanzania Mainland syllabi.
 
 ## Original Problem Statement
-Build mi-lessonPlan app based on provided zip file with:
-- AI-powered lesson plan generation
-- User authentication
-- Two syllabus formats (Zanzibar & Tanzania Mainland)
-- Lesson history management
-- Subscription model
-
-## User Choices & Inputs
-1. **AI Integration**: Emergent LLM key with GPT-5.2 (no extra API key needed)
-2. **Database**: MongoDB (adapted from original MySQL)
-3. **Authentication**: Emergent-managed Google OAuth
-4. **Payments**: Mocked for now (PesaPal keys to be provided later)
+Build mi-lessonPlan app based on provided zip file with AI-powered lesson plan generation, user authentication, two syllabus formats, lesson history, subscription model, MyHub tools (Dictation TTS, Notes, Files, Scheme of Work).
 
 ## Architecture
-
-### Tech Stack
-- **Frontend**: React.js + Custom CSS + Tailwind
+- **Frontend**: React.js + Tailwind + Custom CSS
 - **Backend**: FastAPI (Python)
 - **Database**: MongoDB
 - **AI**: GPT-5.2 via Emergent LLM key
-- **TTS**: OpenAI TTS via Emergent LLM key (tts-1 model) + GPT-5.2 translation
+- **TTS**: OpenAI TTS + GPT-5.2 translation (5 languages)
 - **Auth**: Emergent Google OAuth
-
-### Key Files
-- `/app/backend/server.py` - Main API server (~817 lines)
-- `/app/frontend/src/App.js` - React router & auth provider
-- `/app/frontend/src/pages/Dashboard.js` - Main dashboard with form switcher
-- `/app/frontend/src/pages/MyHub.js` - Hub with collapsible sidebar
-- `/app/frontend/src/components/ZanzibarLessonForm.js` - Zanzibar syllabus form
-- `/app/frontend/src/components/TanzaniaMainlandLessonForm.js` - Tanzania Mainland form
-- `/app/frontend/src/components/SchemeOfWorkForm.js` - Scheme of Work with syllabus toggle
-- `/app/frontend/src/components/CreateNotes.js` - Rich text editor
-- `/app/frontend/src/components/Dictation.js` - AI TTS dictation
-- `/app/frontend/src/components/MyFiles.js` - All files with Play/View
-- `/app/frontend/src/components/ProfileSettings.js` - Profile with pic upload
-- `/app/frontend/src/components/Header.js` - Header with custom profile pic
 
 ## What's Been Implemented
 
-### April 1, 2026
-- [x] Emergent Google OAuth authentication
-- [x] GPT-5.2 AI lesson generation
-- [x] Zanzibar & Tanzania Mainland syllabus forms
+### Core Features
+- [x] Emergent Google OAuth
+- [x] GPT-5.2 AI lesson generation (Zanzibar + Mainland)
 - [x] AI leaves Teacher's Evaluation & Remarks empty
 - [x] Full lesson header in View/Print/Download
 - [x] MyHub with collapsible sidebar
-- [x] Scheme of Work with Zanzibar/Tanzania Mainland toggle, 12-column table, pagination
-- [x] Create Notes rich text editor (font family/size, color, formatting, undo/redo)
-- [x] Dictation TTS with translation for 5 languages
-- [x] My Files showing ALL file types (lessons, notes, dictations, uploads) with Play/View
-- [x] Profile picture upload (stored as base64) displayed in Header
-- [x] Profile editing (name, school, location, bio)
 - [x] Free plan limit (3 lessons)
 
-## API Endpoints
+### Scheme of Work
+- [x] Zanzibar / Tanzania Mainland toggle
+- [x] 12-column table with auto-expanding cells (no scroll, fully visible for printing)
+- [x] Pagination + Add Row (jumps to last page)
+- [x] Save to My Files (MongoDB)
+- [x] Print (opens formatted print window, landscape)
+- [x] Export as DOCX (downloadable .doc)
 
-| Endpoint | Method | Auth | Description |
-|----------|--------|------|-------------|
-| /api/auth/session | POST | No | Exchange session_id for token |
-| /api/auth/me | GET | Yes | Get current user + custom_picture |
-| /api/auth/logout | POST | Yes | Logout |
-| /api/lessons/generate | POST | Yes | Generate lesson with AI |
-| /api/lessons | GET | Yes | List lessons |
-| /api/lessons/{id} | DELETE | Yes | Delete lesson |
-| /api/dictation/generate | POST | Yes | Generate TTS audio (mp3) |
-| /api/dictations | GET/POST | Yes | List/save dictations |
-| /api/notes | GET/POST | Yes | List/create notes |
-| /api/profile | GET/PUT | Yes | Get/update profile |
-| /api/profile/upload-picture | POST | Yes | Upload profile pic |
-| /api/subscription/plans | GET | No | Get plans |
-| /api/subscription/subscribe | POST | Yes | Subscribe (MOCKED) |
+### Notes
+- [x] Rich text editor (font family/size, color, bold/italic/underline/strikethrough, headings, lists, alignment, undo/redo, horizontal rule)
+
+### Dictation TTS
+- [x] Real OpenAI TTS via Emergent LLM key
+- [x] Auto-translates to target language via GPT-5.2 before TTS
+- [x] 5 languages: British English, Swahili, Arabic, Turkish, French
+
+### My Files
+- [x] Shows ALL types: lessons, schemes, notes, dictations, uploads
+- [x] 5 stat cards
+- [x] Play button for dictations (regenerates audio)
+- [x] View modal for notes
+- [x] Delete actually deletes for ALL types
+- [x] Filter by type
+
+### Profile
+- [x] Profile picture upload (stored as base64 in MongoDB)
+- [x] Custom picture displays in Header
+- [x] Edit name, school, location, bio
+
+## API Endpoints
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| /api/auth/session | POST | Exchange session_id for token |
+| /api/auth/me | GET | Current user + custom_picture |
+| /api/lessons/generate | POST | AI lesson generation |
+| /api/lessons | GET | List lessons |
+| /api/lessons/{id} | DELETE | Delete lesson |
+| /api/schemes | POST | Save scheme of work |
+| /api/schemes | GET | List schemes |
+| /api/schemes/{id} | DELETE | Delete scheme |
+| /api/dictation/generate | POST | TTS audio (mp3) |
+| /api/dictations | GET/POST | List/save dictations |
+| /api/dictations/{id} | DELETE | Delete dictation |
+| /api/notes | GET/POST | List/create notes |
+| /api/notes/{id} | DELETE | Delete note |
+| /api/uploads | GET/POST | List/create uploads |
+| /api/uploads/{id} | DELETE | Delete upload |
+| /api/profile | GET/PUT | Get/update profile |
+| /api/profile/upload-picture | POST | Upload profile pic |
+| /api/subscription/subscribe | POST | Subscribe (MOCKED) |
 
 ## Prioritized Backlog
-
-### P1 - High Priority
+### P1
 - [ ] PesaPal payment integration (awaiting user keys)
 - [ ] Custom lesson templates (awaiting user content)
 
-### P2 - Medium Priority
+### P2
 - [ ] Loading spinners per input field during AI generation
-- [ ] PDF/Word export improvements
 - [ ] Lesson sharing between users
 
-### P3 - Future
+### P3
 - [ ] Team/school accounts, Mobile app, Offline mode, Swahili UI
