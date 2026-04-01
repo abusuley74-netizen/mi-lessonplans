@@ -20,6 +20,7 @@ const MyFiles = () => {
   const [selectedNote, setSelectedNote] = useState(null);
   const [playingDictation, setPlayingDictation] = useState(null);
   const [generatingAudio, setGeneratingAudio] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null); // {type, id, name}
   const audioRef = useRef(null);
   const printRef = useRef(null);
 
@@ -49,24 +50,23 @@ const MyFiles = () => {
   };
 
   const handleDeleteLesson = async (lessonId) => {
-    if (!window.confirm('Are you sure you want to delete this lesson plan?')) return;
     try {
       await axios.delete(`${API_URL}/api/lessons/${lessonId}`, { withCredentials: true });
       setLessons(lessons.filter(l => l.lesson_id !== lessonId));
       if (selectedLesson?.lesson_id === lessonId) setSelectedLesson(null);
     } catch (error) { console.error('Error deleting lesson:', error); }
+    setConfirmDelete(null);
   };
 
   const handleDeleteNote = async (noteId) => {
-    if (!window.confirm('Delete this note?')) return;
     try {
       await axios.delete(`${API_URL}/api/notes/${noteId}`, { withCredentials: true });
       setNotes(notes.filter(n => n.note_id !== noteId));
     } catch (error) { console.error('Error deleting note:', error); }
+    setConfirmDelete(null);
   };
 
   const handleDeleteDictation = async (dictationId) => {
-    if (!window.confirm('Delete this dictation?')) return;
     try {
       await axios.delete(`${API_URL}/api/dictations/${dictationId}`, { withCredentials: true });
       setDictations(dictations.filter(d => d.dictation_id !== dictationId));
@@ -75,22 +75,33 @@ const MyFiles = () => {
         if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
       }
     } catch (error) { console.error('Error deleting dictation:', error); }
+    setConfirmDelete(null);
   };
 
   const handleDeleteUpload = async (uploadId) => {
-    if (!window.confirm('Delete this upload?')) return;
     try {
       await axios.delete(`${API_URL}/api/uploads/${uploadId}`, { withCredentials: true });
       setUploads(uploads.filter(u => u.upload_id !== uploadId));
     } catch (error) { console.error('Error deleting upload:', error); }
+    setConfirmDelete(null);
   };
 
   const handleDeleteScheme = async (schemeId) => {
-    if (!window.confirm('Delete this scheme of work?')) return;
     try {
       await axios.delete(`${API_URL}/api/schemes/${schemeId}`, { withCredentials: true });
       setSchemes(schemes.filter(s => s.scheme_id !== schemeId));
     } catch (error) { console.error('Error deleting scheme:', error); }
+    setConfirmDelete(null);
+  };
+
+  const executeDelete = () => {
+    if (!confirmDelete) return;
+    const { type, id } = confirmDelete;
+    if (type === 'lesson') handleDeleteLesson(id);
+    else if (type === 'note') handleDeleteNote(id);
+    else if (type === 'dictation') handleDeleteDictation(id);
+    else if (type === 'upload') handleDeleteUpload(id);
+    else if (type === 'scheme') handleDeleteScheme(id);
   };
 
   const handlePlayDictation = async (dictation) => {
@@ -271,7 +282,7 @@ const MyFiles = () => {
                 {file.syllabus}
               </span>
             </div>
-            <button onClick={() => handleDeleteLesson(file.lesson_id)} className="text-[#7A8A76] hover:text-[#D95D39]"><Trash2 className="w-4 h-4" /></button>
+            <button onClick={() => setConfirmDelete({ type: 'lesson', id: file.lesson_id, name: file.topic })} className="text-[#7A8A76] hover:text-[#D95D39]"><Trash2 className="w-4 h-4" /></button>
           </div>
           <h3 className="font-heading font-semibold text-[#1A2E16] mb-2 line-clamp-2">{file.topic}</h3>
           <div className="flex items-center gap-4 text-sm text-[#7A8A76] mb-4">
@@ -295,7 +306,7 @@ const MyFiles = () => {
               <FileText className="w-4 h-4 text-[#E5A93D]" />
               <span className="text-xs px-2.5 py-1 rounded-full font-medium bg-yellow-100 text-yellow-700">Note</span>
             </div>
-            <button onClick={() => handleDeleteNote(file.note_id)} className="text-[#7A8A76] hover:text-[#D95D39]"><Trash2 className="w-4 h-4" /></button>
+            <button onClick={() => setConfirmDelete({ type: 'note', id: file.note_id, name: file.title })} className="text-[#7A8A76] hover:text-[#D95D39]"><Trash2 className="w-4 h-4" /></button>
           </div>
           <h3 className="font-heading font-semibold text-[#1A2E16] mb-2 line-clamp-2">{file.title}</h3>
           <div className="text-sm text-[#7A8A76] mb-4 line-clamp-2" dangerouslySetInnerHTML={{ __html: file.content?.substring(0, 100) }} />
@@ -320,7 +331,7 @@ const MyFiles = () => {
               <span className="text-xs px-2.5 py-1 rounded-full font-medium bg-orange-100 text-orange-700">Dictation</span>
               <span className="text-xs text-[#7A8A76]">{LANG_NAMES[file.language] || file.language}</span>
             </div>
-            <button onClick={() => handleDeleteDictation(file.dictation_id)} className="text-[#7A8A76] hover:text-[#D95D39]"><Trash2 className="w-4 h-4" /></button>
+            <button onClick={() => setConfirmDelete({ type: 'dictation', id: file.dictation_id, name: file.title })} className="text-[#7A8A76] hover:text-[#D95D39]"><Trash2 className="w-4 h-4" /></button>
           </div>
           <h3 className="font-heading font-semibold text-[#1A2E16] mb-2 line-clamp-2">{file.title}</h3>
           <p className="text-sm text-[#7A8A76] mb-4 line-clamp-2">{file.text}</p>
@@ -354,7 +365,7 @@ const MyFiles = () => {
               <Upload className="w-4 h-4 text-[#8E44AD]" />
               <span className="text-xs px-2.5 py-1 rounded-full font-medium bg-purple-100 text-purple-700">Upload</span>
             </div>
-            <button onClick={() => handleDeleteUpload(file.upload_id)} className="text-[#7A8A76] hover:text-[#D95D39]" data-testid={`delete-upload-${file.upload_id}`}><Trash2 className="w-4 h-4" /></button>
+            <button onClick={() => setConfirmDelete({ type: 'upload', id: file.upload_id, name: file.name })} className="text-[#7A8A76] hover:text-[#D95D39]" data-testid={`delete-upload-${file.upload_id}`}><Trash2 className="w-4 h-4" /></button>
           </div>
           <h3 className="font-heading font-semibold text-[#1A2E16] mb-2 line-clamp-2">{file.name}</h3>
           <div className="text-sm text-[#7A8A76] mb-4">{file.type}</div>
@@ -374,7 +385,7 @@ const MyFiles = () => {
             <span className="text-xs px-2.5 py-1 rounded-full font-medium bg-blue-100 text-blue-700">Scheme</span>
             <span className="text-xs text-[#7A8A76]">{file.syllabus}</span>
           </div>
-          <button onClick={() => handleDeleteScheme(file.scheme_id)} className="text-[#7A8A76] hover:text-[#D95D39]" data-testid={`delete-scheme-${file.scheme_id}`}><Trash2 className="w-4 h-4" /></button>
+          <button onClick={() => setConfirmDelete({ type: 'scheme', id: file.scheme_id, name: file.subject || 'Scheme' })} className="text-[#7A8A76] hover:text-[#D95D39]" data-testid={`delete-scheme-${file.scheme_id}`}><Trash2 className="w-4 h-4" /></button>
         </div>
         <h3 className="font-heading font-semibold text-[#1A2E16] mb-2 line-clamp-2">{file.subject || 'Untitled Scheme'}</h3>
         <div className="flex items-center gap-4 text-sm text-[#7A8A76] mb-4">
@@ -482,6 +493,40 @@ const MyFiles = () => {
               <button onClick={() => setSelectedNote(null)} className="p-2 text-[#7A8A76] hover:text-[#1A2E16] hover:bg-[#F2EFE8] rounded-lg"><X className="w-5 h-5" /></button>
             </div>
             <div className="p-6 prose max-w-none" dangerouslySetInnerHTML={{ __html: selectedNote.content }} />
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {confirmDelete && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[60]" data-testid="delete-confirm-modal">
+          <div className="bg-white rounded-xl max-w-sm w-full p-6 shadow-2xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                <Trash2 className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <h3 className="font-heading font-semibold text-[#1A2E16]">Delete {confirmDelete.type}?</h3>
+                <p className="text-sm text-[#7A8A76] mt-0.5 line-clamp-1">"{confirmDelete.name}"</p>
+              </div>
+            </div>
+            <p className="text-sm text-[#7A8A76] mb-6">This action cannot be undone. The file will be permanently removed.</p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setConfirmDelete(null)}
+                className="px-4 py-2 border border-[#E4DFD5] rounded-lg text-[#4A5B46] font-medium hover:bg-[#F2EFE8] transition-colors"
+                data-testid="delete-cancel-btn"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={executeDelete}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors"
+                data-testid="delete-confirm-btn"
+              >
+                Delete
+              </button>
+            </div>
           </div>
         </div>
       )}
