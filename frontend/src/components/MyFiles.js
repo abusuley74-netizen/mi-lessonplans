@@ -7,6 +7,40 @@ import {
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
+// Helper: fetch a file from backend with auth cookies, then trigger download or view
+const fetchAndDownload = async (url, filename) => {
+  try {
+    const response = await fetch(url, { credentials: 'include' });
+    if (!response.ok) throw new Error('Download failed');
+    const blob = await response.blob();
+    // Use FileReader to convert to data URL — works in sandboxed iframes
+    const reader = new FileReader();
+    reader.onload = () => {
+      const a = document.createElement('a');
+      a.href = reader.result;
+      a.download = filename;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    };
+    reader.readAsDataURL(blob);
+  } catch (err) {
+    console.error('Download error:', err);
+  }
+};
+
+const fetchAndView = async (url, setViewContent) => {
+  try {
+    const response = await fetch(url, { credentials: 'include' });
+    if (!response.ok) throw new Error('View failed');
+    const html = await response.text();
+    setViewContent(html);
+  } catch (err) {
+    console.error('View error:', err);
+  }
+};
+
 const MyFiles = () => {
   const [lessons, setLessons] = useState([]);
   const [notes, setNotes] = useState([]);
@@ -21,6 +55,7 @@ const MyFiles = () => {
   const [playingDictation, setPlayingDictation] = useState(null);
   const [generatingAudio, setGeneratingAudio] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null); // {type, id, name}
+  const [viewHtml, setViewHtml] = useState(null); // HTML string for scheme/lesson view
   const audioRef = useRef(null);
   const printRef = useRef(null);
 
@@ -291,10 +326,10 @@ const MyFiles = () => {
           <div className="flex items-center justify-between pt-3 border-t border-[#E4DFD5]">
             <span className="text-xs text-[#7A8A76]">{new Date(file.created_at).toLocaleDateString()}</span>
             <div className="flex items-center gap-3">
-              <button onClick={() => window.open(`${API_URL}/api/lessons/${file.lesson_id}/view`, '_blank')} className="flex items-center gap-1 text-sm text-[#2D5A27] font-medium hover:text-[#21441C]" data-testid={`view-lesson-${file.lesson_id}`}>
+              <button onClick={() => fetchAndView(`${API_URL}/api/lessons/${file.lesson_id}/view`, setViewHtml)} className="flex items-center gap-1 text-sm text-[#2D5A27] font-medium hover:text-[#21441C]" data-testid={`view-lesson-${file.lesson_id}`}>
                 <Eye className="w-4 h-4" />View
               </button>
-              <button onClick={() => window.open(`${API_URL}/api/lessons/${file.lesson_id}/export`, '_blank')} className="flex items-center gap-1 text-sm text-[#8E44AD] font-medium hover:text-[#6C3483]" data-testid={`download-lesson-${file.lesson_id}`}>
+              <button onClick={() => fetchAndDownload(`${API_URL}/api/lessons/${file.lesson_id}/export`, `${file.subject}_${file.topic}_lesson.txt`)} className="flex items-center gap-1 text-sm text-[#8E44AD] font-medium hover:text-[#6C3483]" data-testid={`download-lesson-${file.lesson_id}`}>
                 <Download className="w-4 h-4" />Download
               </button>
             </div>
@@ -402,11 +437,11 @@ const MyFiles = () => {
         <div className="flex items-center justify-between pt-3 border-t border-[#E4DFD5]">
           <span className="text-xs text-[#7A8A76]">{new Date(file.created_at).toLocaleDateString()}</span>
           <div className="flex items-center gap-3">
-            <button onClick={() => window.open(`${API_URL}/api/schemes/${file.scheme_id}/view`, '_blank')}
+            <button onClick={() => fetchAndView(`${API_URL}/api/schemes/${file.scheme_id}/view`, setViewHtml)}
               className="flex items-center gap-1 text-sm text-[#2D5A27] font-medium hover:text-[#21441C]" data-testid={`view-scheme-${file.scheme_id}`}>
               <Eye className="w-4 h-4" />View
             </button>
-            <button onClick={() => window.open(`${API_URL}/api/schemes/${file.scheme_id}/export`, '_blank')}
+            <button onClick={() => fetchAndDownload(`${API_URL}/api/schemes/${file.scheme_id}/export`, `Scheme_${file.subject || 'untitled'}_${file.syllabus}.doc`)}
               className="flex items-center gap-1 text-sm text-[#8E44AD] font-medium hover:text-[#6C3483]" data-testid={`download-scheme-${file.scheme_id}`}>
               <Download className="w-4 h-4" />DOCX
             </button>
@@ -508,6 +543,46 @@ const MyFiles = () => {
               <button onClick={() => setSelectedNote(null)} className="p-2 text-[#7A8A76] hover:text-[#1A2E16] hover:bg-[#F2EFE8] rounded-lg"><X className="w-5 h-5" /></button>
             </div>
             <div className="p-6 prose max-w-none" dangerouslySetInnerHTML={{ __html: selectedNote.content }} />
+          </div>
+        </div>
+      )}
+
+      {/* HTML View Modal (Lesson/Scheme full view with Print) */}
+      {viewHtml && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-auto" data-testid="html-view-modal">
+          <div className="bg-white rounded-xl max-w-6xl w-full max-h-[95vh] overflow-auto shadow-2xl">
+            <div className="sticky top-0 bg-white border-b border-[#E4DFD5] p-4 flex items-center justify-between z-10">
+              <h2 className="font-heading text-lg font-semibold text-[#1A2E16]">Document Preview</h2>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    const printW = window.open('', '_blank');
+                    if (printW) {
+                      printW.document.write(viewHtml);
+                      printW.document.close();
+                      printW.onload = () => printW.print();
+                    }
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-[#4a5568] text-white rounded-lg hover:bg-[#2d3748] text-sm font-medium"
+                  data-testid="view-print-btn"
+                >
+                  <Printer className="w-4 h-4" />Print
+                </button>
+                <button onClick={() => setViewHtml(null)} className="p-2 text-[#7A8A76] hover:text-[#1A2E16] hover:bg-[#F2EFE8] rounded-lg">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+            <div className="p-6">
+              <iframe
+                srcDoc={viewHtml}
+                title="Document View"
+                className="w-full border-0"
+                style={{ minHeight: '600px', height: '75vh' }}
+                sandbox="allow-same-origin"
+                data-testid="view-iframe"
+              />
+            </div>
           </div>
         </div>
       )}

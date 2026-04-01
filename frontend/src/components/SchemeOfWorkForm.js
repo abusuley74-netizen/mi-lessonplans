@@ -4,6 +4,28 @@ import './SchemeOfWork.css';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
+// Fetch file via auth cookie and trigger real download
+const fetchAndDownload = async (url, filename) => {
+  try {
+    const response = await fetch(url, { credentials: 'include' });
+    if (!response.ok) throw new Error('Download failed');
+    const blob = await response.blob();
+    const reader = new FileReader();
+    reader.onload = () => {
+      const a = document.createElement('a');
+      a.href = reader.result;
+      a.download = filename;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    };
+    reader.readAsDataURL(blob);
+  } catch (err) {
+    console.error('Download error:', err);
+  }
+};
+
 const ZANZIBAR_COLUMNS = [
   { key: 'main', label: 'Main Competence', type: 'textarea' },
   { key: 'specific', label: 'Specific Competences', type: 'textarea' },
@@ -132,55 +154,26 @@ const SchemeOfWorkForm = () => {
     }
   };
 
-  const buildPrintHTML = () => {
-    const nonEmpty = getNonEmptyRows();
-    const cols = columns;
-
-    let headerHTML = `
-      <h1 style="text-align:center;font-size:20pt;margin-bottom:5px;font-family:'Times New Roman',serif;">SCHEME OF WORK</h1>
-      <h2 style="text-align:center;font-size:14pt;margin-bottom:15px;color:#555;font-family:'Times New Roman',serif;">${syllabus.toUpperCase()}</h2>
-      <table style="width:100%;border-collapse:collapse;margin-bottom:15px;font-family:'Times New Roman',serif;">
-        <tr><td style="padding:4px 8px;font-weight:bold;width:150px;">Name of School:</td><td style="padding:4px 8px;border-bottom:1px solid #999;">${formData.school}</td></tr>
-        <tr><td style="padding:4px 8px;font-weight:bold;">Teacher's Name:</td><td style="padding:4px 8px;border-bottom:1px solid #999;">${formData.teacher}</td></tr>
-        <tr><td style="padding:4px 8px;font-weight:bold;">Subject:</td><td style="padding:4px 8px;border-bottom:1px solid #999;">${formData.subject}</td></tr>
-        <tr>
-          <td style="padding:4px 8px;font-weight:bold;">Year:</td><td style="padding:4px 8px;border-bottom:1px solid #999;">${formData.year}
-          &nbsp;&nbsp;&nbsp;&nbsp;<strong>Term:</strong> ${formData.term}
-          &nbsp;&nbsp;&nbsp;&nbsp;<strong>Class:</strong> ${formData.class}</td>
-        </tr>
-      </table>
-    `;
-
-    let tableHTML = `<table style="width:100%;border-collapse:collapse;font-size:9pt;font-family:'Times New Roman',serif;">
-      <thead><tr>${cols.map(c => `<th style="border:1px solid #000;padding:6px 4px;background:#3498db;color:white;text-align:center;font-size:8pt;">${c.label}</th>`).join('')}</tr></thead>
-      <tbody>`;
-    
-    nonEmpty.forEach(row => {
-      tableHTML += '<tr>';
-      cols.forEach(c => {
-        const val = (row[c.key] || '').replace(/\n/g, '<br/>');
-        tableHTML += `<td style="border:1px solid #000;padding:5px 4px;vertical-align:top;">${val}</td>`;
-      });
-      tableHTML += '</tr>';
-    });
-    tableHTML += '</tbody></table>';
-
-    return headerHTML + tableHTML;
-  };
-
   const handlePrint = () => {
-    // Open print view in new tab via backend
     if (savedSchemeId) {
-      window.open(`${API_URL}/api/schemes/${savedSchemeId}/view`, '_blank');
+      // Fetch HTML and open in print window
+      fetch(`${API_URL}/api/schemes/${savedSchemeId}/view`, { credentials: 'include' })
+        .then(r => r.text())
+        .then(html => {
+          const printW = window.open('', '_blank');
+          if (printW) { printW.document.write(html); printW.document.close(); printW.onload = () => printW.print(); }
+        });
     } else {
-      // Not saved yet - save first then open
       saveAndThen('print');
     }
   };
 
   const exportToDocx = () => {
     if (savedSchemeId) {
-      window.open(`${API_URL}/api/schemes/${savedSchemeId}/export`, '_blank');
+      fetchAndDownload(
+        `${API_URL}/api/schemes/${savedSchemeId}/export`,
+        `Scheme_of_Work_${formData.subject || 'untitled'}_${syllabus}.doc`
+      );
     } else {
       saveAndThen('export');
     }
@@ -200,14 +193,23 @@ const SchemeOfWorkForm = () => {
         class: formData.class,
         competencies: getNonEmptyRows()
       }, { withCredentials: true });
-      setSavedSchemeId(res.data.scheme_id);
+      const newId = res.data.scheme_id;
+      setSavedSchemeId(newId);
       setSavedMsg('Saved!');
       setTimeout(() => setSavedMsg(''), 3000);
       
       if (action === 'print') {
-        window.open(`${API_URL}/api/schemes/${res.data.scheme_id}/view`, '_blank');
+        fetch(`${API_URL}/api/schemes/${newId}/view`, { credentials: 'include' })
+          .then(r => r.text())
+          .then(html => {
+            const printW = window.open('', '_blank');
+            if (printW) { printW.document.write(html); printW.document.close(); printW.onload = () => printW.print(); }
+          });
       } else if (action === 'export') {
-        window.open(`${API_URL}/api/schemes/${res.data.scheme_id}/export`, '_blank');
+        fetchAndDownload(
+          `${API_URL}/api/schemes/${newId}/export`,
+          `Scheme_of_Work_${formData.subject || 'untitled'}_${syllabus}.doc`
+        );
       }
     } catch (err) {
       console.error('Save error:', err);
