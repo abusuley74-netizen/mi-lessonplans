@@ -1,0 +1,152 @@
+@import url('https://fonts.googleapis.com/css2?family=Work+Sans:wght@300;400;500;600;700&display=swap');
+@import url('https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@400,500,700,800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-primary: #FDFBF7;
+  --bg-secondary: #F2EFE8;
+  --bg-tertiary: #EAE5DA;
+  --text-primary: #1A2E16;
+  --text-secondary: #4A5B46;
+  --text-muted: #7A8A76;
+  --text-inverse: #FFFFFF;
+  --brand-primary: #2D5A27;
+  --brand-primary-hover: #21441C;
+  --brand-cta: #D95D39;
+  --brand-cta-hover: #BD4D2D;
+  --accent-yellow: #E5A93D;
+  --accent-sage: #8E9E82;
+  --border-default: #E4DFD5;
+  --border-focus: #2D5A27;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Work Sans', sans-serif;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.6;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Cabinet Grotesk', sans-serif;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.font-heading {
+  font-family: 'Cabinet Grotesk', sans-serif;
+}
+
+.font-body {
+  font-family: 'Work Sans', sans-serif;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--accent-sage);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--brand-primary);
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(45, 90, 39, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(45, 90, 39, 0.4);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.4s ease-out forwards;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Staggered animations */
+.stagger-1 { animation-delay: 0.1s; }
+.stagger-2 { animation-delay: 0.2s; }
+.stagger-3 { animation-delay: 0.3s; }
+.stagger-4 { animation-delay: 0.4s; }
+.stagger-5 { animation-delay: 0.5s; }
+
+/* Print styles */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  
+  body {
+    background: white;
+    color: black;
+  }
+  
+  .print-content {
+    width: 100%;
+    max-width: none;
+  }
+}
+
+/* Glass morphism for header */
+.glass-header {
+  background: rgba(253, 251, 247, 0.8);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+/* Form focus styles */
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 3px rgba(45, 90, 39, 0.1);
+}
+
+/* Button transitions */
+button {
+  transition: all 0.2s ease;
+}
+
+/* Card hover effect */
+.card-hover {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+}

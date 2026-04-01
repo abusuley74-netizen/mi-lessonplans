@@ -1,0 +1,246 @@
+/* ============================================
+   GEOGRAPHY TEMPLATE STYLES
+   Image upload + questions layout
+   ============================================ */
+
+/* --- Image Upload Section --- */
+.geo-image-section {
+  padding: 20px;
+  border-bottom: 1px solid #E4DFD5;
+}
+
+.geo-section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #5A6B56;
+}
+
+.geo-image-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+
+.geo-image-card {
+  border-radius: 12px;
+  overflow: hidden;
+  border: 2px solid #E4DFD5;
+  background: #FAFAF8;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.geo-image-card:hover {
+  border-color: #C4B5E3;
+  box-shadow: 0 2px 12px rgba(124, 58, 237, 0.08);
+}
+
+.geo-image-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 160px;
+  padding: 16px;
+  cursor: pointer;
+  color: #A0A8AC;
+  transition: all 0.2s;
+  border: 2px dashed transparent;
+}
+
+.geo-image-placeholder:hover {
+  background: #F3EDFC;
+  color: #7C3AED;
+  border-color: #C4B5E3;
+}
+
+.geo-image-placeholder span {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.geo-upload-hint {
+  font-size: 11px !important;
+  opacity: 0.6;
+}
+
+.geo-image-preview {
+  position: relative;
+  min-height: 160px;
+}
+
+.geo-image-preview img {
+  width: 100%;
+  height: 160px;
+  object-fit: cover;
+  display: block;
+}
+
+.geo-image-remove {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(220, 38, 38, 0.9);
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.geo-image-remove:hover {
+  background: #DC2626;
+  transform: scale(1.1);
+}
+
+.geo-image-label {
+  display: block;
+  padding: 6px 10px;
+  font-size: 11px;
+  color: #7A8A76;
+  background: #F8F8F6;
+  border-top: 1px solid #EDE9E0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --- Questions Section --- */
+.geo-questions-section {
+  padding: 20px;
+}
+
+.geo-questions-section .geo-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.geo-add-question-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid #7C3AED;
+  background: white;
+  color: #7C3AED;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.geo-add-question-btn:hover {
+  background: #7C3AED;
+  color: white;
+}
+
+.geo-questions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.geo-question-item {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 14px;
+  border-radius: 10px;
+  background: #FAFAF8;
+  border: 1px solid #EDE9E0;
+  transition: border-color 0.15s;
+}
+
+.geo-question-item:focus-within {
+  border-color: #C4B5E3;
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.06);
+}
+
+.geo-question-badge {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #7C3AED, #6D28D9);
+  color: white;
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.geo-question-textarea {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid #E4DFD5;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  line-height: 1.6;
+  resize: vertical;
+  min-height: 60px;
+  color: #1A2E16;
+  background: white;
+  transition: border-color 0.15s;
+}
+
+.geo-question-textarea:focus {
+  outline: none;
+  border-color: #7C3AED;
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.08);
+}
+
+.geo-question-textarea::placeholder {
+  color: #B0B8AD;
+}
+
+.geo-remove-question {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  border: none;
+  background: #FEE2E2;
+  color: #DC2626;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  margin-top: 4px;
+}
+
+.geo-remove-question:hover {
+  background: #DC2626;
+  color: white;
+}
+
+/* --- Responsive --- */
+@media (max-width: 768px) {
+  .geo-image-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+  .geo-image-placeholder, .geo-image-preview { min-height: 120px; }
+  .geo-image-preview img { height: 120px; }
+}
+
+@media (max-width: 480px) {
+  .geo-image-grid { grid-template-columns: 1fr 1fr; }
+  .geo-image-section, .geo-questions-section { padding: 14px; }
+}

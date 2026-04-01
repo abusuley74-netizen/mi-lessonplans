@@ -1,0 +1,331 @@
+/* ============================================
+   SPECIAL TEMPLATES
+   Premium keyboard & editor styles for
+   Mathematics, Physics, Chemistry templates
+   ============================================ */
+
+/* --- Section Header with Toggle --- */
+.section-header-with-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px;
+  background: #F8F6F2;
+  border-bottom: 1px solid #EDE9E0;
+}
+
+.section-header-with-toggle .section-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #5A6B56;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.formulas-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid #E4DFD5;
+  background: white;
+  color: #5A6B56;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.formulas-toggle-btn:hover {
+  background: #F2EFE8;
+  border-color: #D4CFC5;
+}
+
+.math-theme .formulas-toggle-btn:hover { color: #D35400; border-color: #E67E22; }
+.physics-theme .formulas-toggle-btn:hover { color: #C0392B; border-color: #E74C3C; }
+.chemistry-theme .formulas-toggle-btn:hover { color: #16A085; border-color: #1ABC9C; }
+
+/* --- Formula Reference Panel --- */
+.formulas-reference {
+  padding: 16px 20px;
+  background: #FDFCF9;
+  border-bottom: 1px solid #EDE9E0;
+  max-height: 420px;
+  overflow-y: auto;
+  animation: formulaSlideIn 0.2s ease;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.1) transparent;
+}
+
+@keyframes formulaSlideIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.math-theme .formulas-reference { border-left: 3px solid #E67E22; }
+.physics-theme .formulas-reference { border-left: 3px solid #E74C3C; }
+.chemistry-theme .formulas-reference { border-left: 3px solid #1ABC9C; }
+
+.formulas-section {
+  margin-bottom: 14px;
+}
+
+.formulas-section h4 {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #EEEBE5;
+  color: #999;
+}
+
+.math-theme .formulas-section h4 { color: #D35400; border-bottom-color: #F5D9B5; }
+.physics-theme .formulas-section h4 { color: #C0392B; border-bottom-color: #F5B5B0; }
+.chemistry-theme .formulas-section h4 { color: #16A085; border-bottom-color: #B0E8D8; }
+
+.formulas-group {
+  margin-bottom: 8px;
+}
+
+.formulas-group strong {
+  display: block;
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 2px;
+}
+
+.formula-clickable {
+  font-family: 'Courier New', Consolas, monospace;
+  font-size: 13px;
+  padding: 3px 8px;
+  margin: 1px 0;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  color: #444;
+  line-height: 1.6;
+}
+
+.formula-clickable:hover {
+  padding-left: 12px;
+}
+
+.math-theme .formula-clickable:hover { background: rgba(230, 126, 34, 0.08); color: #B85C10; }
+.physics-theme .formula-clickable:hover { background: rgba(231, 76, 60, 0.08); color: #B83020; }
+.chemistry-theme .formula-clickable:hover { background: rgba(26, 188, 156, 0.08); color: #16A085; }
+
+/* --- Content Textarea --- */
+.special-content-textarea {
+  width: 100%;
+  min-height: 260px;
+  padding: 20px;
+  border: none;
+  outline: none;
+  font-family: 'Courier New', Consolas, monospace;
+  font-size: 15px;
+  line-height: 1.7;
+  resize: vertical;
+  color: #1A2E16;
+  background: #FAFAF8;
+}
+
+.special-content-textarea::placeholder {
+  color: #B0B8AD;
+  font-style: italic;
+}
+
+/* --- Keyboard Tools Section --- */
+.special-tools-section {
+  background: linear-gradient(180deg, #0E0E1A 0%, #12121F 100%);
+  padding: 16px;
+}
+
+.tools-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.tools-header span {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #6A6A80;
+}
+
+.keyboard-scroll-container {
+  max-height: 360px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+  border-radius: 8px;
+}
+
+.keyboard-scroll-container::-webkit-scrollbar { width: 5px; }
+.keyboard-scroll-container::-webkit-scrollbar-track { background: transparent; }
+.keyboard-scroll-container::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 3px; }
+
+/* --- Keyboard Base --- */
+.math-keyboard,
+.physics-keyboard,
+.chemistry-keyboard {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.keyboard-row {
+  display: flex;
+  gap: 4px;
+}
+
+.keyboard-key {
+  flex: 1;
+  min-width: 0;
+  height: 42px;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.1s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  background: #1E1E30;
+  color: #E0E0F0;
+  border: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.keyboard-key:hover {
+  background: #2A2A44;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35);
+}
+
+.keyboard-key:active {
+  transform: translateY(1px);
+  box-shadow: none;
+  background: #151525;
+}
+
+/* === MATH KEYBOARD THEME === */
+.math-keyboard .keyboard-key.operator {
+  background: #2A2010;
+  color: #F39C12;
+  font-weight: 600;
+}
+.math-keyboard .keyboard-key.operator:hover {
+  background: #3A2C14;
+  box-shadow: 0 3px 10px rgba(243, 156, 18, 0.15);
+}
+.math-keyboard .keyboard-key.math-symbol {
+  background: #1E1A12;
+  color: #E8B860;
+}
+.math-keyboard .keyboard-key.math-symbol:hover {
+  background: #2A2418;
+  box-shadow: 0 3px 10px rgba(243, 156, 18, 0.1);
+}
+.math-keyboard .keyboard-key.action {
+  background: linear-gradient(180deg, #F39C12 0%, #E67E22 100%);
+  color: white;
+  font-weight: 700;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.math-keyboard .keyboard-key.action:hover {
+  background: linear-gradient(180deg, #FFAB20 0%, #F39C12 100%);
+  box-shadow: 0 3px 14px rgba(243, 156, 18, 0.35);
+}
+.math-keyboard .keyboard-key.action:active {
+  background: #D35400;
+}
+
+/* === PHYSICS KEYBOARD THEME === */
+.physics-keyboard .keyboard-key.operator {
+  background: #2A1210;
+  color: #E74C3C;
+  font-weight: 600;
+}
+.physics-keyboard .keyboard-key.operator:hover {
+  background: #3A1814;
+  box-shadow: 0 3px 10px rgba(231, 76, 60, 0.15);
+}
+.physics-keyboard .keyboard-key.physics-symbol {
+  background: #1E1210;
+  color: #E88070;
+}
+.physics-keyboard .keyboard-key.physics-symbol:hover {
+  background: #2A1A18;
+  box-shadow: 0 3px 10px rgba(231, 76, 60, 0.1);
+}
+.physics-keyboard .keyboard-key.action {
+  background: linear-gradient(180deg, #E74C3C 0%, #C0392B 100%);
+  color: white;
+  font-weight: 700;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.physics-keyboard .keyboard-key.action:hover {
+  background: linear-gradient(180deg, #F05A4A 0%, #E74C3C 100%);
+  box-shadow: 0 3px 14px rgba(231, 76, 60, 0.35);
+}
+.physics-keyboard .keyboard-key.action:active {
+  background: #A93226;
+}
+
+/* === CHEMISTRY KEYBOARD THEME === */
+.chemistry-keyboard .keyboard-key.operator {
+  background: #0E2A1E;
+  color: #1ABC9C;
+  font-weight: 600;
+}
+.chemistry-keyboard .keyboard-key.operator:hover {
+  background: #143A28;
+  box-shadow: 0 3px 10px rgba(26, 188, 156, 0.15);
+}
+.chemistry-keyboard .keyboard-key.chem-symbol {
+  background: #0E1E18;
+  color: #50D0A8;
+}
+.chemistry-keyboard .keyboard-key.chem-symbol:hover {
+  background: #142A22;
+  box-shadow: 0 3px 10px rgba(26, 188, 156, 0.1);
+}
+.chemistry-keyboard .keyboard-key.action {
+  background: linear-gradient(180deg, #1ABC9C 0%, #16A085 100%);
+  color: white;
+  font-weight: 700;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.chemistry-keyboard .keyboard-key.action:hover {
+  background: linear-gradient(180deg, #22CCAA 0%, #1ABC9C 100%);
+  box-shadow: 0 3px 14px rgba(26, 188, 156, 0.35);
+}
+.chemistry-keyboard .keyboard-key.action:active {
+  background: #138D75;
+}
+
+/* --- Responsive --- */
+@media (max-width: 768px) {
+  .keyboard-key { height: 38px; font-size: 12px; border-radius: 6px; }
+  .keyboard-row { gap: 3px; }
+  .math-keyboard, .physics-keyboard, .chemistry-keyboard { gap: 3px; }
+  .special-content-textarea { min-height: 180px; padding: 14px; font-size: 14px; }
+  .keyboard-scroll-container { max-height: 300px; }
+  .formulas-reference { max-height: 300px; padding: 12px 14px; }
+  .formula-clickable { font-size: 12px; }
+  .section-header-with-toggle { padding: 8px 14px; flex-wrap: wrap; gap: 8px; }
+}
+
+@media (max-width: 480px) {
+  .keyboard-key { height: 34px; font-size: 11px; }
+  .special-tools-section { padding: 10px; }
+}

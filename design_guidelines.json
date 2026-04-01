@@ -1,0 +1,124 @@
+{
+  "theme": "Light",
+  "archetype": "1 (Organic & Earthy)",
+  "emotional_tone": "Warm, grounded, trustworthy, and culturally resonant. It should feel like an academic sanctuary—calm but efficient.",
+  "colors": {
+    "background": {
+      "primary": "#FDFBF7",
+      "secondary": "#F2EFE8",
+      "tertiary": "#EAE5DA"
+    },
+    "text": {
+      "primary": "#1A2E16",
+      "secondary": "#4A5B46",
+      "muted": "#7A8A76",
+      "inverse": "#FFFFFF"
+    },
+    "brand": {
+      "primary": "#2D5A27",
+      "primary_hover": "#21441C",
+      "cta": "#D95D39",
+      "cta_hover": "#BD4D2D",
+      "accent_yellow": "#E5A93D",
+      "accent_sage": "#8E9E82"
+    },
+    "border": {
+      "default": "#E4DFD5",
+      "focus": "#2D5A27",
+      "subtle": "rgba(45, 90, 39, 0.1)"
+    },
+    "status": {
+      "success": "#2D5A27",
+      "error": "#D95D39",
+      "warning": "#E5A93D"
+    }
+  },
+  "typography": {
+    "fonts": {
+      "heading": "Cabinet Grotesk",
+      "body": "Work Sans",
+      "mono": "JetBrains Mono"
+    },
+    "scale": {
+      "h1": "text-4xl sm:text-5xl tracking-tight leading-tight",
+      "h2": "text-2xl sm:text-3xl tracking-tight leading-snug",
+      "h3": "text-xl sm:text-2xl tracking-tight",
+      "h4": "text-lg sm:text-xl font-medium",
+      "body": "text-base leading-relaxed",
+      "small": "text-sm leading-normal",
+      "label": "text-xs tracking-[0.1em] uppercase font-bold"
+    },
+    "rules": [
+      "No generic sans-serifs (Inter, Roboto) for headings.",
+      "Headlines must use tracking-tight.",
+      "Overlines/Labels must be uppercase with wide tracking.",
+      "Keep line-height tight for headings and relaxed for body text."
+    ]
+  },
+  "spacing_and_layout": {
+    "grid_system": {
+      "dashboard": "Control Room grid (gap-4 or gap-6). Use all available space.",
+      "marketing": "Tetris Grid, high asymmetry, gap-8 to gap-12."
+    },
+    "containers": "Generous spacing. Use p-6, p-8, p-12. Avoid cramped forms.",
+    "borders": "1px subtle solid borders (border-border) with no heavy drop shadows by default. Use 'Clay & Crisp' neumorphism selectively for primary action cards.",
+    "radius": "rounded-xl for primary containers, rounded-md for inner elements like inputs and buttons."
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-[#D95D39] text-white hover:bg-[#BD4D2D] transition-colors shadow-sm",
+      "secondary": "bg-[#2D5A27] text-white hover:bg-[#21441C] transition-colors",
+      "outline": "border border-[#E4DFD5] bg-transparent text-[#1A2E16] hover:bg-[#F2EFE8]"
+    },
+    "forms": {
+      "inputs": "bg-white border border-[#E4DFD5] text-[#1A2E16] focus:border-[#2D5A27] focus:ring-1 focus:ring-[#2D5A27] rounded-md p-3",
+      "labels": "text-sm font-medium text-[#4A5B46] mb-1.5 block",
+      "generator_card": "bg-white border border-[#E4DFD5] rounded-xl p-6 sm:p-8 shadow-sm"
+    },
+    "navigation": {
+      "header": "Sticky top-0 z-50 bg-[#FDFBF7]/80 backdrop-blur-xl border-b border-[#E4DFD5].",
+      "links": "text-[#4A5B46] hover:text-[#1A2E16] font-medium transition-colors"
+    },
+    "myhub_dashboard": {
+      "lesson_card": "bg-white border border-[#E4DFD5] rounded-xl p-5 hover:-translate-y-1 hover:shadow-md transition-all duration-200 cursor-pointer flex flex-col gap-3",
+      "tag": "bg-[#EAE5DA] text-[#4A5B46] text-xs px-2.5 py-1 rounded-full font-medium"
+    },
+    "premium_modal": {
+      "container": "relative overflow-hidden bg-[#1A2E16] text-white rounded-2xl p-8 border border-[#4A5B46]",
+      "highlight": "Use the abstract terracotta fluid artwork as a subtle background image with low opacity (10-20%)"
+    }
+  },
+  "animations": {
+    "hover": "Subtle -translate-y-1 and shadow-md on interactive cards.",
+    "page_load": "Staggered fade-up for dashboard items.",
+    "generator_state": "Pulsing opacity on a subtle green glow when AI is generating the lesson plan."
+  },
+  "image_urls": {
+    "hero_marketing": {
+      "url": "https://images.pexels.com/photos/8423062/pexels-photo-8423062.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "description": "Friendly female teacher smiling in front of a whiteboard. Use in the marketing landing page hero section."
+    },
+    "auth_background": {
+      "url": "https://images.pexels.com/photos/9159001/pexels-photo-9159001.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "description": "Focused student/teacher at a laptop. Use as the 50% split-screen background image for the Login/Signup page."
+    },
+    "premium_subscription_bg": {
+      "url": "https://images.pexels.com/photos/33145086/pexels-photo-33145086.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "description": "Abstract fluid artwork in terracotta and green. Use as a low-opacity background texture inside the Premium Subscription Modal or Banner to make it feel high-end."
+    },
+    "placeholder_texture": {
+      "url": "https://images.pexels.com/photos/29584832/pexels-photo-29584832.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "description": "Intricate abstract earthy tones. Can be used for empty states or generic section backgrounds."
+    }
+  },
+  "instructions_to_main_agent": [
+    "Always use the provided JSON media URLs for images. NEVER use via.placeholder.com or similar dummy image services.",
+    "All interactive and key informational elements MUST include a data-testid attribute in kebab-case based on role.",
+    "For the Lesson Plan Form, use Shadcn Select/Dropdown components customized to match the 'Forms' guidelines. Do not use native HTML <select>.",
+    "Implement the 'Crystal Glassmorphism' strategy for the header nav. It must use backdrop-blur-xl and bg-[#FDFBF7]/80.",
+    "In the Premium Subscription UI, do not use bright neon colors. Stick to the deep Forest Green (#1A2E16) background with Terracotta (#D95D39) accents and use the premium fluid texture image.",
+    "Ensure contrast passes APCA/WCAG standards. Text over images must have adequate dimming overlays or text-shadows.",
+    "For icons, install and use lucide-react (default) or @phosphor-icons/react for a more premium look.",
+    "When generating the PDF for download, ensure the layout is clean, high-contrast (black/dark green on white), and uses system-safe or embedded fonts."
+  ]
+}

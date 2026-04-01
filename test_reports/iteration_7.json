@@ -1,0 +1,107 @@
+{
+  "summary": "Completed testing of Scheme of Work CRUD, auto-expand textareas, and MyFiles delete operations. All features working correctly.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "Backend: POST /api/schemes creates scheme record (200)",
+    "Backend: GET /api/schemes returns schemes array (200)",
+    "Backend: DELETE /api/schemes/{id} deletes scheme (200)",
+    "Backend: DELETE /api/lessons/{id} deletes lesson (200/404)",
+    "Backend: DELETE /api/notes/{id} deletes note (200)",
+    "Backend: DELETE /api/dictations/{id} deletes dictation (200)",
+    "Backend: DELETE /api/uploads/{id} deletes upload (200/404)",
+    "Backend: Scheme with empty competencies array accepted (200)",
+    "Backend: Scheme with Tanzania Mainland syllabus accepted (200)",
+    "Frontend: Scheme of Work page loads with Zanzibar/Tanzania Mainland toggle",
+    "Frontend: Toggle changes header from ZANZIBAR to TANZANIA MAINLAND",
+    "Frontend: Toggle changes column headers (Umahiri Mkuu, Shughuli Kuu, etc.)",
+    "Frontend: Add Row button adds new row and jumps to last page (Page 1 of 1 -> Page 2 of 2)",
+    "Frontend: Save to My Files button saves scheme via POST /api/schemes (button shows 'Saved to My Files!')",
+    "Frontend: Print button opens print window with full table content",
+    "Frontend: Export as DOCX downloads .doc file (Scheme_of_Work_TestExport_Zanzibar.doc)",
+    "Frontend: Textarea cells auto-expand height (80px -> 125px) when text is entered",
+    "Frontend: My Files shows 5 stat cards (Lessons, Schemes, Notes, Dictations, Uploads)",
+    "Frontend: My Files shows scheme cards with Calendar icon and delete button",
+    "Frontend: My Files filter dropdown includes 'Schemes of Work' option",
+    "Frontend: Delete scheme button removes scheme from My Files (1 Schemes -> 0 Schemes)"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_iteration7_scheme_crud.py",
+    "/app/test_reports/pytest/pytest_results_iter7.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_iteration7_scheme_crud.py - Created comprehensive backend tests for iteration 7"
+  ],
+  "success_rate": {
+    "backend": "100% (10/10 tests passed)",
+    "frontend": "100% (all UI features working)"
+  },
+  "test_credentials": {
+    "session_token": "test_session_tts_001",
+    "user_id": "test-user-tts",
+    "email": "test-tts@example.com"
+  },
+  "seed_data_creation": "Created TEST_School_Playwright scheme for testing, cleaned up after tests",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All Scheme of Work features verified working: (1) Add Row adds row and jumps to last page, (2) Save to My Files saves via POST /api/schemes, (3) Print opens print window with full table, (4) Export as DOCX downloads .doc file, (5) Textarea cells auto-expand (overflow:hidden + JS autoResize), (6) Zanzibar/Tanzania Mainland toggle changes headers. MyFiles delete operations work for all types (lessons, notes, dictations, uploads, schemes). PesaPal payments remain MOCKED.",
+  "mocked_apis": {
+    "POST /api/subscription/subscribe": "PesaPal payments are MOCKED"
+  },
+  "real_integrations": {
+    "POST /api/schemes": "Real MongoDB storage",
+    "POST /api/dictation/generate": "Real OpenAI TTS via Emergent LLM key",
+    "POST /api/lessons/generate": "Real GPT-5.2 via Emergent LLM key"
+  },
+  "features_tested": {
+    "scheme_of_work_add_row": {
+      "status": "PASSED",
+      "details": "Add Row button adds new row and automatically navigates to last page"
+    },
+    "scheme_of_work_save": {
+      "status": "PASSED",
+      "details": "Save to My Files button saves scheme via POST /api/schemes, button shows success message"
+    },
+    "scheme_of_work_print": {
+      "status": "PASSED",
+      "details": "Print button opens new window with formatted scheme table for printing"
+    },
+    "scheme_of_work_export_docx": {
+      "status": "PASSED",
+      "details": "Export as DOCX downloads HTML-based .doc file that MS Word can open"
+    },
+    "scheme_of_work_textarea_autoexpand": {
+      "status": "PASSED",
+      "details": "Textarea cells auto-expand from 80px to 125px when multi-line text is entered"
+    },
+    "scheme_of_work_toggle": {
+      "status": "PASSED",
+      "details": "Zanzibar/Tanzania Mainland toggle changes header and column labels"
+    },
+    "myfiles_5_stat_cards": {
+      "status": "PASSED",
+      "details": "My Files shows 5 stat cards: Lesson Plans, Schemes, Notes, Dictations, Uploads"
+    },
+    "myfiles_scheme_display": {
+      "status": "PASSED",
+      "details": "Schemes appear in My Files with Calendar icon, subject, class, term, school info"
+    },
+    "myfiles_delete_all_types": {
+      "status": "PASSED",
+      "details": "Delete buttons work for all file types (lessons, notes, dictations, uploads, schemes)"
+    },
+    "myfiles_filter_schemes": {
+      "status": "PASSED",
+      "details": "Filter dropdown includes 'Schemes of Work' option"
+    }
+  }
+}
