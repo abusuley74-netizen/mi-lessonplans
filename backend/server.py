@@ -549,6 +549,150 @@ async def subscribe(request: Request, user: User = Depends(get_current_user)):
         "expires": expires.isoformat()
     }
 
+# ==================== NOTES ROUTES ====================
+
+@api_router.get("/notes")
+async def get_notes(user: User = Depends(get_current_user)):
+    """Get all notes for the current user"""
+    notes = await db.notes.find(
+        {"user_id": user.user_id},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    return {"notes": notes}
+
+@api_router.post("/notes")
+async def create_note(request: Request, user: User = Depends(get_current_user)):
+    """Create a new note"""
+    data = await request.json()
+    note = {
+        "note_id": f"note_{uuid.uuid4().hex[:12]}",
+        "user_id": user.user_id,
+        "title": data.get("title", "Untitled Note"),
+        "content": data.get("content", ""),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.notes.insert_one(note)
+    note.pop("_id", None)
+    return note
+
+@api_router.delete("/notes/{note_id}")
+async def delete_note(note_id: str, user: User = Depends(get_current_user)):
+    """Delete a note"""
+    result = await db.notes.delete_one({"note_id": note_id, "user_id": user.user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Note not found")
+    return {"message": "Note deleted"}
+
+# ==================== DICTATION ROUTES ====================
+
+@api_router.get("/dictations")
+async def get_dictations(user: User = Depends(get_current_user)):
+    """Get all dictations for the current user"""
+    dictations = await db.dictations.find(
+        {"user_id": user.user_id},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    return {"dictations": dictations}
+
+@api_router.post("/dictations")
+async def save_dictation(request: Request, user: User = Depends(get_current_user)):
+    """Save a dictation record"""
+    data = await request.json()
+    dictation = {
+        "dictation_id": f"dict_{uuid.uuid4().hex[:12]}",
+        "user_id": user.user_id,
+        "title": data.get("title", "Untitled Dictation"),
+        "text": data.get("text", ""),
+        "language": data.get("language", "en-GB"),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.dictations.insert_one(dictation)
+    dictation.pop("_id", None)
+    return dictation
+
+@api_router.post("/dictation/generate")
+async def generate_dictation_audio(request: Request, user: User = Depends(get_current_user)):
+    """Generate audio from text using TTS (returns audio file)"""
+    from fastapi.responses import Response
+    
+    data = await request.json()
+    text = data.get("text", "")
+    language = data.get("language", "en-GB")
+    
+    if not text.strip():
+        raise HTTPException(status_code=400, detail="Text is required")
+    
+    # Word count check
+    words = text.strip().split()
+    if len(words) > 200:
+        raise HTTPException(status_code=400, detail="Text exceeds 200 word limit")
+    
+    # For now, return a placeholder response
+    # In production, integrate with a TTS service like Google TTS or ElevenLabs
+    # This is a placeholder that returns a simple beep sound
+    
+    # Return a simple audio placeholder
+    # In real implementation, use Google Cloud TTS, Amazon Polly, or ElevenLabs
+    return Response(
+        content=b"Audio generation requires TTS integration",
+        media_type="text/plain",
+        status_code=200
+    )
+
+@api_router.delete("/dictations/{dictation_id}")
+async def delete_dictation(dictation_id: str, user: User = Depends(get_current_user)):
+    """Delete a dictation"""
+    result = await db.dictations.delete_one({"dictation_id": dictation_id, "user_id": user.user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Dictation not found")
+    return {"message": "Dictation deleted"}
+
+# ==================== UPLOADS ROUTES ====================
+
+@api_router.get("/uploads")
+async def get_uploads(user: User = Depends(get_current_user)):
+    """Get all uploads for the current user"""
+    uploads = await db.uploads.find(
+        {"user_id": user.user_id},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    return {"uploads": uploads}
+
+@api_router.post("/uploads")
+async def upload_file(request: Request, user: User = Depends(get_current_user)):
+    """Upload a file"""
+    from fastapi import UploadFile, File, Form
+    
+    form = await request.form()
+    file = form.get("file")
+    name = form.get("name", "Untitled")
+    file_type = form.get("type", "unknown")
+    size = form.get("size", 0)
+    
+    upload = {
+        "upload_id": f"upload_{uuid.uuid4().hex[:12]}",
+        "user_id": user.user_id,
+        "name": name,
+        "type": file_type,
+        "size": int(size),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    # In production, save file to cloud storage (S3, GCS, etc.)
+    # For now, just save the metadata
+    await db.uploads.insert_one(upload)
+    upload.pop("_id", None)
+    return upload
+
+@api_router.delete("/uploads/{upload_id}")
+async def delete_upload(upload_id: str, user: User = Depends(get_current_user)):
+    """Delete an upload"""
+    result = await db.uploads.delete_one({"upload_id": upload_id, "user_id": user.user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Upload not found")
+    return {"message": "Upload deleted"}
+
 # ==================== UTILITY ROUTES ====================
 
 @api_router.get("/")
