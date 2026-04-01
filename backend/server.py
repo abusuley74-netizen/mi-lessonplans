@@ -224,6 +224,7 @@ async def logout(request: Request, response: Response):
 
 async def generate_lesson_with_ai(syllabus: str, subject: str, grade: str, topic: str) -> Dict[str, Any]:
     """Generate lesson plan content using GPT-5.2 via Emergent LLM key"""
+    import asyncio
     from emergentintegrations.llm.chat import LlmChat, UserMessage
     
     api_key = os.environ.get("EMERGENT_LLM_KEY")
@@ -235,7 +236,7 @@ async def generate_lesson_with_ai(syllabus: str, subject: str, grade: str, topic
         chat = LlmChat(
             api_key=api_key,
             session_id=f"lesson_{uuid.uuid4().hex[:8]}",
-            system_message="You are an expert education curriculum designer specializing in Tanzanian education systems. You create detailed, practical lesson plans following official syllabus guidelines."
+            system_message="You are an expert Tanzanian education curriculum designer. Create practical lesson plans. Be concise but comprehensive."
         ).with_model("openai", "gpt-5.2")
         
         if syllabus == "Zanzibar":
