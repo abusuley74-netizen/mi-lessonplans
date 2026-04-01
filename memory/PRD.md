@@ -4,7 +4,7 @@
 AI-powered lesson planning platform for Tanzanian teachers, supporting Tanzania Mainland & Zanzibar syllabi. Built with React + FastAPI + MongoDB.
 
 ## Core Features (Implemented)
-- **Google OAuth Login** (Emergent-managed) 
+- **Google OAuth Login** (Emergent-managed)
 - **AI Lesson Plan Generator** (GPT-5.2 via Emergent LLM Key)
 - **MyHub Dashboard** with sidebar navigation
 - **Dictation Tool** (OpenAI TTS with GPT-5.2 auto-translation to Swahili/Arabic/French)
@@ -12,32 +12,36 @@ AI-powered lesson planning platform for Tanzanian teachers, supporting Tanzania 
 - **Scheme of Work Generator** with AI, Add Row, Save, Export DOCX
 - **MyFiles Manager** with custom delete modals, blob-based downloads, audio playback
 - **Profile Settings** with custom picture upload
-- **Templates System** with 6 types:
-  - Basic Template (Free)
-  - Scientific Template (Free)
-  - Geography Template (Premium) - with image upload + questions
-  - Mathematics Template (Premium) - with math keyboard + Tanzania formulas
-  - Physics Template (Premium) - with physics keyboard + Tanzania formulas
-  - Chemistry Template (Premium) - with chemistry keyboard + Tanzania formulas
+- **6 Specialized Template Editors:**
+  - **Basic** - Generic contentEditable editor (Free)
+  - **Scientific** - Vertical split: notes on left + 3 image uploads on right (Free)
+  - **Geography** - 4 image upload cards + dynamic questions section (Premium)
+  - **Mathematics** - Monospace editor + dark math keyboard + Tanzania Syllabus formulas (Premium)
+  - **Physics** - Monospace editor + dark physics keyboard + Tanzania Syllabus formulas (Premium)
+  - **Chemistry** - Monospace editor + dark chemistry keyboard + Tanzania Syllabus formulas (Premium)
 - **Subscription System** (Mock PesaPal - Basic TZS 9,999 / Premium TZS 19,999)
-- **Sonner Toast Notifications** - All window.alert() calls replaced for iframe sandbox compatibility
-- **Sandbox-safe Downloads** - Fetch-to-blob approach for document exports
+- **Sonner Toast Notifications** - All window.alert() calls replaced
+- **Sandbox-safe Downloads** - Fetch-to-blob for document exports
 
 ## Architecture
 ```
 /app
 ├── backend/
-│   └── server.py          # FastAPI (auth, AI, templates, TTS, CRUD)
+│   └── server.py              # FastAPI (auth, AI, templates, TTS, CRUD)
 ├── frontend/src/
 │   ├── components/
-│   │   ├── Templates.js         # Template grid + generic editor
-│   │   ├── MathTemplate.js      # Math editor w/ keyboard
-│   │   ├── PhysicsTemplate.js   # Physics editor w/ keyboard
-│   │   ├── ChemistryTemplate.js # Chemistry editor w/ keyboard
-│   │   ├── MathKeyboard.js      # Math symbols keyboard
-│   │   ├── PhysicsKeyboard.js   # Physics symbols keyboard
-│   │   ├── ChemistryKeyboard.js # Chemistry symbols keyboard
-│   │   ├── SpecialTemplates.css # Premium keyboard styling
+│   │   ├── Templates.js           # Template grid + generic editor + routing
+│   │   ├── MathTemplate.js        # Math editor w/ keyboard
+│   │   ├── PhysicsTemplate.js     # Physics editor w/ keyboard
+│   │   ├── ChemistryTemplate.js   # Chemistry editor w/ keyboard
+│   │   ├── GeographyTemplate.js   # Geography editor w/ images + questions
+│   │   ├── ScientificTemplate.js  # Scientific editor w/ split layout
+│   │   ├── MathKeyboard.js        # Math symbols keyboard
+│   │   ├── PhysicsKeyboard.js     # Physics symbols keyboard
+│   │   ├── ChemistryKeyboard.js   # Chemistry symbols keyboard
+│   │   ├── SpecialTemplates.css   # Keyboard styling (Math/Physics/Chemistry)
+│   │   ├── GeographyTemplate.css  # Geography template styling
+│   │   ├── ScientificTemplate.css # Scientific template styling
 │   │   ├── Dictation.js, CreateNotes.js, SchemeOfWork.js
 │   │   ├── MyFiles.js, ProfileSettings.js, Header.js
 │   │   └── SubscriptionModal.js
@@ -62,11 +66,14 @@ AI-powered lesson planning platform for Tanzanian teachers, supporting Tanzania 
 - [x] Scheme of Work with AI + CRUD + Export
 - [x] MyFiles with audio/notes/schemes + delete modals + blob downloads
 - [x] Profile picture upload
-- [x] Basic/Scientific/Geography templates
-- [x] Premium Math/Physics/Chemistry templates with custom keyboards
-- [x] Tanzania Syllabus Formula reference panels (Form 1-6)
+- [x] Basic template (generic editor)
+- [x] Scientific template (vertical split: notes + 3 image uploads)
+- [x] Geography template (4 image uploads + dynamic questions)
+- [x] Mathematics template (keyboard + Tanzania formulas)
+- [x] Physics template (keyboard + Tanzania formulas)
+- [x] Chemistry template (keyboard + Tanzania formulas)
 - [x] All window.alert() → Sonner toast notifications
-- [x] Sandbox iframe compatibility (no confirm/alert/window.open)
+- [x] Sandbox iframe compatibility
 
 ## Backlog
 - P1: PesaPal real payment integration (blocked on API keys)
