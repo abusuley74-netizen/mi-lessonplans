@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { 
   BookOpen, Calendar, Trash2, Eye, Download, Search, Filter,
-  Printer, X, FileText, Mic, Upload, File
+  Printer, X, FileText, Mic, Upload, File, FolderOpen
 } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;

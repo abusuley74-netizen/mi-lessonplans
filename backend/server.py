@@ -613,8 +613,9 @@ async def save_dictation(request: Request, user: User = Depends(get_current_user
 
 @api_router.post("/dictation/generate")
 async def generate_dictation_audio(request: Request, user: User = Depends(get_current_user)):
-    """Generate audio from text using TTS (returns audio file)"""
-    from fastapi.responses import Response
+    """Generate audio from text using OpenAI TTS via Emergent LLM Key"""
+    from fastapi.responses import Response as FastAPIResponse
+    from emergentintegrations.llm.openai import OpenAITextToSpeech
     
     data = await request.json()
     text = data.get("text", "")
@@ -623,22 +624,42 @@ async def generate_dictation_audio(request: Request, user: User = Depends(get_cu
     if not text.strip():
         raise HTTPException(status_code=400, detail="Text is required")
     
-    # Word count check
     words = text.strip().split()
     if len(words) > 200:
         raise HTTPException(status_code=400, detail="Text exceeds 200 word limit")
     
-    # For now, return a placeholder response
-    # In production, integrate with a TTS service like Google TTS or ElevenLabs
-    # This is a placeholder that returns a simple beep sound
+    # Map language codes to appropriate TTS voices
+    voice_map = {
+        "en-GB": "nova",
+        "sw": "onyx",
+        "ar": "echo",
+        "tr": "fable",
+        "fr": "shimmer",
+    }
+    voice = voice_map.get(language, "alloy")
     
-    # Return a simple audio placeholder
-    # In real implementation, use Google Cloud TTS, Amazon Polly, or ElevenLabs
-    return Response(
-        content=b"Audio generation requires TTS integration",
-        media_type="text/plain",
-        status_code=200
-    )
+    api_key = os.environ.get("EMERGENT_LLM_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="TTS service not configured")
+    
+    try:
+        tts = OpenAITextToSpeech(api_key=api_key)
+        audio_bytes = await tts.generate_speech(
+            text=text,
+            model="tts-1",
+            voice=voice,
+            response_format="mp3",
+            speed=1.0
+        )
+        
+        return FastAPIResponse(
+            content=audio_bytes,
+            media_type="audio/mpeg",
+            headers={"Content-Disposition": f"inline; filename=dictation_{language}.mp3"}
+        )
+    except Exception as e:
+        logger.error(f"TTS generation error: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate audio: {str(e)}")
 
 @api_router.delete("/dictations/{dictation_id}")
 async def delete_dictation(dictation_id: str, user: User = Depends(get_current_user)):

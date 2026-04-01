@@ -15,6 +15,7 @@ import MyActivities from '../components/MyActivities';
 import PaymentSettings from '../components/PaymentSettings';
 import ProfileSettings from '../components/ProfileSettings';
 import UploadMaterials from '../components/UploadMaterials';
+import SchemeOfWorkForm from '../components/SchemeOfWorkForm';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -29,7 +30,7 @@ const MyHub = () => {
     { id: 'templates', label: 'Templates', icon: Layout, emoji: '📋', disabled: true, badge: 'Coming Soon' },
     { id: 'dictation', label: 'Dictation', icon: Mic, emoji: '📝' },
     { id: 'my-files', label: 'My Files', icon: FolderOpen, emoji: '📁' },
-    { id: 'scheme-of-work', label: 'Scheme of Work', icon: Calendar, emoji: '📅', disabled: true, badge: 'Coming Soon' },
+    { id: 'scheme-of-work', label: 'Scheme of Work', icon: Calendar, emoji: '📅' },
     { id: 'my-activities', label: 'My Activities', icon: BarChart3, emoji: '📊' },
     { id: 'payment-settings', label: 'Payment Settings', icon: CreditCard, emoji: '💰' },
     { id: 'profile-settings', label: 'Profile Settings', icon: User, emoji: '👤' },
@@ -51,8 +52,9 @@ const MyHub = () => {
         return <PaymentSettings />;
       case 'profile-settings':
         return <ProfileSettings />;
-      case 'templates':
       case 'scheme-of-work':
+        return <SchemeOfWorkForm />;
+      case 'templates':
         return (
           <div className="flex flex-col items-center justify-center h-full py-20">
             <div className="text-6xl mb-4">🚧</div>
