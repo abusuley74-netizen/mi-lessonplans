@@ -777,6 +777,119 @@ async def delete_scheme(scheme_id: str, user: User = Depends(get_current_user)):
     return {"message": "Scheme deleted"}
 
 
+# ==================== TEMPLATE ROUTES ====================
+
+DEFAULT_TEMPLATES = [
+    {"template_id": "template_basic", "name": "Basic Template", "type": "basic", "description": "Simple note format with title, subject, and content.", "required_subscription": "basic", "content": {"title": "Lesson Plan", "subject": "General", "category": "Lesson", "body": ""}, "is_active": True, "is_default": True},
+    {"template_id": "template_scientific", "name": "Scientific Template", "type": "scientific", "description": "Split layout with image uploads on left and notes on right.", "required_subscription": "basic", "content": {"title": "Scientific Notes", "subject": "Science", "category": "Experiment", "body": ""}, "is_active": True, "is_default": True},
+    {"template_id": "template_geography", "name": "Geography Template", "type": "geography", "description": "Image upload for physical geography/maps with question areas.", "required_subscription": "premium", "content": {"title": "Geography Lesson", "subject": "Geography", "category": "Map Reading", "body": "", "questions": []}, "is_active": True, "is_default": True},
+    {"template_id": "template_mathematics", "name": "Mathematics Template", "type": "mathematics", "description": "Text area for math problems and solutions.", "required_subscription": "premium", "content": {"title": "Mathematics Lesson", "subject": "Mathematics", "category": "Algebra", "body": ""}, "is_active": True, "is_default": True},
+    {"template_id": "template_physics", "name": "Physics Template", "type": "physics", "description": "Text area for physics problems and solutions.", "required_subscription": "premium", "content": {"title": "Physics Lesson", "subject": "Physics", "category": "Mechanics", "body": ""}, "is_active": True, "is_default": True},
+    {"template_id": "template_chemistry", "name": "Chemistry Template", "type": "chemistry", "description": "Text area for chemistry problems and solutions.", "required_subscription": "premium", "content": {"title": "Chemistry Lesson", "subject": "Chemistry", "category": "Organic", "body": ""}, "is_active": True, "is_default": True},
+]
+
+@api_router.get("/templates")
+async def get_templates(user: User = Depends(get_current_user)):
+    """Get all templates for current user (user-saved + defaults)"""
+    user_templates = await db.templates.find({"user_id": user.user_id}, {"_id": 0}).to_list(100)
+    saved_ids = {t["template_id"] for t in user_templates}
+    # Merge defaults for any not overridden
+    result = list(user_templates)
+    for dt in DEFAULT_TEMPLATES:
+        if dt["template_id"] not in saved_ids:
+            result.append(dt)
+    return {"templates": result}
+
+@api_router.post("/templates")
+async def save_template(request: Request, user: User = Depends(get_current_user)):
+    """Save or update a user template"""
+    data = await request.json()
+    template_id = data.get("template_id", f"template_{uuid.uuid4().hex[:12]}")
+    
+    template = {
+        "template_id": template_id,
+        "user_id": user.user_id,
+        "name": data.get("name", ""),
+        "type": data.get("type", "basic"),
+        "description": data.get("description", ""),
+        "content": data.get("content", {}),
+        "is_active": data.get("is_active", True),
+        "is_default": False,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": data.get("created_at", datetime.now(timezone.utc).isoformat()),
+    }
+    
+    await db.templates.update_one(
+        {"template_id": template_id, "user_id": user.user_id},
+        {"$set": template},
+        upsert=True
+    )
+    template.pop("_id", None)
+    return template
+
+@api_router.delete("/templates/{template_id}")
+async def delete_template(template_id: str, user: User = Depends(get_current_user)):
+    await db.templates.delete_one({"template_id": template_id, "user_id": user.user_id})
+    return {"message": "Template deleted"}
+
+@api_router.post("/templates/{template_id}/export")
+async def export_template(template_id: str, request: Request, user: User = Depends(get_current_user)):
+    """Export a template as Word-compatible HTML document"""
+    from fastapi.responses import Response as FastAPIResponse
+    
+    data = await request.json()
+    content = data.get("content", {})
+    template_type = data.get("type", "basic")
+    user_name = user.name or ""
+    current_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    
+    title = content.get("title", "Document")
+    subject = content.get("subject", "General")
+    category = content.get("category", "General")
+    body = content.get("body", "")
+    
+    meta = f'<strong>Subject:</strong> {subject} | <strong>Category:</strong> {category} | <strong>Created:</strong> {current_date}'
+    if user_name:
+        meta += f' | <strong>Teacher:</strong> {user_name}'
+    
+    styles = """body{font-family:'Segoe UI',Tahoma,sans-serif;margin:20px;line-height:1.6;color:#374151}
+    h1{color:#1f2937;border-bottom:2px solid #e5e7eb;padding-bottom:10px;margin-bottom:20px}
+    .meta{color:#6b7280;font-size:14px;margin-bottom:20px}.content{line-height:1.8}"""
+    
+    if template_type == "scientific":
+        body_html = f"""<div style="display:table;width:100%">
+            <div style="display:table-cell;width:30%;vertical-align:top;padding:15px;background:#f8fafc;border:1px solid #e2e8f0">
+                <h4>Images</h4><p style="color:#9ca3af">(Attach images when editing)</p>
+            </div>
+            <div style="display:table-cell;width:70%;vertical-align:top;padding-left:20px">
+                <h1>{title}</h1><div class="meta">{meta}</div><div class="content">{body}</div>
+            </div></div>"""
+    elif template_type == "geography":
+        questions = content.get("questions", [])
+        q_html = "".join(f'<p style="margin:10px 0;padding:10px;background:#f8fafc;border-left:3px solid #4B0082"><strong>Q{i+1}:</strong> {q}</p>' for i, q in enumerate(questions) if q)
+        body_html = f"""<h1>{title}</h1><div class="meta">{meta}</div>
+            <h3>Images</h3><p style="color:#9ca3af">(Attach geography/map images when editing)</p>
+            <h3>Questions</h3>{q_html or '<p>No questions added</p>'}"""
+    elif template_type in ("mathematics", "physics", "chemistry"):
+        styles += " .content{white-space:pre-wrap;font-family:'Courier New',monospace}"
+        body_html = f'<h1>{title}</h1><div class="meta">{meta}</div><div class="content">{body}</div>'
+    else:
+        body_html = f'<h1>{title}</h1><div class="meta">{meta}</div><div class="content">{body}</div>'
+    
+    html = f"""<html xmlns:o="urn:schemas-microsoft-com:office:office"
+        xmlns:w="urn:schemas-microsoft-com:office:word"
+        xmlns="http://www.w3.org/TR/REC-html40">
+    <head><meta charset="utf-8"><style>{styles}</style></head>
+    <body>{body_html}</body></html>"""
+    
+    filename = f"{title.replace(' ','_')}_{template_type}.doc"
+    return FastAPIResponse(
+        content=f'\ufeff{html}'.encode('utf-8'),
+        media_type="application/msword",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
 @api_router.get("/schemes/{scheme_id}/export")
 async def export_scheme_docx(scheme_id: str, user: User = Depends(get_current_user)):
     """Export a scheme of work as a downloadable .doc file"""

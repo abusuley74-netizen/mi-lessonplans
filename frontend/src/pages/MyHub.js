@@ -16,6 +16,7 @@ import PaymentSettings from '../components/PaymentSettings';
 import ProfileSettings from '../components/ProfileSettings';
 import UploadMaterials from '../components/UploadMaterials';
 import SchemeOfWorkForm from '../components/SchemeOfWorkForm';
+import Templates from '../components/Templates';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -28,7 +29,7 @@ const MyHub = () => {
   const menuItems = [
     { id: 'upload-materials', label: 'Upload Materials', icon: Upload, emoji: '📤' },
     { id: 'create-notes', label: 'Create Notes', icon: FileText, emoji: '📝' },
-    { id: 'templates', label: 'Templates', icon: Layout, emoji: '📋', disabled: true, badge: 'Coming Soon' },
+    { id: 'templates', label: 'Templates', icon: Layout, emoji: '📋' },
     { id: 'dictation', label: 'Dictation', icon: Mic, emoji: '📝' },
     { id: 'my-files', label: 'My Files', icon: FolderOpen, emoji: '📁' },
     { id: 'scheme-of-work', label: 'Scheme of Work', icon: Calendar, emoji: '📅' },
@@ -56,13 +57,7 @@ const MyHub = () => {
       case 'scheme-of-work':
         return <SchemeOfWorkForm />;
       case 'templates':
-        return (
-          <div className="flex flex-col items-center justify-center h-full py-20">
-            <div className="text-6xl mb-4">🚧</div>
-            <h2 className="text-2xl font-bold text-[#1A2E16] mb-2">Coming Soon</h2>
-            <p className="text-[#7A8A76]">This feature is under development</p>
-          </div>
-        );
+        return <Templates />;
       default:
         return <MyFiles />;
     }
