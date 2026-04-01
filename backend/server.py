@@ -1183,27 +1183,75 @@ def build_resource_preview(resource_type: str, resource: dict) -> dict:
     return {}
 
 def build_download_content(resource_type: str, resource: dict) -> tuple:
-    """Build downloadable content. Returns (content_bytes, media_type, filename)."""
+    """Build downloadable Word document. Returns (content_bytes, media_type, filename)."""
+    doc_styles = """
+      body { font-family: 'Segoe UI', Tahoma, Geneva, sans-serif; margin: 30px; line-height: 1.7; color: #1f2937; background: #fff; }
+      h1 { font-size: 22pt; color: #1a2e16; text-align: center; border-bottom: 3px solid #2D5A27; padding-bottom: 12px; margin-bottom: 8px; }
+      h2 { font-size: 14pt; color: #2D5A27; margin: 20px 0 8px; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px; }
+      h3 { font-size: 12pt; color: #4a5b46; margin: 14px 0 6px; }
+      .subtitle { text-align: center; color: #6b7280; font-size: 11pt; margin-bottom: 20px; }
+      .meta-table { width: 100%; border-collapse: collapse; margin: 15px 0 25px; }
+      .meta-table td { padding: 6px 12px; border: 1px solid #d1d5db; font-size: 10pt; }
+      .meta-table td:first-child { font-weight: bold; background: #f8f6f1; width: 140px; color: #2D5A27; }
+      .section { margin: 16px 0; padding: 14px 18px; border: 1px solid #e2e8f0; border-radius: 6px; background: #fafaf8; }
+      .section-title { font-weight: bold; font-size: 11pt; color: #2D5A27; margin-bottom: 8px; border-bottom: 1px dashed #d1d5db; padding-bottom: 4px; }
+      .section p { margin: 4px 0; font-size: 10pt; }
+      .content { line-height: 1.8; font-size: 11pt; }
+      .footer { text-align: center; margin-top: 30px; padding-top: 12px; border-top: 2px solid #e5e7eb; color: #9ca3af; font-size: 9pt; }
+      table.data { width: 100%; border-collapse: collapse; margin: 10px 0; }
+      table.data th { background: #2D5A27; color: #fff; padding: 8px 6px; border: 1px solid #1a2e16; font-size: 9pt; text-align: center; }
+      table.data td { border: 1px solid #999; padding: 6px; vertical-align: top; font-size: 9pt; }
+    """
+    word_ns = 'xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"'
+
     if resource_type == "lesson":
         content = resource.get("content", {})
-        text = f"{'='*70}\n{'LESSON PLAN':^70}\n{'='*70}\n\n"
-        text += f"SYLLABUS: {resource.get('syllabus','')}\nSUBJECT: {resource.get('subject','')}\n"
-        text += f"GRADE/CLASS: {resource.get('grade','')}\nTOPIC: {resource.get('topic','')}\n\n"
+        syllabus = resource.get("syllabus", "")
+        subject = resource.get("subject", "")
+        grade = resource.get("grade", "")
+        topic = resource.get("topic", "")
+        created = resource.get("created_at", "")
+
+        sections_html = ""
         for key, val in content.items():
             if isinstance(val, str):
-                text += f"{key.replace('_',' ').title()}: {val}\n"
+                label = key.replace('_', ' ').title()
+                sections_html += f'<div class="section"><div class="section-title">{label}</div><p>{val}</p></div>'
             elif isinstance(val, dict):
-                text += f"\n--- {key.replace('_',' ').title()} ---\n"
-                for k2, v2 in val.items():
-                    text += f"  {k2}: {v2}\n"
-        text += "\nShared via MiLesson Plan\n"
-        filename = f"{resource.get('subject','lesson')}_{resource.get('topic','plan')}.txt"
-        return text.encode('utf-8'), "text/plain", filename
+                label = key.replace('_', ' ').title()
+                inner = "".join(f'<p><strong>{k}:</strong> {v}</p>' for k, v in val.items())
+                time_str = val.get("time", "")
+                title_extra = f" ({time_str})" if time_str else ""
+                sections_html += f'<div class="section"><div class="section-title">{label}{title_extra}</div>{inner}</div>'
+
+        html = f"""<html {word_ns}>
+        <head><meta charset="utf-8"><style>{doc_styles}</style></head><body>
+        <h1>{syllabus.upper()} LESSON PLAN</h1>
+        <table class="meta-table">
+          <tr><td>Subject</td><td>{subject}</td></tr>
+          <tr><td>Grade / Class</td><td>{grade}</td></tr>
+          <tr><td>Topic</td><td>{topic}</td></tr>
+          <tr><td>Syllabus</td><td>{syllabus}</td></tr>
+          <tr><td>Date</td><td>{created[:10] if created else ''}</td></tr>
+        </table>
+        {sections_html}
+        <div class="footer">Generated &amp; Shared via MiLesson Plan</div>
+        </body></html>"""
+        filename = f"{subject}_{topic}_Lesson_Plan.doc".replace(' ', '_')
+        return f'\ufeff{html}'.encode('utf-8'), "application/msword", filename
 
     elif resource_type == "note":
-        html = f"""<html><head><meta charset="utf-8"><style>body{{font-family:sans-serif;padding:20px;line-height:1.6}}</style></head>
-        <body><h1>{resource.get('title','Note')}</h1>{resource.get('content','')}</body></html>"""
-        filename = f"{resource.get('title','note').replace(' ','_')}.doc"
+        title = resource.get("title", "Note")
+        note_content = resource.get("content", "")
+        created = resource.get("created_at", "")
+        html = f"""<html {word_ns}>
+        <head><meta charset="utf-8"><style>{doc_styles}</style></head><body>
+        <h1>{title}</h1>
+        <p class="subtitle">Created: {created[:10] if created else ''}</p>
+        <div class="content">{note_content}</div>
+        <div class="footer">Shared via MiLesson Plan</div>
+        </body></html>"""
+        filename = f"{title.replace(' ','_')}.doc"
         return f'\ufeff{html}'.encode('utf-8'), "application/msword", filename
 
     elif resource_type == "scheme":
@@ -1213,16 +1261,25 @@ def build_download_content(resource_type: str, resource: dict) -> tuple:
                     "methods", "resources", "assessment", "references", "remarks"]
         rows_html = ""
         for row in resource.get("competencies", []):
-            cells = "".join(f'<td style="border:1px solid #000;padding:4px;">{row.get(k, "")}</td>' for k in col_keys)
+            cells = "".join(f'<td>{row.get(k, "")}</td>' for k in col_keys)
             rows_html += f"<tr>{cells}</tr>"
-        html = f"""<html><head><meta charset="utf-8"><style>body{{font-family:'Times New Roman',serif;font-size:11pt}}
-        table{{border-collapse:collapse;width:100%}}th,td{{border:1px solid #000;padding:4px;font-size:9pt}}
-        th{{background:#3498db;color:white}}</style></head><body>
-        <h1 style="text-align:center">SCHEME OF WORK</h1>
-        <p><strong>Subject:</strong> {resource.get('subject','')}</p>
-        <p><strong>School:</strong> {resource.get('school','')}</p>
-        <table><thead><tr>{"".join(f'<th>{c}</th>' for c in cols)}</tr></thead>
-        <tbody>{rows_html}</tbody></table></body></html>"""
+        html = f"""<html {word_ns}>
+        <head><meta charset="utf-8"><style>{doc_styles}
+        @page {{ size: landscape; margin: 10mm; }}</style></head><body>
+        <h1>SCHEME OF WORK</h1>
+        <p class="subtitle">{resource.get('syllabus','').upper()}</p>
+        <table class="meta-table">
+          <tr><td>School</td><td>{resource.get('school','')}</td></tr>
+          <tr><td>Teacher</td><td>{resource.get('teacher','')}</td></tr>
+          <tr><td>Subject</td><td>{resource.get('subject','')}</td></tr>
+          <tr><td>Year / Term / Class</td><td>{resource.get('year','')} &mdash; Term {resource.get('term','')} &mdash; Class {resource.get('class_name','')}</td></tr>
+        </table>
+        <table class="data">
+          <thead><tr>{"".join(f'<th>{c}</th>' for c in cols)}</tr></thead>
+          <tbody>{rows_html}</tbody>
+        </table>
+        <div class="footer">Shared via MiLesson Plan</div>
+        </body></html>"""
         filename = f"Scheme_{resource.get('subject','untitled')}_{resource.get('syllabus','')}.doc"
         return f'\ufeff{html}'.encode('utf-8'), "application/msword", filename
 
@@ -1230,17 +1287,55 @@ def build_download_content(resource_type: str, resource: dict) -> tuple:
         content = resource.get("content", {})
         body = content.get("body", "")
         title = content.get("title", resource.get("name", "Template"))
-        html = f"""<html><head><meta charset="utf-8"><style>body{{font-family:sans-serif;padding:20px;line-height:1.6}}
-        .content{{white-space:pre-wrap}}</style></head><body>
-        <h1>{title}</h1><p><strong>Subject:</strong> {content.get('subject','')}</p>
-        <div class="content">{body}</div></body></html>"""
-        filename = f"{title.replace(' ','_')}.doc"
+        subject = content.get("subject", "")
+        category = content.get("category", "")
+        tpl_type = resource.get("type", "basic")
+
+        extra_style = ""
+        if tpl_type in ("mathematics", "physics", "chemistry"):
+            extra_style = " .content { white-space: pre-wrap; font-family: 'Courier New', monospace; }"
+
+        meta_line = f'<strong>Subject:</strong> {subject}'
+        if category:
+            meta_line += f' | <strong>Category:</strong> {category}'
+        meta_line += f' | <strong>Type:</strong> {tpl_type.title()}'
+
+        questions_html = ""
+        if tpl_type == "geography":
+            questions = content.get("questions", [])
+            if questions:
+                questions_html = '<h2>Questions</h2>'
+                for i, q in enumerate(questions):
+                    if q:
+                        questions_html += f'<div class="section"><p><strong>Q{i+1}:</strong> {q}</p></div>'
+
+        html = f"""<html {word_ns}>
+        <head><meta charset="utf-8"><style>{doc_styles}{extra_style}</style></head><body>
+        <h1>{title}</h1>
+        <p class="subtitle">{meta_line}</p>
+        <div class="content">{body}</div>
+        {questions_html}
+        <div class="footer">Shared via MiLesson Plan</div>
+        </body></html>"""
+        filename = f"{title.replace(' ','_')}_{tpl_type}.doc"
         return f'\ufeff{html}'.encode('utf-8'), "application/msword", filename
 
     elif resource_type == "dictation":
-        text = f"Title: {resource.get('title','')}\nLanguage: {resource.get('language','')}\n\n{resource.get('text','')}\n\nShared via MiLesson Plan"
-        filename = f"dictation_{resource.get('title','untitled').replace(' ','_')}.txt"
-        return text.encode('utf-8'), "text/plain", filename
+        title = resource.get("title", "Dictation")
+        lang_names = {"en-GB": "English", "sw": "Swahili", "ar": "Arabic", "tr": "Turkish", "fr": "French"}
+        language = lang_names.get(resource.get("language", ""), resource.get("language", ""))
+        text = resource.get("text", "")
+        html = f"""<html {word_ns}>
+        <head><meta charset="utf-8"><style>{doc_styles}</style></head><body>
+        <h1>{title}</h1>
+        <p class="subtitle">Dictation &mdash; {language}</p>
+        <div class="content" style="font-size:14pt; line-height:2.2; padding:20px; border:1px solid #e2e8f0; border-radius:8px; background:#fafaf8;">
+        {text}
+        </div>
+        <div class="footer">Shared via MiLesson Plan</div>
+        </body></html>"""
+        filename = f"Dictation_{title.replace(' ','_')}.doc"
+        return f'\ufeff{html}'.encode('utf-8'), "application/msword", filename
 
     return b"", "application/octet-stream", "download"
 

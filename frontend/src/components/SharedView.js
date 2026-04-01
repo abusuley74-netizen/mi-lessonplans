@@ -72,7 +72,7 @@ const SharedView = () => {
   const handleDownload = async () => {
     setDownloading(true);
     try {
-      const filename = `${linkData.title || 'download'}.txt`;
+      const filename = `${linkData.title || 'download'}.doc`;
       await fetchAndDownloadBlob(`${API_URL}/api/links/${code}/download`, filename);
       setDownloaded(true);
       toast.success('Download started! This link is now expired.');
