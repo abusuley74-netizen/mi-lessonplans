@@ -28,30 +28,53 @@ Build mi-lessonPlan app based on provided zip file with:
 - **Auth**: Emergent Google OAuth
 
 ### Key Files
-- `/app/backend/server.py` - Main API server
+- `/app/backend/server.py` - Main API server (~817 lines)
 - `/app/frontend/src/App.js` - React router & auth provider
 - `/app/frontend/src/pages/Dashboard.js` - Main dashboard with form switcher
-- `/app/frontend/src/pages/MyHub.js` - Hub with collapsible sidebar navigation
+- `/app/frontend/src/pages/MyHub.js` - Hub with collapsible sidebar
 - `/app/frontend/src/components/ZanzibarLessonForm.js` - Zanzibar syllabus form
 - `/app/frontend/src/components/TanzaniaMainlandLessonForm.js` - Tanzania Mainland form
-- `/app/frontend/src/components/SchemeOfWorkForm.js` - Scheme of Work table form
-- `/app/frontend/src/components/CreateNotes.js` - Rich text editor for notes
-- `/app/frontend/src/components/Dictation.js` - AI TTS dictation with translation
+- `/app/frontend/src/components/SchemeOfWorkForm.js` - Scheme of Work with syllabus toggle
+- `/app/frontend/src/components/CreateNotes.js` - Rich text editor
+- `/app/frontend/src/components/Dictation.js` - AI TTS dictation
+- `/app/frontend/src/components/MyFiles.js` - All files with Play/View
+- `/app/frontend/src/components/ProfileSettings.js` - Profile with pic upload
+- `/app/frontend/src/components/Header.js` - Header with custom profile pic
 
 ## What's Been Implemented
 
 ### April 1, 2026
 - [x] Emergent Google OAuth authentication
-- [x] GPT-5.2 AI lesson generation via Emergent LLM key
+- [x] GPT-5.2 AI lesson generation
 - [x] Zanzibar & Tanzania Mainland syllabus forms
 - [x] AI leaves Teacher's Evaluation & Remarks empty
 - [x] Full lesson header in View/Print/Download
-- [x] MyHub with **collapsible sidebar** (toggle button)
-- [x] Scheme of Work - 12-column table form with pagination
-- [x] Create Notes - Rich text editor (font family/size, color, formatting, undo/redo)
-- [x] Dictation TTS - Real OpenAI TTS + GPT-5.2 translation for 5 languages
-- [x] My Files, Upload Materials, My Activities, Payment/Profile Settings
+- [x] MyHub with collapsible sidebar
+- [x] Scheme of Work with Zanzibar/Tanzania Mainland toggle, 12-column table, pagination
+- [x] Create Notes rich text editor (font family/size, color, formatting, undo/redo)
+- [x] Dictation TTS with translation for 5 languages
+- [x] My Files showing ALL file types (lessons, notes, dictations, uploads) with Play/View
+- [x] Profile picture upload (stored as base64) displayed in Header
+- [x] Profile editing (name, school, location, bio)
 - [x] Free plan limit (3 lessons)
+
+## API Endpoints
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| /api/auth/session | POST | No | Exchange session_id for token |
+| /api/auth/me | GET | Yes | Get current user + custom_picture |
+| /api/auth/logout | POST | Yes | Logout |
+| /api/lessons/generate | POST | Yes | Generate lesson with AI |
+| /api/lessons | GET | Yes | List lessons |
+| /api/lessons/{id} | DELETE | Yes | Delete lesson |
+| /api/dictation/generate | POST | Yes | Generate TTS audio (mp3) |
+| /api/dictations | GET/POST | Yes | List/save dictations |
+| /api/notes | GET/POST | Yes | List/create notes |
+| /api/profile | GET/PUT | Yes | Get/update profile |
+| /api/profile/upload-picture | POST | Yes | Upload profile pic |
+| /api/subscription/plans | GET | No | Get plans |
+| /api/subscription/subscribe | POST | Yes | Subscribe (MOCKED) |
 
 ## Prioritized Backlog
 
