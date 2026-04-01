@@ -7,6 +7,8 @@ import {
 import MathTemplate from './MathTemplate';
 import PhysicsTemplate from './PhysicsTemplate';
 import ChemistryTemplate from './ChemistryTemplate';
+import GeographyTemplate from './GeographyTemplate';
+import ScientificTemplate from './ScientificTemplate';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -214,7 +216,7 @@ const Templates = () => {
   useEffect(() => { fetchTemplates(); }, []);
 
   if (editing) {
-    const specialEditors = { mathematics: MathTemplate, physics: PhysicsTemplate, chemistry: ChemistryTemplate };
+    const specialEditors = { mathematics: MathTemplate, physics: PhysicsTemplate, chemistry: ChemistryTemplate, geography: GeographyTemplate, scientific: ScientificTemplate };
     const SpecialEditor = specialEditors[editing.type];
     if (SpecialEditor) {
       return <SpecialEditor template={editing} onBack={() => setEditing(null)} onSaved={fetchTemplates} />;
