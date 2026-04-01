@@ -265,9 +265,9 @@ Generate the lesson plan in JSON format with these exact keys:
         "learningActivities": "Student activities for learning new content",
         "assessment": "Assessment methods for new knowledge"
     }},
-    "teacherEvaluation": "How the teacher will evaluate the lesson's success",
+    "teacherEvaluation": "",
     "pupilWork": "Classwork or activities for students",
-    "remarks": "Additional notes or observations"
+    "remarks": ""
 }}
 
 Provide practical, actionable content appropriate for {grade} students in Tanzania."""
@@ -311,7 +311,7 @@ Generate the lesson plan in JSON format with these exact keys:
             "assessment": "Assessment for realisation"
         }}
     }},
-    "remarks": "Additional notes and observations"
+    "remarks": ""
 }}
 
 Provide practical, actionable content appropriate for {grade} students in Tanzania."""
@@ -327,6 +327,9 @@ Provide practical, actionable content appropriate for {grade} students in Tanzan
         json_match = re.search(r'\{[\s\S]*\}', response)
         if json_match:
             content = json.loads(json_match.group())
+            # Force teacherEvaluation and remarks to be empty for teacher input
+            content["teacherEvaluation"] = ""
+            content["remarks"] = ""
             return content
         else:
             logger.warning("Could not parse AI response, using fallback")
@@ -358,9 +361,9 @@ def get_fallback_lesson_content(syllabus: str, subject: str, grade: str, topic: 
                 "learningActivities": "Listen, take notes, practice exercises, ask questions",
                 "assessment": "Monitor practice, provide feedback"
             },
-            "teacherEvaluation": "Assess student understanding through questions and exercises",
+            "teacherEvaluation": "",
             "pupilWork": "Complete practice exercises in notebook",
-            "remarks": "Adjust pace based on student understanding"
+            "remarks": ""
         }
     else:
         return {
@@ -396,7 +399,7 @@ def get_fallback_lesson_content(syllabus: str, subject: str, grade: str, topic: 
                     "assessment": "Evaluate presentations and understanding"
                 }
             },
-            "remarks": "Differentiate instruction based on student needs"
+            "remarks": ""
         }
 
 # ==================== LESSON ROUTES ====================

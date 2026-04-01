@@ -598,6 +598,11 @@
   white-space: pre-wrap;
 }
 
+.preview-item-left p.empty-field {
+  color: #8E9E82;
+  font-style: italic;
+}
+
 /* Responsive Design */
 @media (max-width: 1200px) {
   .main-content {

@@ -592,17 +592,21 @@ const ZanzibarLessonForm = ({ onLessonGenerated }) => {
             <div className="preview-content-left">
               <div className="preview-item-left">
                 <h4>TEACHER'S EVALUATION: TATHMINI YA MWALIMU</h4>
-                <p>{previewData.teacherEvaluation}</p>
+                <p className={!previewData.teacherEvaluation ? 'empty-field' : ''}>
+                  {previewData.teacherEvaluation || '(To be filled by teacher after lesson)'}
+                </p>
               </div>
 
               <div className="preview-item-left">
                 <h4>PUPIL'S WORK: KAZI YA MWANAFUNZI</h4>
-                <p>{previewData.pupilWork}</p>
+                <p>{previewData.pupilWork || 'Not specified'}</p>
               </div>
 
               <div className="preview-item-left">
                 <h4>REMARKS: MAELEZO</h4>
-                <p>{previewData.remarks}</p>
+                <p className={!previewData.remarks ? 'empty-field' : ''}>
+                  {previewData.remarks || '(To be filled by teacher)'}
+                </p>
               </div>
             </div>
           </div>
