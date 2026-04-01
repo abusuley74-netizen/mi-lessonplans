@@ -74,25 +74,28 @@ Build mi-lessonPlan app based on provided zip file with:
 
 ## What's Been Implemented
 
-### April 1, 2026 - MVP + Form Update + View Improvements
+### April 1, 2026 - MVP + Form Update + View Improvements + MyHub Redesign
 - [x] Emergent Google OAuth authentication
 - [x] GPT-5.2 AI lesson generation via Emergent LLM key
-- [x] **Zanzibar syllabus form** - exact layout from original code:
-  - Student info table with English/Swahili labels
-  - Enrollment section with auto-calculated totals
-  - All content fields (General Outcome, Main Topic, etc.)
-  - Lesson development table with 5 columns
-  - Teacher evaluation section
+- [x] **Zanzibar syllabus form** - exact layout from original code
 - [x] **Tanzania Mainland form** - 4-stage competence-based format
-- [x] **Smart AI detection**: 
-  - Empty content fields → AI Mode (generates lesson content)
-  - Filled content fields → Manual Mode (previews entered data)
-- [x] Loading spinners in each field during AI generation
+- [x] **Smart AI detection** for auto-generation
 - [x] **AI leaves empty**: Teacher's Evaluation & Remarks (for real teacher input)
-- [x] **Improved Print/Download** - proper CSS styling for print output
-- [x] **Better MyHub View** - styled modal with dark headers, structured layout
-- [x] MyHub with lesson history, search, filter
-- [x] Subscription plans page (mocked payment)
+- [x] **Full lesson header in View/Print/Download**:
+  - Syllabus type (ZANZIBAR LESSON PLAN / TANZANIA MAINLAND)
+  - Subject, Grade/Class, Topic
+  - Student info table: DAY & DATE, SESSION, CLASS, PERIODS, TIME, ENROLLED/PRESENT
+- [x] **Redesigned MyHub** with sidebar navigation:
+  - 📤 Upload Materials
+  - 📝 Create Notes (rich text editor)
+  - 📋 Templates (Coming Soon)
+  - 📝 Dictation (AI TTS - 200 words max, 5 languages)
+  - 📁 My Files (saved lessons, notes, dictations)
+  - 📅 Scheme of Work (Coming Soon)
+  - 📊 My Activities (analytics)
+  - 💰 Payment Settings
+  - 👤 Profile Settings
+- [x] **Dictation languages**: British English, Swahili, Arabic, Turkish, French
 - [x] Free plan limit (3 lessons)
 
 ## Prioritized Backlog
