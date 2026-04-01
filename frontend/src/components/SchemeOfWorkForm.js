@@ -44,6 +44,7 @@ const SchemeOfWorkForm = () => {
   const [syllabus, setSyllabus] = useState('Zanzibar');
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState('');
+  const [savedSchemeId, setSavedSchemeId] = useState(null);
   const [formData, setFormData] = useState({
     school: '', teacher: '', subject: '',
     year: new Date().getFullYear(), term: '', class: '',
@@ -111,7 +112,7 @@ const SchemeOfWorkForm = () => {
     setSaving(true);
     setSavedMsg('');
     try {
-      await axios.post(`${API_URL}/api/schemes`, {
+      const res = await axios.post(`${API_URL}/api/schemes`, {
         syllabus,
         school: formData.school,
         teacher: formData.teacher,
@@ -121,11 +122,11 @@ const SchemeOfWorkForm = () => {
         class: formData.class,
         competencies: getNonEmptyRows()
       }, { withCredentials: true });
+      setSavedSchemeId(res.data.scheme_id);
       setSavedMsg('Saved to My Files!');
       setTimeout(() => setSavedMsg(''), 3000);
     } catch (err) {
       console.error('Save error:', err);
-      alert('Failed to save. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -168,42 +169,51 @@ const SchemeOfWorkForm = () => {
   };
 
   const handlePrint = () => {
-    const printWindow = window.open('', '_blank', 'width=1200,height=800');
-    printWindow.document.write(`<html><head><title>Scheme of Work - ${formData.subject}</title>
-      <style>
-        * { margin:0; padding:0; box-sizing:border-box; }
-        body { padding:20px; font-family:'Times New Roman',serif; }
-        @media print { body { padding:10px; } @page { size:landscape; margin:10mm; } }
-      </style></head><body>${buildPrintHTML()}</body></html>`);
-    printWindow.document.close();
-    printWindow.onload = () => { printWindow.print(); };
+    // Open print view in new tab via backend
+    if (savedSchemeId) {
+      window.open(`${API_URL}/api/schemes/${savedSchemeId}/view`, '_blank');
+    } else {
+      // Not saved yet - save first then open
+      saveAndThen('print');
+    }
   };
 
   const exportToDocx = () => {
-    const html = `
-      <html xmlns:o="urn:schemas-microsoft-com:office:office"
-            xmlns:w="urn:schemas-microsoft-com:office:word"
-            xmlns="http://www.w3.org/TR/REC-html40">
-      <head><meta charset="utf-8">
-        <style>
-          body { font-family: 'Times New Roman', serif; font-size: 11pt; }
-          table { border-collapse: collapse; width: 100%; }
-          th, td { border: 1px solid #000; padding: 4px 6px; vertical-align: top; font-size: 9pt; }
-          th { background-color: #3498db; color: white; text-align: center; }
-          h1 { text-align: center; font-size: 18pt; }
-          h2 { text-align: center; font-size: 13pt; color: #555; }
-        </style>
-      </head><body>${buildPrintHTML()}</body></html>`;
+    if (savedSchemeId) {
+      window.open(`${API_URL}/api/schemes/${savedSchemeId}/export`, '_blank');
+    } else {
+      saveAndThen('export');
+    }
+  };
 
-    const blob = new Blob(['\ufeff', html], { type: 'application/msword' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Scheme_of_Work_${formData.subject || 'untitled'}_${syllabus}.doc`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  const saveAndThen = async (action) => {
+    setSaving(true);
+    setSavedMsg('');
+    try {
+      const res = await axios.post(`${API_URL}/api/schemes`, {
+        syllabus,
+        school: formData.school,
+        teacher: formData.teacher,
+        subject: formData.subject,
+        year: formData.year,
+        term: formData.term,
+        class: formData.class,
+        competencies: getNonEmptyRows()
+      }, { withCredentials: true });
+      setSavedSchemeId(res.data.scheme_id);
+      setSavedMsg('Saved!');
+      setTimeout(() => setSavedMsg(''), 3000);
+      
+      if (action === 'print') {
+        window.open(`${API_URL}/api/schemes/${res.data.scheme_id}/view`, '_blank');
+      } else if (action === 'export') {
+        window.open(`${API_URL}/api/schemes/${res.data.scheme_id}/export`, '_blank');
+      }
+    } catch (err) {
+      console.error('Save error:', err);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const currentCompetencies = formData.competencies.slice(

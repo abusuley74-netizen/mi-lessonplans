@@ -290,9 +290,14 @@ const MyFiles = () => {
           </div>
           <div className="flex items-center justify-between pt-3 border-t border-[#E4DFD5]">
             <span className="text-xs text-[#7A8A76]">{new Date(file.created_at).toLocaleDateString()}</span>
-            <button onClick={() => setSelectedLesson(file)} className="flex items-center gap-1 text-sm text-[#2D5A27] font-medium hover:text-[#21441C]" data-testid={`view-lesson-${file.lesson_id}`}>
-              <Eye className="w-4 h-4" />View
-            </button>
+            <div className="flex items-center gap-3">
+              <button onClick={() => window.open(`${API_URL}/api/lessons/${file.lesson_id}/view`, '_blank')} className="flex items-center gap-1 text-sm text-[#2D5A27] font-medium hover:text-[#21441C]" data-testid={`view-lesson-${file.lesson_id}`}>
+                <Eye className="w-4 h-4" />View
+              </button>
+              <button onClick={() => window.open(`${API_URL}/api/lessons/${file.lesson_id}/export`, '_blank')} className="flex items-center gap-1 text-sm text-[#8E44AD] font-medium hover:text-[#6C3483]" data-testid={`download-lesson-${file.lesson_id}`}>
+                <Download className="w-4 h-4" />Download
+              </button>
+            </div>
           </div>
         </div>
       );
@@ -394,8 +399,18 @@ const MyFiles = () => {
           {file.school && <span>{file.school}</span>}
         </div>
         <div className="text-xs text-[#7A8A76] mb-4">{(file.competencies || []).length} competencies</div>
-        <div className="pt-3 border-t border-[#E4DFD5]">
+        <div className="flex items-center justify-between pt-3 border-t border-[#E4DFD5]">
           <span className="text-xs text-[#7A8A76]">{new Date(file.created_at).toLocaleDateString()}</span>
+          <div className="flex items-center gap-3">
+            <button onClick={() => window.open(`${API_URL}/api/schemes/${file.scheme_id}/view`, '_blank')}
+              className="flex items-center gap-1 text-sm text-[#2D5A27] font-medium hover:text-[#21441C]" data-testid={`view-scheme-${file.scheme_id}`}>
+              <Eye className="w-4 h-4" />View
+            </button>
+            <button onClick={() => window.open(`${API_URL}/api/schemes/${file.scheme_id}/export`, '_blank')}
+              className="flex items-center gap-1 text-sm text-[#8E44AD] font-medium hover:text-[#6C3483]" data-testid={`download-scheme-${file.scheme_id}`}>
+              <Download className="w-4 h-4" />DOCX
+            </button>
+          </div>
         </div>
       </div>
     );

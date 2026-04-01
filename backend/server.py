@@ -777,6 +777,198 @@ async def delete_scheme(scheme_id: str, user: User = Depends(get_current_user)):
     return {"message": "Scheme deleted"}
 
 
+@api_router.get("/schemes/{scheme_id}/export")
+async def export_scheme_docx(scheme_id: str, user: User = Depends(get_current_user)):
+    """Export a scheme of work as a downloadable .doc file"""
+    from fastapi.responses import Response as FastAPIResponse
+    
+    scheme = await db.schemes.find_one({"scheme_id": scheme_id, "user_id": user.user_id}, {"_id": 0})
+    if not scheme:
+        raise HTTPException(status_code=404, detail="Scheme not found")
+    
+    cols = ["Main Competence", "Specific Competences", "Learning Activities", "Specific Activities",
+            "Month", "Week", "Periods", "Methods", "Resources", "Assessment", "References", "Remarks"]
+    col_keys = ["main", "specific", "activities", "specificActivities", "month", "week", "periods",
+                "methods", "resources", "assessment", "references", "remarks"]
+    
+    rows_html = ""
+    for row in scheme.get("competencies", []):
+        cells = "".join(f'<td style="border:1px solid #000;padding:5px 4px;vertical-align:top;">{row.get(k, "")}</td>' for k in col_keys)
+        rows_html += f"<tr>{cells}</tr>"
+    
+    html = f"""<html xmlns:o="urn:schemas-microsoft-com:office:office"
+          xmlns:w="urn:schemas-microsoft-com:office:word"
+          xmlns="http://www.w3.org/TR/REC-html40">
+    <head><meta charset="utf-8">
+    <style>
+      body {{ font-family: 'Times New Roman', serif; font-size: 11pt; }}
+      table {{ border-collapse: collapse; width: 100%; }}
+      th, td {{ border: 1px solid #000; padding: 4px 6px; vertical-align: top; font-size: 9pt; }}
+      th {{ background-color: #3498db; color: white; text-align: center; }}
+    </style></head><body>
+    <h1 style="text-align:center;">SCHEME OF WORK</h1>
+    <h2 style="text-align:center;color:#555;">{scheme.get('syllabus', '').upper()}</h2>
+    <table style="width:100%;margin-bottom:15px;">
+      <tr><td style="font-weight:bold;width:150px;">School:</td><td>{scheme.get('school', '')}</td></tr>
+      <tr><td style="font-weight:bold;">Teacher:</td><td>{scheme.get('teacher', '')}</td></tr>
+      <tr><td style="font-weight:bold;">Subject:</td><td>{scheme.get('subject', '')}</td></tr>
+      <tr><td style="font-weight:bold;">Year:</td><td>{scheme.get('year', '')} &nbsp; Term: {scheme.get('term', '')} &nbsp; Class: {scheme.get('class_name', '')}</td></tr>
+    </table>
+    <table style="width:100%;font-size:9pt;">
+      <thead><tr>{"".join(f'<th>{c}</th>' for c in cols)}</tr></thead>
+      <tbody>{rows_html}</tbody>
+    </table>
+    </body></html>"""
+    
+    subject = scheme.get("subject", "untitled")
+    syllabus = scheme.get("syllabus", "")
+    filename = f"Scheme_of_Work_{subject}_{syllabus}.doc"
+    
+    return FastAPIResponse(
+        content=f'\ufeff{html}'.encode('utf-8'),
+        media_type="application/msword",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+@api_router.get("/schemes/{scheme_id}/view")
+async def view_scheme_html(scheme_id: str, user: User = Depends(get_current_user)):
+    """View a scheme of work as rendered HTML"""
+    from fastapi.responses import HTMLResponse
+    
+    scheme = await db.schemes.find_one({"scheme_id": scheme_id, "user_id": user.user_id}, {"_id": 0})
+    if not scheme:
+        raise HTTPException(status_code=404, detail="Scheme not found")
+    
+    cols = ["Main Competence", "Specific Competences", "Learning Activities", "Specific Activities",
+            "Month", "Week", "Periods", "Methods", "Resources", "Assessment", "References", "Remarks"]
+    col_keys = ["main", "specific", "activities", "specificActivities", "month", "week", "periods",
+                "methods", "resources", "assessment", "references", "remarks"]
+    
+    rows_html = ""
+    for row in scheme.get("competencies", []):
+        cells = "".join(f'<td>{row.get(k, "")}</td>' for k in col_keys)
+        rows_html += f"<tr>{cells}</tr>"
+    
+    html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><title>Scheme of Work - {scheme.get('subject','')}</title>
+    <style>
+      * {{ margin:0; padding:0; box-sizing:border-box; }}
+      body {{ font-family:'Times New Roman',serif; padding:30px; background:#fff; }}
+      h1 {{ text-align:center; font-size:22pt; margin-bottom:5px; }}
+      h2 {{ text-align:center; font-size:14pt; color:#555; margin-bottom:20px; }}
+      .info {{ margin-bottom:20px; }}
+      .info td {{ padding:4px 10px; }}
+      .info td:first-child {{ font-weight:bold; width:130px; }}
+      .data {{ width:100%; border-collapse:collapse; font-size:10pt; }}
+      .data th {{ background:#3498db; color:#fff; padding:8px 5px; border:1px solid #999; text-align:center; font-size:9pt; }}
+      .data td {{ border:1px solid #999; padding:6px 5px; vertical-align:top; }}
+      .actions {{ text-align:center; margin:25px 0; }}
+      .actions button {{ padding:10px 24px; margin:0 8px; border:none; border-radius:5px; font-weight:bold; cursor:pointer; font-size:14px; }}
+      .print-btn {{ background:#4a5568; color:#fff; }}
+      .download-btn {{ background:#9b59b6; color:#fff; }}
+      @media print {{ .actions {{ display:none; }} @page {{ size:landscape; margin:10mm; }} }}
+    </style></head><body>
+    <h1>SCHEME OF WORK</h1>
+    <h2>{scheme.get('syllabus','').upper()}</h2>
+    <table class="info">
+      <tr><td>School:</td><td>{scheme.get('school','')}</td></tr>
+      <tr><td>Teacher:</td><td>{scheme.get('teacher','')}</td></tr>
+      <tr><td>Subject:</td><td>{scheme.get('subject','')}</td></tr>
+      <tr><td>Year:</td><td>{scheme.get('year','')} &nbsp;&nbsp; Term: {scheme.get('term','')} &nbsp;&nbsp; Class: {scheme.get('class_name','')}</td></tr>
+    </table>
+    <table class="data">
+      <thead><tr>{"".join(f'<th>{c}</th>' for c in cols)}</tr></thead>
+      <tbody>{rows_html}</tbody>
+    </table>
+    <div class="actions">
+      <button class="print-btn" onclick="window.print()">Print</button>
+      <button class="download-btn" onclick="window.location.href=window.location.href.replace('/view','/export')">Download DOCX</button>
+    </div>
+    </body></html>"""
+    
+    return HTMLResponse(content=html)
+
+@api_router.get("/lessons/{lesson_id}/export")
+async def export_lesson_txt(lesson_id: str, user: User = Depends(get_current_user)):
+    """Export a lesson plan as downloadable text file"""
+    from fastapi.responses import Response as FastAPIResponse
+    
+    lesson = await db.lesson_plans.find_one({"lesson_id": lesson_id, "user_id": user.user_id}, {"_id": 0})
+    if not lesson:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+    
+    content = lesson.get("content", {})
+    text = f"{'='*70}\n{'LESSON PLAN':^70}\n{'='*70}\n\n"
+    text += f"SYLLABUS: {lesson.get('syllabus','')}\nSUBJECT: {lesson.get('subject','')}\n"
+    text += f"GRADE/CLASS: {lesson.get('grade','')}\nTOPIC: {lesson.get('topic','')}\n"
+    text += f"DATE: {lesson.get('created_at','')}\n\n"
+    
+    for key, val in content.items():
+        if isinstance(val, str):
+            label = key.replace('_', ' ').title()
+            text += f"{label}: {val}\n"
+        elif isinstance(val, dict):
+            label = key.replace('_', ' ').title()
+            text += f"\n--- {label} ---\n"
+            for k2, v2 in val.items():
+                text += f"  {k2}: {v2}\n"
+    
+    text += f"\nGenerated by MiLesson Plan\n"
+    
+    filename = f"{lesson.get('subject','lesson')}_{lesson.get('topic','plan')}.txt"
+    return FastAPIResponse(
+        content=text.encode('utf-8'),
+        media_type="text/plain",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+@api_router.get("/lessons/{lesson_id}/view")
+async def view_lesson_html(lesson_id: str, user: User = Depends(get_current_user)):
+    """View a lesson plan as rendered HTML page with print/download"""
+    from fastapi.responses import HTMLResponse
+    
+    lesson = await db.lesson_plans.find_one({"lesson_id": lesson_id, "user_id": user.user_id}, {"_id": 0})
+    if not lesson:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+    
+    content = lesson.get("content", {})
+    syllabus = lesson.get("syllabus", "")
+    
+    sections = ""
+    for key, val in content.items():
+        if isinstance(val, str):
+            label = key.replace('_', ' ').title()
+            sections += f'<div style="margin-bottom:10px;"><strong>{label}:</strong> {val}</div>'
+        elif isinstance(val, dict):
+            label = key.replace('_', ' ').title()
+            inner = "".join(f'<p><strong>{k}:</strong> {v}</p>' for k, v in val.items())
+            sections += f'<div style="margin:15px 0;padding:10px;border:1px solid #ccc;border-radius:4px;"><h3>{label}</h3>{inner}</div>'
+    
+    html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><title>Lesson Plan - {lesson.get('topic','')}</title>
+    <style>
+      * {{ margin:0; padding:0; box-sizing:border-box; }}
+      body {{ font-family:'Times New Roman',serif; padding:30px; background:#fff; font-size:12pt; line-height:1.5; }}
+      h1 {{ text-align:center; font-size:18pt; margin-bottom:5px; border-bottom:2px solid #000; padding-bottom:10px; }}
+      .info td {{ padding:4px 10px; }} .info td:first-child {{ font-weight:bold; width:100px; }}
+      .actions {{ text-align:center; margin:25px 0; }}
+      .actions button {{ padding:10px 24px; margin:0 8px; border:none; border-radius:5px; font-weight:bold; cursor:pointer; font-size:14px; }}
+      .print-btn {{ background:#4a5568; color:#fff; }}
+      .download-btn {{ background:#2D5A27; color:#fff; }}
+      @media print {{ .actions {{ display:none; }} }}
+    </style></head><body>
+    <h1>{syllabus.upper()} LESSON PLAN</h1>
+    <table class="info" style="width:100%;margin:15px 0;">
+      <tr><td>Subject:</td><td>{lesson.get('subject','')}</td><td>Grade:</td><td>{lesson.get('grade','')}</td></tr>
+      <tr><td>Topic:</td><td colspan="3">{lesson.get('topic','')}</td></tr>
+    </table>
+    {sections}
+    <div class="actions">
+      <button class="print-btn" onclick="window.print()">Print</button>
+      <button class="download-btn" onclick="window.location.href=window.location.href.replace('/view','/export')">Download</button>
+    </div>
+    </body></html>"""
+    
+    return HTMLResponse(content=html)
+
 # ==================== PROFILE ROUTES ====================
 
 @api_router.post("/profile/upload-picture")
