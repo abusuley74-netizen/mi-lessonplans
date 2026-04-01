@@ -643,9 +643,26 @@ async def generate_dictation_audio(request: Request, user: User = Depends(get_cu
         raise HTTPException(status_code=500, detail="TTS service not configured")
     
     try:
+        # If non-English language selected, translate text first
+        tts_text = text
+        if language != "en-GB":
+            from emergentintegrations.llm.chat import LlmChat, UserMessage
+            lang_names = {"sw": "Swahili", "ar": "Arabic", "tr": "Turkish", "fr": "French"}
+            target_lang = lang_names.get(language, "English")
+            
+            chat = LlmChat(
+                api_key=api_key,
+                session_id=f"translate_{uuid.uuid4().hex[:8]}",
+                system_message=f"You are a translator. Translate the following text to {target_lang}. Return ONLY the translated text, nothing else."
+            ).with_model("openai", "gpt-5.2")
+            
+            translation = await chat.send_message(UserMessage(text=text))
+            tts_text = translation.strip()
+            logger.info(f"Translated to {target_lang}: {tts_text[:50]}...")
+        
         tts = OpenAITextToSpeech(api_key=api_key)
         audio_bytes = await tts.generate_speech(
-            text=text,
+            text=tts_text,
             model="tts-1",
             voice=voice,
             response_format="mp3",
