@@ -74,7 +74,7 @@ Build mi-lessonPlan app based on provided zip file with:
 
 ## What's Been Implemented
 
-### April 1, 2026 - MVP + Form Update
+### April 1, 2026 - MVP + Form Update + View Improvements
 - [x] Emergent Google OAuth authentication
 - [x] GPT-5.2 AI lesson generation via Emergent LLM key
 - [x] **Zanzibar syllabus form** - exact layout from original code:
@@ -88,7 +88,9 @@ Build mi-lessonPlan app based on provided zip file with:
   - Empty content fields → AI Mode (generates lesson content)
   - Filled content fields → Manual Mode (previews entered data)
 - [x] Loading spinners in each field during AI generation
-- [x] Print, download (TXT), and share functionality
+- [x] **AI leaves empty**: Teacher's Evaluation & Remarks (for real teacher input)
+- [x] **Improved Print/Download** - proper CSS styling for print output
+- [x] **Better MyHub View** - styled modal with dark headers, structured layout
 - [x] MyHub with lesson history, search, filter
 - [x] Subscription plans page (mocked payment)
 - [x] Free plan limit (3 lessons)
