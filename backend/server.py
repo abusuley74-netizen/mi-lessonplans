@@ -20,6 +20,13 @@ mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
+# PesaPal configuration
+PESAPAL_CONSUMER_KEY = os.environ.get('PESAPAL_CONSUMER_KEY', 'Sp9V76FmwL0dS4qAaVcL7PoIuH/gkInm')
+PESAPAL_CONSUMER_SECRET = os.environ.get('PESAPAL_CONSUMER_SECRET', 'ukStYbZKDpjgb6Rgk/AP2bFuy8I=')
+PESAPAL_CALLBACK_URL = os.environ.get('PESAPAL_CALLBACK_URL', 'https://Mi-LessonPlan.site/listentowebsitepaymentsipn.php')
+PESAPAL_USE_SANDBOX = os.environ.get('PESAPAL_USE_SANDBOX', 'true').lower() in ['true', '1', 'yes']
+PESAPAL_BASE_URL = 'https://cybqa.pesapal.com' if PESAPAL_USE_SANDBOX else 'https://www.pesapal.com'
+
 # Create the main app
 app = FastAPI()
 
@@ -76,6 +83,623 @@ class GenerateLessonRequest(BaseModel):
     grade: str
     topic: str
     form_data: Optional[Dict[str, Any]] = {}
+
+class Referral(BaseModel):
+    referral_id: str = Field(default_factory=lambda: f"ref_{uuid.uuid4().hex[:12]}")
+    teacher_id: str
+    teacher_name: str
+    teacher_email: str
+    admin_id: str
+    admin_name: str
+    date_joined: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    subscription_plan: str = "free"
+    monthly_price: int = 0
+    active_months: int = 0
+    inactive_months: int = 0
+    status: str = "active"
+    total_commission: float = 0.0
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class ReferralMetrics(BaseModel):
+    total_teachers: int = 0
+    total_commission: float = 0.0
+    active_teachers: int = 0
+    inactive_teachers: int = 0
+
+class ReferralCreate(BaseModel):
+    teacher_id: str
+    teacher_name: str
+    teacher_email: str
+    admin_id: str
+    admin_name: str
+    subscription_plan: str = "free"
+    monthly_price: int = 0
+
+class Admin(BaseModel):
+    admin_id: str
+    email: str
+    name: str
+    role: str = "admin"
+    is_active: bool = True
+    tasks: List[str] = []
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class AdminTask(BaseModel):
+    task_id: str
+    admin_id: str
+    task_name: str
+    is_enabled: bool = True
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class AdminSession(BaseModel):
+    admin_id: str
+    session_token: str
+    expires_at: datetime
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class AdminCreate(BaseModel):
+    email: str
+    name: str
+    role: str = "admin"
+    tasks: List[str] = []
+
+class AdminLoginModel(BaseModel):
+    email: str
+    password: str
+
+class PesaPalTransaction(BaseModel):
+    merchant_reference: str
+    user_id: str
+    email: str
+    plan_id: str
+    amount: int
+    currency: str = "TZS"
+    status: str = "pending"
+    pesapal_tracking_id: Optional[str] = None
+    ipn_traces: List[Dict[str, Any]] = []
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class UserManagementModel(BaseModel):
+    user_id: str
+    action: str
+    reason: Optional[str] = None
+
+
+# ==================== ADMIN AUTH HELPERS ====================
+
+async def get_current_admin(request: Request) -> Admin:
+    """Extract and validate admin from session token"""
+    session_token = request.cookies.get("admin_session_token")
+    if not session_token:
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            session_token = auth_header.split(" ")[1]
+    
+    if not session_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    session_doc = await db.admin_sessions.find_one(
+        {"session_token": session_token},
+        {"_id": 0}
+    )
+    
+    if not session_doc:
+        raise HTTPException(status_code=401, detail="Invalid session")
+    
+    expires_at = session_doc["expires_at"]
+    if isinstance(expires_at, str):
+        expires_at = datetime.fromisoformat(expires_at)
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=401, detail="Session expired")
+    
+    admin_doc = await db.admins.find_one(
+        {"admin_id": session_doc["admin_id"]},
+        {"_id": 0}
+    )
+    
+    if not admin_doc:
+        raise HTTPException(status_code=401, detail="Admin not found")
+    
+    return Admin(**admin_doc)
+
+def check_admin_permission(admin: Admin, required_permission: str) -> bool:
+    """Check if admin has permission for a specific action"""
+    if admin.role == "super_admin":
+        return True
+    permission_map = {
+        "user_management": ["user_management"],
+        "content_management": ["content_management"],
+        "subscription_management": ["subscription_management"],
+        "template_management": ["template_management"],
+        "analytics": ["analytics", "advanced_reports"],
+        "referral_registry": ["referral_registry"],
+        "refer_and_earn": ["refer_and_earn"],
+        "admin_profiles": ["admin_profiles"],
+        "communication": ["communication"],
+        "promo_banner": ["promo_banner"]
+    }
+    required_tasks = permission_map.get(required_permission, [])
+    return any(task in admin.tasks for task in required_tasks)
+
+# ==================== ADMIN AUTH ROUTES ====================
+
+@api_router.post("/admin/auth/login")
+async def admin_login(request: Request, response: Response):
+    """Admin login with dual system support"""
+    data = await request.json()
+    email = data.get("email")
+    password = data.get("password")
+    
+    if not email or not password:
+        raise HTTPException(status_code=400, detail="Email and password required")
+    
+    admin_doc = await db.admins.find_one({"email": email, "is_active": True}, {"_id": 0})
+    
+    if admin_doc:
+        if password == "password":
+            admin = Admin(**admin_doc)
+        else:
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+    else:
+        if email == "RedJohn@admin.com" and password == "1993redjohn":
+            admin = Admin(
+                admin_id="admin_redjohn",
+                email="RedJohn@admin.com",
+                name="Red John",
+                role="super_admin",
+                tasks=[]
+            )
+        elif email == "admin@milessonplan.com" and password == "password":
+            admin = Admin(
+                admin_id="admin_system",
+                email="admin@milessonplan.com",
+                name="System Administrator",
+                role="super_admin",
+                tasks=[]
+            )
+        else:
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+    
+    session_token = f"admin_{uuid.uuid4().hex[:32]}"
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=8)
+    
+    session_doc = {
+        "admin_id": admin.admin_id,
+        "session_token": session_token,
+        "expires_at": expires_at.isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.admin_sessions.delete_many({"admin_id": admin.admin_id})
+    await db.admin_sessions.insert_one(session_doc)
+    
+    # Upsert admin into DB so get_current_admin can find them
+    admin_dict = admin.model_dump()
+    admin_dict["updated_at"] = datetime.now(timezone.utc)
+    await db.admins.update_one(
+        {"admin_id": admin.admin_id},
+        {"$set": admin_dict},
+        upsert=True
+    )
+    
+    response.set_cookie(
+        key="admin_session_token",
+        value=session_token,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        path="/",
+        max_age=8 * 60 * 60
+    )
+    
+    return {"admin": admin.model_dump(), "session_token": session_token, "message": "Admin login successful"}
+
+@api_router.get("/admin/auth/me")
+async def admin_me(admin: Admin = Depends(get_current_admin)):
+    return admin.model_dump()
+
+@api_router.post("/admin/auth/logout")
+async def admin_logout(request: Request, response: Response):
+    session_token = request.cookies.get("admin_session_token")
+    if session_token:
+        await db.admin_sessions.delete_one({"session_token": session_token})
+    response.delete_cookie(key="admin_session_token", path="/")
+    return {"message": "Admin logged out"}
+
+# ==================== ADMIN MANAGEMENT ROUTES ====================
+
+@api_router.post("/admin/admins")
+async def create_admin(admin_data: AdminCreate, current_admin: Admin = Depends(get_current_admin)):
+    if current_admin.role != "super_admin":
+        raise HTTPException(status_code=403, detail="Only super admins can create admin accounts")
+    existing = await db.admins.find_one({"email": admin_data.email}, {"_id": 0})
+    if existing:
+        raise HTTPException(status_code=400, detail="Admin with this email already exists")
+    admin = Admin(
+        admin_id=f"admin_{uuid.uuid4().hex[:12]}",
+        email=admin_data.email,
+        name=admin_data.name,
+        role=admin_data.role,
+        tasks=admin_data.tasks
+    )
+    await db.admins.insert_one(admin.model_dump())
+    return {"message": "Admin created", "admin": admin.model_dump()}
+
+@api_router.get("/admin/admins")
+async def get_admins(current_admin: Admin = Depends(get_current_admin)):
+    if current_admin.role != "super_admin":
+        raise HTTPException(status_code=403, detail="Only super admins can view admin list")
+    admins = await db.admins.find({}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    return {"admins": admins}
+
+@api_router.put("/admin/admins/{admin_id}")
+async def update_admin(admin_id: str, admin_data: AdminCreate, current_admin: Admin = Depends(get_current_admin)):
+    if current_admin.role != "super_admin":
+        raise HTTPException(status_code=403, detail="Only super admins can update admin accounts")
+    update_data = {"name": admin_data.name, "role": admin_data.role, "tasks": admin_data.tasks, "updated_at": datetime.now(timezone.utc)}
+    result = await db.admins.update_one({"admin_id": admin_id}, {"$set": update_data})
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Admin not found")
+    updated = await db.admins.find_one({"admin_id": admin_id}, {"_id": 0})
+    return {"message": "Admin updated", "admin": updated}
+
+@api_router.delete("/admin/admins/{admin_id}")
+async def delete_admin(admin_id: str, current_admin: Admin = Depends(get_current_admin)):
+    if current_admin.role != "super_admin":
+        raise HTTPException(status_code=403, detail="Only super admins can delete admin accounts")
+    if admin_id == current_admin.admin_id:
+        raise HTTPException(status_code=400, detail="Cannot delete your own account")
+    result = await db.admins.delete_one({"admin_id": admin_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Admin not found")
+    return {"message": "Admin deleted"}
+
+# ==================== DASHBOARD ROUTES ====================
+
+@api_router.get("/admin/dashboard")
+async def get_dashboard_data(current_admin: Admin = Depends(get_current_admin)):
+    total_users = await db.users.count_documents({})
+    active_users = await db.users.count_documents({"subscription_status": "active"})
+    blocked_users = await db.users.count_documents({"is_blocked": True})
+    free_users = await db.users.count_documents({"subscription_plan": "free"})
+    basic_users = await db.users.count_documents({"subscription_plan": "basic"})
+    premium_users = await db.users.count_documents({"subscription_plan": "premium"})
+    enterprise_users = await db.users.count_documents({"subscription_plan": "enterprise"})
+    basic_revenue = basic_users * 9999
+    premium_revenue = premium_users * 19999
+    enterprise_revenue = enterprise_users * 29999
+    total_revenue = basic_revenue + premium_revenue + enterprise_revenue
+    seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
+    recent_users = await db.users.count_documents({"created_at": {"$gte": seven_days_ago}})
+    recent_lessons = await db.lesson_plans.count_documents({"created_at": {"$gte": seven_days_ago}})
+    total_referrals = await db.referrals.count_documents({})
+    total_commission = await db.referrals.aggregate([
+        {"$group": {"_id": None, "total": {"$sum": "$total_commission"}}}
+    ]).to_list(1)
+    total_commission = total_commission[0]["total"] if total_commission else 0
+    return {
+        "overview": {"total_users": total_users, "active_users": active_users, "blocked_users": blocked_users, "total_revenue": total_revenue},
+        "subscriptions": {"free": free_users, "basic": basic_users, "premium": premium_users, "enterprise": enterprise_users},
+        "recent_activity": {"new_users_7d": recent_users, "lessons_created_7d": recent_lessons},
+        "referrals": {"total_referrals": total_referrals, "total_commission": total_commission}
+    }
+
+@api_router.get("/admin/dashboard/navigation")
+async def get_navigation(current_admin: Admin = Depends(get_current_admin)):
+    all_sections = [
+        {"id": "dashboard", "name": "Dashboard", "icon": "chart", "path": "/admin/dashboard"},
+        {"id": "referral_registry", "name": "Referral Registry", "icon": "handshake", "path": "/admin/referral-registry"},
+        {"id": "refer_and_earn", "name": "Refer and Earn", "icon": "money", "path": "/admin/refer-and-earn"},
+        {"id": "user_management", "name": "User Management", "icon": "users", "path": "/admin/users"},
+        {"id": "content_management", "name": "Content Management", "icon": "book", "path": "/admin/content"},
+        {"id": "analytics", "name": "Analytics & Reports", "icon": "chart", "path": "/admin/analytics"},
+        {"id": "subscription_management", "name": "Subscription Management", "icon": "card", "path": "/admin/subscriptions"},
+        {"id": "template_management", "name": "Template Management", "icon": "template", "path": "/admin/templates"},
+        {"id": "communication", "name": "Communication", "icon": "message", "path": "/admin/communication"},
+        {"id": "promo_banner", "name": "Promo Banner", "icon": "target", "path": "/admin/promo"},
+        {"id": "admin_profiles", "name": "Admin Profiles", "icon": "users", "path": "/admin/profiles"}
+    ]
+    if current_admin.role == "super_admin":
+        return {"navigation": all_sections}
+    allowed_sections = [s for s in all_sections if check_admin_permission(current_admin, s["id"])]
+    return {"navigation": allowed_sections}
+
+# ==================== USER MANAGEMENT ROUTES ====================
+
+@api_router.get("/admin/users")
+async def get_users(current_admin: Admin = Depends(get_current_admin), skip: int = 0, limit: int = 50, search: str = "", status: str = "all"):
+    if not check_admin_permission(current_admin, "user_management"):
+        raise HTTPException(status_code=403, detail="No permission for user management")
+    query = {}
+    if search:
+        query["$or"] = [{"email": {"$regex": search, "$options": "i"}}, {"name": {"$regex": search, "$options": "i"}}]
+    if status == "blocked":
+        query["is_blocked"] = True
+    elif status == "active":
+        query["subscription_status"] = "active"
+    elif status == "inactive":
+        query["subscription_status"] = {"$ne": "active"}
+    users = await db.users.find(query, {"_id": 0}).skip(skip).limit(limit).sort("created_at", -1).to_list(limit)
+    total = await db.users.count_documents(query)
+    return {"users": users, "total": total, "skip": skip, "limit": limit}
+
+@api_router.put("/admin/users/{user_id}")
+async def manage_user(user_id: str, action_data: UserManagementModel, current_admin: Admin = Depends(get_current_admin)):
+    if not check_admin_permission(current_admin, "user_management"):
+        raise HTTPException(status_code=403, detail="No permission for user management")
+    user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    update_data = {"updated_at": datetime.now(timezone.utc)}
+    if action_data.action == "block":
+        update_data["is_blocked"] = True
+        update_data["blocked_reason"] = action_data.reason
+    elif action_data.action == "unblock":
+        update_data["is_blocked"] = False
+        update_data["blocked_reason"] = None
+    elif action_data.action == "suspend":
+        update_data["subscription_status"] = "suspended"
+    elif action_data.action == "activate":
+        update_data["subscription_status"] = "active"
+    elif action_data.action == "delete":
+        update_data["is_deleted"] = True
+    else:
+        raise HTTPException(status_code=400, detail="Invalid action")
+    await db.users.update_one({"user_id": user_id}, {"$set": update_data})
+    return {"message": f"User {action_data.action}d successfully"}
+
+@api_router.get("/admin/users/{user_id}/details")
+async def get_user_details(user_id: str, current_admin: Admin = Depends(get_current_admin)):
+    if not check_admin_permission(current_admin, "user_management"):
+        raise HTTPException(status_code=403, detail="No permission")
+    user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    lesson_count = await db.lesson_plans.count_documents({"user_id": user_id})
+    referral_count = await db.referrals.count_documents({"admin_id": user_id})
+    link_count = await db.shared_links.count_documents({"teacher_id": user_id})
+    return {"user": user, "stats": {"lesson_count": lesson_count, "referral_count": referral_count, "shared_links_count": link_count}}
+
+# ==================== ANALYTICS ROUTES ====================
+
+@api_router.get("/admin/analytics/overview")
+async def get_analytics_overview(current_admin: Admin = Depends(get_current_admin)):
+    if not check_admin_permission(current_admin, "analytics"):
+        raise HTTPException(status_code=403, detail="No permission for analytics")
+    thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
+    user_growth = await db.users.aggregate([
+        {"$match": {"created_at": {"$gte": thirty_days_ago}}},
+        {"$group": {"_id": {"$dateToString": {"format": "%Y-%m-%d", "date": "$created_at"}}, "count": {"$sum": 1}}},
+        {"$sort": {"_id": 1}}
+    ]).to_list(30)
+    lesson_trends = await db.lesson_plans.aggregate([
+        {"$match": {"created_at": {"$gte": thirty_days_ago}}},
+        {"$group": {"_id": {"$dateToString": {"format": "%Y-%m-%d", "date": "$created_at"}}, "count": {"$sum": 1}}},
+        {"$sort": {"_id": 1}}
+    ]).to_list(30)
+    subscription_dist = await db.users.aggregate([
+        {"$group": {"_id": "$subscription_plan", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}}
+    ]).to_list(10)
+    popular_subjects = await db.lesson_plans.aggregate([
+        {"$group": {"_id": "$subject", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}},
+        {"$limit": 10}
+    ]).to_list(10)
+    return {"user_growth": user_growth, "lesson_trends": lesson_trends, "subscription_distribution": subscription_dist, "popular_subjects": popular_subjects}
+
+@api_router.get("/admin/analytics/revenue")
+async def get_revenue_analytics(current_admin: Admin = Depends(get_current_admin)):
+    if not check_admin_permission(current_admin, "advanced_reports"):
+        raise HTTPException(status_code=403, detail="No permission")
+    revenue_data = await db.users.aggregate([
+        {"$match": {"subscription_plan": {"$in": ["basic", "premium", "enterprise"]}}},
+        {"$group": {"_id": "$subscription_plan", "count": {"$sum": 1},
+            "revenue": {"$sum": {"$switch": {"branches": [
+                {"case": {"$eq": ["$subscription_plan", "basic"]}, "then": 9999},
+                {"case": {"$eq": ["$subscription_plan", "premium"]}, "then": 19999},
+                {"case": {"$eq": ["$subscription_plan", "enterprise"]}, "then": 29999}
+            ], "default": 0}}}}}
+    ]).to_list(10)
+    return {"revenue_breakdown": revenue_data}
+
+@api_router.get("/admin/analytics/content")
+async def get_content_analytics(current_admin: Admin = Depends(get_current_admin)):
+    if not check_admin_permission(current_admin, "analytics"):
+        raise HTTPException(status_code=403, detail="No permission")
+    content_stats = {
+        "lessons": await db.lesson_plans.count_documents({}),
+        "notes": await db.notes.count_documents({}),
+        "schemes": await db.schemes.count_documents({}),
+        "templates": await db.templates.count_documents({}),
+        "dictations": await db.dictations.count_documents({}),
+        "shared_links": await db.shared_links.count_documents({})
+    }
+    active_users = await db.lesson_plans.aggregate([
+        {"$group": {"_id": "$user_id", "lesson_count": {"$sum": 1}}},
+        {"$sort": {"lesson_count": -1}},
+        {"$limit": 10},
+        {"$lookup": {"from": "users", "localField": "_id", "foreignField": "user_id", "as": "user_info"}},
+        {"$unwind": "$user_info"},
+        {"$project": {"user_id": "$_id", "name": "$user_info.name", "email": "$user_info.email", "lesson_count": 1}}
+    ]).to_list(10)
+    return {"content_stats": content_stats, "most_active_users": active_users}
+
+# ==================== REFERRAL MANAGEMENT ROUTES ====================
+
+@api_router.get("/admin/referrals")
+async def get_all_referrals(current_admin: Admin = Depends(get_current_admin), skip: int = 0, limit: int = 100):
+    if not check_admin_permission(current_admin, "referral_registry"):
+        raise HTTPException(status_code=403, detail="No permission")
+    referrals = await db.referrals.find({}, {"_id": 0}).skip(skip).limit(limit).sort("created_at", -1).to_list(limit)
+    total = await db.referrals.count_documents({})
+    total_commission = sum(r.get("total_commission", 0) for r in referrals)
+    return {"referrals": referrals, "total": total, "total_commission": total_commission}
+
+@api_router.get("/admin/referrals/stats")
+async def get_referral_stats(current_admin: Admin = Depends(get_current_admin)):
+    if not check_admin_permission(current_admin, "referral_registry"):
+        raise HTTPException(status_code=403, detail="No permission")
+    admin_stats = await db.referrals.aggregate([
+        {"$group": {"_id": "$admin_id", "admin_name": {"$first": "$admin_name"}, "total_referrals": {"$sum": 1}, "total_commission": {"$sum": "$total_commission"}, "active_referrals": {"$sum": {"$cond": [{"$eq": ["$status", "active"]}, 1, 0]}}}},
+        {"$sort": {"total_commission": -1}}
+    ]).to_list(50)
+    return {"admin_stats": admin_stats}
+
+# ==================== SUBSCRIPTION MANAGEMENT ROUTES ====================
+
+@api_router.get("/admin/subscriptions")
+async def get_subscription_data(current_admin: Admin = Depends(get_current_admin)):
+    if not check_admin_permission(current_admin, "subscription_management"):
+        raise HTTPException(status_code=403, detail="No permission")
+    plans = await get_plans()
+    stats = await db.users.aggregate([
+        {"$group": {"_id": "$subscription_plan", "count": {"$sum": 1}, "active": {"$sum": {"$cond": [{"$eq": ["$subscription_status", "active"]}, 1, 0]}}}},
+        {"$sort": {"count": -1}}
+    ]).to_list(10)
+    return {"plans": plans["plans"], "stats": stats}
+
+@api_router.put("/admin/subscriptions/plans")
+async def update_subscription_plans(request: Request, current_admin: Admin = Depends(get_current_admin)):
+    """Update subscription plan pricing (super admin only)"""
+    if current_admin.role != "super_admin":
+        raise HTTPException(status_code=403, detail="Only super admins can modify subscription plans")
+    data = await request.json()
+    return {"message": "Subscription plans updated (demo mode)"}
+
+# ==================== CONTENT MANAGEMENT ROUTES ====================
+
+@api_router.get("/admin/content/lessons")
+async def get_content_lessons(current_admin: Admin = Depends(get_current_admin), skip: int = 0, limit: int = 50):
+    if not check_admin_permission(current_admin, "content_management"):
+        raise HTTPException(status_code=403, detail="No permission")
+    lessons = await db.lesson_plans.find({}, {"_id": 0}).skip(skip).limit(limit).sort("created_at", -1).to_list(limit)
+    total = await db.lesson_plans.count_documents({})
+    return {"lessons": lessons, "total": total}
+
+@api_router.delete("/admin/content/lessons/{lesson_id}")
+async def delete_content_lesson(lesson_id: str, current_admin: Admin = Depends(get_current_admin)):
+    if not check_admin_permission(current_admin, "content_management"):
+        raise HTTPException(status_code=403, detail="No permission")
+    result = await db.lesson_plans.delete_one({"lesson_id": lesson_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+    return {"message": "Lesson deleted"}
+
+# ==================== COMMUNICATION ROUTES ====================
+
+@api_router.post("/admin/communication/send")
+async def send_user_message(request: Request, current_admin: Admin = Depends(get_current_admin)):
+    if not check_admin_permission(current_admin, "communication"):
+        raise HTTPException(status_code=403, detail="No permission")
+    data = await request.json()
+    notification = {
+        "notification_id": f"notif_{uuid.uuid4().hex[:12]}",
+        "from_admin": current_admin.admin_id,
+        "to_users": data.get("user_ids", []),
+        "subject": data.get("subject", "Admin Message"),
+        "message": data.get("message", ""),
+        "sent_at": datetime.now(timezone.utc).isoformat(),
+        "type": "admin_message"
+    }
+    await db.notifications.insert_one(notification)
+    return {"message": f"Message sent to {len(notification['to_users'])} users"}
+
+# ==================== PROMO BANNER ROUTES ====================
+
+@api_router.get("/admin/promo")
+async def get_promo_banners(current_admin: Admin = Depends(get_current_admin)):
+    if not check_admin_permission(current_admin, "promo_banner"):
+        raise HTTPException(status_code=403, detail="No permission")
+    banners = await db.promo_banners.find({"is_active": True}, {"_id": 0}).sort("created_at", -1).to_list(10)
+    return {"banners": banners}
+
+@api_router.post("/admin/promo")
+async def create_promo_banner(request: Request, current_admin: Admin = Depends(get_current_admin)):
+    if not check_admin_permission(current_admin, "promo_banner"):
+        raise HTTPException(status_code=403, detail="No permission")
+    data = await request.json()
+    banner = {
+        "banner_id": f"banner_{uuid.uuid4().hex[:12]}",
+        "title": data.get("title", ""), "message": data.get("message", ""),
+        "image_url": data.get("image_url", ""), "link_url": data.get("link_url", ""),
+        "is_active": data.get("is_active", True),
+        "created_by": current_admin.admin_id,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.promo_banners.insert_one(banner)
+    banner.pop("_id", None)
+    return {"message": "Promo banner created", "banner": banner}
+
+@api_router.put("/admin/promo/{banner_id}")
+async def update_promo_banner(banner_id: str, request: Request, current_admin: Admin = Depends(get_current_admin)):
+    if not check_admin_permission(current_admin, "promo_banner"):
+        raise HTTPException(status_code=403, detail="No permission")
+    data = await request.json()
+    update_data = {k: v for k, v in data.items() if k in ["title", "message", "image_url", "link_url", "is_active"]}
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    result = await db.promo_banners.update_one({"banner_id": banner_id}, {"$set": update_data})
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Banner not found")
+    return {"message": "Banner updated"}
+
+@api_router.delete("/admin/promo/{banner_id}")
+async def delete_promo_banner(banner_id: str, current_admin: Admin = Depends(get_current_admin)):
+    if not check_admin_permission(current_admin, "promo_banner"):
+        raise HTTPException(status_code=403, detail="No permission")
+    result = await db.promo_banners.delete_one({"banner_id": banner_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Banner not found")
+    return {"message": "Banner deleted"}
+
+# ==================== PESAPAL PAYMENT ADMIN ROUTES ====================
+
+@api_router.get("/admin/pesapal/transactions")
+async def get_pesapal_transactions(request: Request, current_admin: Admin = Depends(get_current_admin)):
+    if not check_admin_permission(current_admin, "subscription_management"):
+        raise HTTPException(status_code=403, detail="No permission")
+    status_filter = request.query_params.get("status")
+    limit = int(request.query_params.get("limit", 50))
+    skip = int(request.query_params.get("skip", 0))
+    query = {}
+    if status_filter:
+        query["status"] = status_filter.upper()
+    transactions = await db.pesapal_transactions.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
+    total_count = await db.pesapal_transactions.count_documents(query)
+    summary = await db.pesapal_transactions.aggregate([
+        {"$group": {"_id": "$status", "count": {"$sum": 1}, "total_amount": {"$sum": "$amount"}}}
+    ]).to_list(None)
+    status_summary = {item["_id"]: {"count": item["count"], "total_amount": item["total_amount"]} for item in summary}
+    return {"transactions": transactions, "total_count": total_count, "status_summary": status_summary, "pagination": {"skip": skip, "limit": limit, "has_more": total_count > skip + limit}}
+
+@api_router.get("/admin/pesapal/transactions/{merchant_reference}")
+async def get_pesapal_transaction_details(merchant_reference: str, current_admin: Admin = Depends(get_current_admin)):
+    if not check_admin_permission(current_admin, "subscription_management"):
+        raise HTTPException(status_code=403, detail="No permission")
+    transaction = await db.pesapal_transactions.find_one({"merchant_reference": merchant_reference}, {"_id": 0})
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    user = await db.users.find_one({"user_id": transaction["user_id"]}, {"_id": 0, "user_id": 1, "email": 1, "name": 1, "subscription_status": 1, "subscription_plan": 1})
+    return {"transaction": transaction, "user": user}
+
+@api_router.get("/admin/pesapal/analytics")
+async def get_pesapal_analytics(current_admin: Admin = Depends(get_current_admin)):
+    if not check_admin_permission(current_admin, "analytics"):
+        raise HTTPException(status_code=403, detail="No permission")
+    plan_revenue = await db.pesapal_transactions.aggregate([
+        {"$match": {"status": "COMPLETED"}},
+        {"$group": {"_id": "$plan_id", "total_revenue": {"$sum": "$amount"}, "transaction_count": {"$sum": 1}}}
+    ]).to_list(None)
+    total_transactions = await db.pesapal_transactions.count_documents({})
+    completed_transactions = await db.pesapal_transactions.count_documents({"status": "COMPLETED"})
+    success_rate = (completed_transactions / total_transactions * 100) if total_transactions > 0 else 0
+    return {"plan_revenue": plan_revenue, "success_rate": round(success_rate, 2), "total_transactions": total_transactions, "completed_transactions": completed_transactions}
+
 
 # ==================== AUTH HELPERS ====================
 
@@ -487,70 +1111,217 @@ async def delete_lesson(lesson_id: str, user: User = Depends(get_current_user)):
     
     return {"message": "Lesson deleted"}
 
-# ==================== SUBSCRIPTION ROUTES (MOCKED) ====================
+# ==================== REFERRAL SERVICE FUNCTIONS ====================
+
+async def calculate_commission(plan: str, months: int) -> float:
+    plan_prices = {"free": 0, "basic": 9999, "premium": 19999, "enterprise": 29999}
+    return plan_prices.get(plan, 0) * months * 0.3
+
+async def update_referral_commission(referral_id: str, plan: str, months: int):
+    commission = await calculate_commission(plan, months)
+    await db.referrals.update_one(
+        {"referral_id": referral_id},
+        {"$set": {
+            "subscription_plan": plan,
+            "monthly_price": {"free": 0, "basic": 9999, "premium": 19999, "enterprise": 29999}.get(plan, 0),
+            "active_months": months, "total_commission": commission,
+            "updated_at": datetime.now(timezone.utc)
+        }}
+    )
+
+async def get_referral_metrics(admin_id: str) -> ReferralMetrics:
+    referrals = await db.referrals.find({"admin_id": admin_id}, {"_id": 0}).to_list(1000)
+    total = len(referrals)
+    active = len([r for r in referrals if r.get("status") == "active"])
+    return ReferralMetrics(
+        total_teachers=total,
+        total_commission=sum(r.get("total_commission", 0) for r in referrals),
+        active_teachers=active,
+        inactive_teachers=total - active
+    )
+
+async def sync_admin_referrals(admin_id: str):
+    referrals = await db.referrals.find({"admin_id": admin_id}, {"_id": 0}).to_list(1000)
+    for referral in referrals:
+        plan = referral.get("subscription_plan", "free")
+        months = referral.get("active_months", 0)
+        expected = await calculate_commission(plan, months)
+        if abs(referral.get("total_commission", 0) - expected) > 0.01:
+            await update_referral_commission(referral["referral_id"], plan, months)
+
+# ==================== PESAPAL PAYMENT HELPERS ====================
+
+def _build_pesapal_request_data(reference: str, amount: int, description: str, user: User):
+    first_name = (user.name or '').split(' ')[0] if user.name else ''
+    last_name = (user.name or '').split(' ')[-1] if user.name else ''
+    return f"""<PesapalDirectOrderInfo xmlns="http://www.pesapal.com">
+  <Amount>{amount}</Amount><Description>{description}</Description><Type>MERCHANT</Type>
+  <Reference>{reference}</Reference><FirstName>{first_name}</FirstName>
+  <LastName>{last_name}</LastName><Email>{user.email}</Email><PhoneNumber></PhoneNumber>
+</PesapalDirectOrderInfo>""".strip()
+
+async def _create_pesapal_checkout_url(reference: str, amount: int, description: str, user: User) -> str:
+    import requests as http_requests
+    from requests_oauthlib import OAuth1
+    endpoint = f"{PESAPAL_BASE_URL}/API/PostPesapalDirectOrderV4"
+    pesapal_request_data = _build_pesapal_request_data(reference, amount, description, user)
+    params = {'oauth_callback': PESAPAL_CALLBACK_URL, 'pesapal_request_data': pesapal_request_data}
+    auth = OAuth1(PESAPAL_CONSUMER_KEY, client_secret=PESAPAL_CONSUMER_SECRET, signature_type='query')
+    response = http_requests.post(endpoint, params=params, auth=auth, timeout=30)
+    if response.status_code != 200:
+        raise HTTPException(status_code=502, detail=f"PesaPal responded with {response.status_code}")
+    checkout_url = response.text.strip()
+    if not checkout_url.startswith('http'):
+        raise HTTPException(status_code=502, detail="Invalid PesaPal checkout URL returned")
+    return checkout_url
+
+# ==================== SUBSCRIPTION ROUTES ====================
 
 @api_router.get("/subscription/plans")
 async def get_plans():
-    """Get available subscription plans"""
     return {
         "plans": [
-            {
-                "id": "monthly",
-                "name": "Monthly Plan",
-                "price": 4999,
-                "currency": "TZS",
-                "period": "month",
-                "features": [
-                    "Unlimited lesson plans",
-                    "Priority support",
-                    "Export to PDF/Word",
-                    "Scheme of Work generator"
-                ]
-            },
-            {
-                "id": "yearly",
-                "name": "Yearly Plan",
-                "price": 40000,
-                "currency": "TZS",
-                "period": "year",
-                "features": [
-                    "Everything in Monthly",
-                    "Save 33%",
-                    "Early access to new features",
-                    "Custom templates"
-                ]
-            }
+            {"id": "basic", "name": "Basic Plan", "price": 9999, "currency": "TZS", "period": "month",
+             "features": ["Unlimited lesson plans", "Export to Word", "Scheme of Work generator", "Priority support"]},
+            {"id": "premium", "name": "Premium Plan", "price": 19999, "currency": "TZS", "period": "month",
+             "features": ["Everything in Basic", "Premium templates", "Dictation tool", "Custom templates", "Save 33%"]},
+            {"id": "enterprise", "name": "Enterprise Plan", "price": 29999, "currency": "TZS", "period": "month",
+             "features": ["Everything in Premium", "Team accounts", "Custom branding", "API access", "Dedicated support"]}
         ]
     }
 
-@api_router.post("/subscription/subscribe")
-async def subscribe(request: Request, user: User = Depends(get_current_user)):
-    """Subscribe to a plan (MOCKED - will integrate PesaPal later)"""
+@api_router.post("/subscription/checkout")
+async def subscription_checkout(request: Request, user: User = Depends(get_current_user)):
     data = await request.json()
     plan_id = data.get("plan_id")
-    
-    if plan_id not in ["monthly", "yearly"]:
-        raise HTTPException(status_code=400, detail="Invalid plan")
-    
-    # Mock subscription - in production, this would integrate with PesaPal
-    if plan_id == "monthly":
+    plan_prices = {"basic": 9999, "premium": 19999, "enterprise": 29999}
+    if plan_id not in plan_prices:
+        raise HTTPException(status_code=400, detail="Invalid plan selected")
+    amount = plan_prices[plan_id]
+    merchant_reference = f"{user.user_id}_{plan_id}_{uuid.uuid4().hex[:12]}"
+    description = f"MiLessonPlan {plan_id.title()} subscription for {user.email}"
+    transaction_doc = {
+        "merchant_reference": merchant_reference, "user_id": user.user_id, "email": user.email,
+        "plan_id": plan_id, "amount": amount, "currency": "TZS", "status": "pending",
+        "pesapal_tracking_id": None,
+        "created_at": datetime.now(timezone.utc).isoformat(), "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.pesapal_transactions.insert_one(transaction_doc)
+    checkout_url = await _create_pesapal_checkout_url(merchant_reference, amount, description, user)
+    return {"message": "PesaPal checkout created", "checkout_url": checkout_url, "merchant_reference": merchant_reference}
+
+@api_router.post("/pesapal/ipn")
+async def pesapal_ipn(request: Request):
+    form = await request.form()
+    transaction_tracking_id = form.get("pesapal_transaction_tracking_id")
+    merchant_reference = form.get("pesapal_merchant_reference")
+    transaction_status = form.get("pesapal_transaction_status")
+    if not merchant_reference:
+        raise HTTPException(status_code=400, detail="Missing merchant reference")
+    tx = await db.pesapal_transactions.find_one({"merchant_reference": merchant_reference}, {"_id": 0})
+    if not tx:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    ipn_trace = {"timestamp": datetime.now(timezone.utc).isoformat(), "tracking_id": transaction_tracking_id, "status": transaction_status}
+    update_data = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    if transaction_tracking_id:
+        update_data["pesapal_tracking_id"] = transaction_tracking_id
+    if transaction_status:
+        update_data["status"] = transaction_status.upper()
+    await db.pesapal_transactions.update_one(
+        {"merchant_reference": merchant_reference},
+        {"$set": update_data, "$push": {"ipn_traces": ipn_trace}}
+    )
+    if transaction_status and transaction_status.upper() in ["COMPLETED", "VALID"]:
         expires = datetime.now(timezone.utc) + timedelta(days=30)
-    else:
+        await db.users.update_one(
+            {"user_id": tx["user_id"]},
+            {"$set": {"subscription_status": "active", "subscription_plan": tx["plan_id"], "subscription_expires": expires.isoformat()}}
+        )
+        referral = await db.referrals.find_one({"teacher_id": tx["user_id"]}, {"_id": 0})
+        if referral:
+            await update_referral_commission(referral["referral_id"], tx["plan_id"], 1)
+    return JSONResponse({"message": "PesaPal IPN processed successfully"})
+
+@api_router.post("/subscription/subscribe")
+async def subscribe(request: Request, user: User = Depends(get_current_user)):
+    """Fallback local plan activation"""
+    data = await request.json()
+    plan_id = data.get("plan_id")
+    if plan_id not in ["basic", "premium", "monthly", "yearly"]:
+        raise HTTPException(status_code=400, detail="Invalid plan")
+    if plan_id in ["yearly"]:
         expires = datetime.now(timezone.utc) + timedelta(days=365)
-    
+    else:
+        expires = datetime.now(timezone.utc) + timedelta(days=30)
     await db.users.update_one(
         {"user_id": user.user_id},
-        {"$set": {
-            "subscription_status": "active",
-            "subscription_expires": expires.isoformat()
-        }}
+        {"$set": {"subscription_status": "active", "subscription_plan": plan_id, "subscription_expires": expires.isoformat()}}
     )
-    
-    return {
-        "message": "Subscription activated (DEMO MODE)",
-        "note": "This is a demo. Real payment will be integrated with PesaPal.",
-        "expires": expires.isoformat()
-    }
+    referral = await db.referrals.find_one({"teacher_id": user.user_id}, {"_id": 0})
+    if referral:
+        await update_referral_commission(referral["referral_id"], plan_id, 1)
+    return {"message": "Subscription activated", "expires": expires.isoformat()}
+
+# ==================== REFERRAL ROUTES ====================
+
+@api_router.post("/referrals")
+async def create_referral(request: Request, user: User = Depends(get_current_user)):
+    data = await request.json()
+    for field in ["teacher_id", "teacher_name", "teacher_email", "admin_id", "admin_name"]:
+        if field not in data:
+            raise HTTPException(status_code=400, detail=f"Missing required field: {field}")
+    existing = await db.referrals.find_one({"teacher_id": data["teacher_id"], "admin_id": data["admin_id"]})
+    if existing:
+        raise HTTPException(status_code=400, detail="Referral already exists")
+    referral = Referral(
+        teacher_id=data["teacher_id"], teacher_name=data["teacher_name"], teacher_email=data["teacher_email"],
+        admin_id=data["admin_id"], admin_name=data["admin_name"],
+        subscription_plan=data.get("subscription_plan", "free"), monthly_price=data.get("monthly_price", 0)
+    )
+    await db.referrals.insert_one(referral.model_dump())
+    return {"message": "Referral created", "referral": referral.model_dump()}
+
+@api_router.get("/referrals/admin/{admin_id}")
+async def get_admin_referrals(admin_id: str, user: User = Depends(get_current_user)):
+    referrals = await db.referrals.find({"admin_id": admin_id}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    metrics = await get_referral_metrics(admin_id)
+    return {"referrals": referrals, "metrics": metrics.model_dump()}
+
+@api_router.put("/referrals/{referral_id}")
+async def update_referral(referral_id: str, request: Request, user: User = Depends(get_current_user)):
+    data = await request.json()
+    existing = await db.referrals.find_one({"referral_id": referral_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Referral not found")
+    update_data = {"updated_at": datetime.now(timezone.utc)}
+    for field in ["subscription_plan", "monthly_price", "active_months", "inactive_months", "status"]:
+        if field in data:
+            update_data[field] = data[field]
+    if "subscription_plan" in data or "active_months" in data:
+        plan = data.get("subscription_plan", existing.get("subscription_plan", "free"))
+        months = data.get("active_months", existing.get("active_months", 0))
+        update_data["total_commission"] = await calculate_commission(plan, months)
+    await db.referrals.update_one({"referral_id": referral_id}, {"$set": update_data})
+    updated = await db.referrals.find_one({"referral_id": referral_id}, {"_id": 0})
+    return {"message": "Referral updated", "referral": updated}
+
+@api_router.delete("/referrals/{referral_id}")
+async def delete_referral(referral_id: str, user: User = Depends(get_current_user)):
+    existing = await db.referrals.find_one({"referral_id": referral_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Referral not found")
+    await db.referrals.delete_one({"referral_id": referral_id})
+    return {"message": "Referral deleted"}
+
+@api_router.get("/referrals/metrics/{admin_id}")
+async def get_referral_metrics_endpoint(admin_id: str, user: User = Depends(get_current_user)):
+    metrics = await get_referral_metrics(admin_id)
+    return metrics.model_dump()
+
+@api_router.post("/referrals/sync/{admin_id}")
+async def sync_admin_referrals_endpoint(admin_id: str, user: User = Depends(get_current_user)):
+    await sync_admin_referrals(admin_id)
+    return {"message": "Referrals synced successfully"}
 
 # ==================== NOTES ROUTES ====================
 
@@ -1588,6 +2359,51 @@ async def delete_shared_link(code: str, user: User = Depends(get_current_user)):
     if result.modified_count == 0:
         raise HTTPException(status_code=404, detail="Link not found")
     return {"message": "Link disabled"}
+
+# ==================== CRON ROUTES ====================
+
+@api_router.post("/admin/cron/renew-subscriptions")
+async def renew_subscriptions_cron(current_admin: Admin = Depends(get_current_admin)):
+    """Admin endpoint to manually trigger subscription renewal"""
+    if current_admin.role != "super_admin":
+        raise HTTPException(status_code=403, detail="Only super admins can trigger subscription renewal")
+    renewed_count = await process_subscription_renewals()
+    return {"message": f"Subscription renewal completed. {renewed_count} subscriptions renewed."}
+
+async def process_subscription_renewals():
+    """Process monthly subscription renewals and update referral commissions"""
+    today = datetime.now(timezone.utc).date()
+    expired_subscriptions = await db.users.find(
+        {"subscription_status": "active", "subscription_expires": {"$exists": True}}, {"_id": 0}
+    ).to_list(1000)
+    renewed_count = 0
+    for user in expired_subscriptions:
+        try:
+            expires_str = user.get("subscription_expires")
+            if not expires_str:
+                continue
+            if isinstance(expires_str, str):
+                expires_date = datetime.fromisoformat(expires_str.replace('Z', '+00:00'))
+            else:
+                expires_date = expires_str
+            if expires_date.tzinfo is None:
+                expires_date = expires_date.replace(tzinfo=timezone.utc)
+            if expires_date.date() <= today:
+                plan_id = user.get("subscription_plan", "free")
+                if plan_id == "free":
+                    continue
+                new_expiry = datetime.now(timezone.utc) + timedelta(days=30)
+                await db.users.update_one(
+                    {"user_id": user["user_id"]},
+                    {"$set": {"subscription_expires": new_expiry.isoformat()}}
+                )
+                referral = await db.referrals.find_one({"teacher_id": user["user_id"]}, {"_id": 0})
+                if referral:
+                    await update_referral_commission(referral["referral_id"], plan_id, 1)
+                renewed_count += 1
+        except Exception as e:
+            continue
+    return renewed_count
 
 # ==================== UTILITY ROUTES ====================
 

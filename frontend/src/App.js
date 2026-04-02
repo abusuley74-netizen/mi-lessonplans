@@ -1,11 +1,16 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { AdminProvider } from './contexts/AdminContext';
 import AuthCallback from './components/AuthCallback';
 import LoginPage from './pages/LoginPage';
 import Dashboard from './pages/Dashboard';
 import MyHub from './pages/MyHub';
 import SubscribePage from './pages/SubscribePage';
+import AdminLogin from './pages/AdminLogin';
+import AdminDashboard from './pages/AdminDashboard';
+import AdminProfileManager from './components/AdminProfileManager';
+import UserManagement from './components/UserManagement';
 import SharedView from './components/SharedView';
 import { Toaster } from './components/ui/sonner';
 import './index.css';
@@ -51,6 +56,7 @@ const AppRouter = () => {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/admin/login" element={<AdminProvider><AdminLogin /></AdminProvider>} />
       <Route path="/shared/:code" element={<SharedView />} />
       <Route 
         path="/dashboard" 
@@ -74,6 +80,14 @@ const AppRouter = () => {
           <ProtectedRoute>
             <SubscribePage />
           </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/admin/*" 
+        element={
+          <AdminProvider>
+            <AdminDashboard />
+          </AdminProvider>
         } 
       />
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
