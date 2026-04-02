@@ -238,32 +238,23 @@ async def admin_login(request: Request, response: Response):
     if not email or not password:
         raise HTTPException(status_code=400, detail="Email and password required")
     
-    admin_doc = await db.admins.find_one({"email": email, "is_active": True}, {"_id": 0})
+    # Hardcoded admin credentials
+    valid_admins = {
+        "admin@milessonplan.com": {"password": "password", "admin_id": "admin_system", "name": "System Administrator"},
+        "RedJohn@admin.com": {"password": "1993redjohn", "admin_id": "admin_redjohn", "name": "Red John"},
+    }
     
-    if admin_doc:
-        if password == "password":
-            admin = Admin(**admin_doc)
-        else:
-            raise HTTPException(status_code=401, detail="Invalid credentials")
-    else:
-        if email == "RedJohn@admin.com" and password == "1993redjohn":
-            admin = Admin(
-                admin_id="admin_redjohn",
-                email="RedJohn@admin.com",
-                name="Red John",
-                role="super_admin",
-                tasks=[]
-            )
-        elif email == "admin@milessonplan.com" and password == "password":
-            admin = Admin(
-                admin_id="admin_system",
-                email="admin@milessonplan.com",
-                name="System Administrator",
-                role="super_admin",
-                tasks=[]
-            )
-        else:
-            raise HTTPException(status_code=401, detail="Invalid credentials")
+    cred = valid_admins.get(email)
+    if not cred or password != cred["password"]:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    
+    admin = Admin(
+        admin_id=cred["admin_id"],
+        email=email,
+        name=cred["name"],
+        role="super_admin",
+        tasks=[]
+    )
     
     session_token = f"admin_{uuid.uuid4().hex[:32]}"
     expires_at = datetime.now(timezone.utc) + timedelta(hours=8)
