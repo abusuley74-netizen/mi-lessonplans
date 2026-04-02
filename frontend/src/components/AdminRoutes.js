@@ -3,6 +3,7 @@ import { Routes, Route } from 'react-router-dom';
 import AdminProfileManager from '../components/AdminProfileManager';
 import UserManagement from '../components/UserManagement';
 import PesaPalTransactionManager from '../components/PesaPalTransactionManager';
+import ReferralRegistry from '../components/ReferralRegistry';
 
 const AdminRoutes = () => {
   return (
@@ -11,8 +12,8 @@ const AdminRoutes = () => {
       <Route path="/dashboard" element={<div>Dashboard Home</div>} />
       <Route path="/profiles" element={<AdminProfileManager />} />
       <Route path="/users" element={<UserManagement />} />
-      <Route path="/referral-registry" element={<div>Referral Registry</div>} />
-      <Route path="/refer-and-earn" element={<div>Refer and Earn</div>} />
+      <Route path="/referral-registry" element={<ReferralRegistry />} />
+      <Route path="/refer-and-earn" element={<ReferralRegistry />} />
       <Route path="/content" element={<div>Content Management</div>} />
       <Route path="/analytics" element={<div>Analytics</div>} />
       <Route path="/reports" element={<div>Advanced Reports</div>} />

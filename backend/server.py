@@ -52,6 +52,8 @@ class User(BaseModel):
     subscription_expires: Optional[datetime] = None
     lesson_period_start: Optional[str] = None
     lesson_period_count: int = 0
+    referral_code: Optional[str] = None
+    referred_by: Optional[str] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class UserSession(BaseModel):
@@ -780,9 +782,18 @@ async def create_session(request: Request, response: Response):
             {"user_id": user_id},
             {"$set": {"name": name, "picture": picture}}
         )
+        is_new_user = False
     else:
         # Create new user
         user_id = f"user_{uuid.uuid4().hex[:12]}"
+        ref_code = f"ML{uuid.uuid4().hex[:6].upper()}"
+        # Check for referral code passed during signup
+        ref_by_code = data.get("referral_code")
+        referred_by_id = None
+        if ref_by_code:
+            referrer = await db.users.find_one({"referral_code": ref_by_code}, {"_id": 0})
+            if referrer:
+                referred_by_id = referrer["user_id"]
         new_user = {
             "user_id": user_id,
             "email": email,
@@ -793,9 +804,12 @@ async def create_session(request: Request, response: Response):
             "subscription_expires": None,
             "lesson_period_start": datetime.now(timezone.utc).isoformat(),
             "lesson_period_count": 0,
+            "referral_code": ref_code,
+            "referred_by": referred_by_id,
             "created_at": datetime.now(timezone.utc).isoformat()
         }
         await db.users.insert_one(new_user)
+        is_new_user = True
     
     # Create session
     expires_at = datetime.now(timezone.utc) + timedelta(days=7)
@@ -1194,7 +1208,7 @@ async def delete_lesson(lesson_id: str, user: User = Depends(get_current_user)):
 # ==================== REFERRAL SERVICE FUNCTIONS ====================
 
 async def calculate_commission(plan: str, months: int) -> float:
-    plan_prices = {"free": 0, "basic": 9999, "premium": 19999, "enterprise": 29999}
+    plan_prices = {"free": 0, "basic": 9999, "premium": 19999, "master": 29999, "enterprise": 29999}
     return plan_prices.get(plan, 0) * months * 0.3
 
 async def update_referral_commission(referral_id: str, plan: str, months: int):
@@ -1203,7 +1217,7 @@ async def update_referral_commission(referral_id: str, plan: str, months: int):
         {"referral_id": referral_id},
         {"$set": {
             "subscription_plan": plan,
-            "monthly_price": {"free": 0, "basic": 9999, "premium": 19999, "enterprise": 29999}.get(plan, 0),
+            "monthly_price": {"free": 0, "basic": 9999, "premium": 19999, "master": 29999, "enterprise": 29999}.get(plan, 0),
             "active_months": months, "total_commission": commission,
             "updated_at": datetime.now(timezone.utc)
         }}
@@ -1349,6 +1363,23 @@ async def pesapal_ipn(request: Request):
             {"user_id": tx["user_id"]},
             {"$set": {"subscription_status": "active", "subscription_plan": tx["plan_id"], "subscription_expires": expires.isoformat()}}
         )
+        # Credit referrer 30% commission
+        user_doc = await db.users.find_one({"user_id": tx["user_id"]}, {"_id": 0})
+        referred_by = user_doc.get("referred_by") if user_doc else None
+        if referred_by:
+            plan_prices = {"basic": 9999, "premium": 19999, "master": 29999}
+            price = plan_prices.get(tx["plan_id"], 0)
+            if price > 0:
+                await db.referral_commissions.insert_one({
+                    "commission_id": f"comm_{uuid.uuid4().hex[:12]}",
+                    "referrer_id": referred_by,
+                    "referee_id": tx["user_id"],
+                    "plan": tx["plan_id"],
+                    "plan_price": price,
+                    "commission_amount": round(price * 0.3),
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                })
+        # Legacy referral update
         referral = await db.referrals.find_one({"teacher_id": tx["user_id"]}, {"_id": 0})
         if referral:
             await update_referral_commission(referral["referral_id"], tx["plan_id"], 1)
@@ -1369,6 +1400,24 @@ async def subscribe(request: Request, user: User = Depends(get_current_user)):
         {"user_id": user.user_id},
         {"$set": {"subscription_status": "active", "subscription_plan": plan_id, "subscription_expires": expires.isoformat()}}
     )
+    # Credit referrer 30% commission
+    user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
+    referred_by = user_doc.get("referred_by") if user_doc else None
+    if referred_by:
+        plan_prices = {"basic": 9999, "premium": 19999, "master": 29999}
+        price = plan_prices.get(plan_id, 0)
+        if price > 0:
+            commission = round(price * 0.3)
+            await db.referral_commissions.insert_one({
+                "commission_id": f"comm_{uuid.uuid4().hex[:12]}",
+                "referrer_id": referred_by,
+                "referee_id": user.user_id,
+                "plan": plan_id,
+                "plan_price": price,
+                "commission_amount": commission,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            })
+    # Legacy referral update
     referral = await db.referrals.find_one({"teacher_id": user.user_id}, {"_id": 0})
     if referral:
         await update_referral_commission(referral["referral_id"], plan_id, 1)
@@ -1434,6 +1483,146 @@ async def get_referral_metrics_endpoint(admin_id: str, user: User = Depends(get_
 async def sync_admin_referrals_endpoint(admin_id: str, user: User = Depends(get_current_user)):
     await sync_admin_referrals(admin_id)
     return {"message": "Referrals synced successfully"}
+
+# ==================== TEACHER REFERRAL ROUTES ====================
+
+@api_router.get("/teacher/referral/my-code")
+async def get_my_referral_code(user: User = Depends(get_current_user)):
+    """Get or generate the teacher's unique referral code"""
+    user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
+    code = user_doc.get("referral_code") if user_doc else None
+    if not code:
+        code = f"ML{uuid.uuid4().hex[:6].upper()}"
+        await db.users.update_one({"user_id": user.user_id}, {"$set": {"referral_code": code}})
+    base_url = "https://mi-learning-hub.preview.emergentagent.com"
+    return {
+        "referral_code": code,
+        "referral_link": f"{base_url}/login?ref={code}",
+    }
+
+@api_router.get("/teacher/referral/my-referrals")
+async def get_my_referrals(user: User = Depends(get_current_user)):
+    """Get list of users referred by this teacher"""
+    referred_users = await db.users.find(
+        {"referred_by": user.user_id},
+        {"_id": 0, "user_id": 1, "name": 1, "email": 1, "subscription_plan": 1, "subscription_status": 1, "created_at": 1}
+    ).sort("created_at", -1).to_list(500)
+
+    # Calculate earnings
+    plan_prices = {"free": 0, "basic": 9999, "premium": 19999, "master": 29999, "enterprise": 29999}
+    total_earned = 0
+    pending = 0
+    referrals_with_earnings = []
+    for u in referred_users:
+        plan = u.get("subscription_plan", "free")
+        price = plan_prices.get(plan, 0)
+        commission = round(price * 0.3)
+        # Check commission payouts
+        paid_amount = 0
+        payouts = await db.referral_payouts.find({"referrer_id": user.user_id, "referee_id": u["user_id"]}, {"_id": 0}).to_list(100)
+        paid_amount = sum(p.get("amount", 0) for p in payouts)
+        unpaid = commission - paid_amount if commission > 0 else 0
+        total_earned += commission
+        pending += max(0, unpaid)
+        referrals_with_earnings.append({
+            "user_id": u["user_id"],
+            "name": u.get("name", "Unknown"),
+            "email": u.get("email", ""),
+            "plan": plan,
+            "commission_per_cycle": commission,
+            "total_paid": paid_amount,
+            "joined": u.get("created_at"),
+        })
+
+    return {
+        "referrals": referrals_with_earnings,
+        "total_referrals": len(referred_users),
+        "total_earned": total_earned,
+        "pending_payout": pending,
+    }
+
+# ==================== ADMIN REFERRAL MANAGEMENT ====================
+
+@api_router.get("/admin/teacher-referrals")
+async def admin_get_teacher_referrals(current_admin: Admin = Depends(get_current_admin)):
+    """Admin: Get all referrers with their referees and earnings"""
+    # Find all users who have referred someone
+    referrers_pipeline = [
+        {"$match": {"referred_by": {"$ne": None}}},
+        {"$group": {"_id": "$referred_by", "referee_count": {"$sum": 1}}},
+    ]
+    referrer_groups = await db.users.aggregate(referrers_pipeline).to_list(1000)
+
+    plan_prices = {"free": 0, "basic": 9999, "premium": 19999, "master": 29999, "enterprise": 29999}
+    results = []
+    for group in referrer_groups:
+        referrer_id = group["_id"]
+        referrer_doc = await db.users.find_one({"user_id": referrer_id}, {"_id": 0, "user_id": 1, "name": 1, "email": 1, "referral_code": 1})
+        if not referrer_doc:
+            continue
+        # Get referees
+        referees = await db.users.find(
+            {"referred_by": referrer_id},
+            {"_id": 0, "user_id": 1, "name": 1, "email": 1, "subscription_plan": 1, "created_at": 1}
+        ).to_list(500)
+        total_commission = sum(round(plan_prices.get(r.get("subscription_plan", "free"), 0) * 0.3) for r in referees)
+        total_paid = 0
+        payouts = await db.referral_payouts.find({"referrer_id": referrer_id}, {"_id": 0}).to_list(500)
+        total_paid = sum(p.get("amount", 0) for p in payouts)
+        results.append({
+            "referrer": referrer_doc,
+            "referees": referees,
+            "total_commission": total_commission,
+            "total_paid": total_paid,
+            "pending": max(0, total_commission - total_paid),
+            "referee_count": group["referee_count"],
+        })
+
+    # Get payout settings
+    settings = await db.referral_settings.find_one({"key": "payout_schedule"}, {"_id": 0})
+    payout_schedule = settings.get("value", "monthly") if settings else "monthly"
+
+    return {"referrers": results, "payout_schedule": payout_schedule}
+
+@api_router.put("/admin/referral-settings/payout-schedule")
+async def admin_set_payout_schedule(request: Request, current_admin: Admin = Depends(get_current_admin)):
+    """Admin: Set payout duration (biweekly or monthly)"""
+    data = await request.json()
+    schedule = data.get("schedule", "monthly")
+    if schedule not in ["biweekly", "monthly"]:
+        raise HTTPException(status_code=400, detail="Schedule must be 'biweekly' or 'monthly'")
+    await db.referral_settings.update_one(
+        {"key": "payout_schedule"},
+        {"$set": {"key": "payout_schedule", "value": schedule, "updated_at": datetime.now(timezone.utc).isoformat(), "updated_by": current_admin.admin_id}},
+        upsert=True
+    )
+    return {"message": f"Payout schedule set to {schedule}", "schedule": schedule}
+
+@api_router.post("/admin/referral-payouts")
+async def admin_create_payout(request: Request, current_admin: Admin = Depends(get_current_admin)):
+    """Admin: Record a payout to a referrer"""
+    data = await request.json()
+    referrer_id = data.get("referrer_id")
+    amount = data.get("amount", 0)
+    if not referrer_id or amount <= 0:
+        raise HTTPException(status_code=400, detail="referrer_id and positive amount required")
+    payout = {
+        "payout_id": f"pay_{uuid.uuid4().hex[:12]}",
+        "referrer_id": referrer_id,
+        "referee_id": data.get("referee_id"),
+        "amount": amount,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_by": current_admin.admin_id,
+    }
+    await db.referral_payouts.insert_one(payout)
+    payout.pop("_id", None)
+    return {"message": "Payout recorded", "payout": payout}
+
+@api_router.get("/admin/referral-payouts")
+async def admin_get_payouts(current_admin: Admin = Depends(get_current_admin)):
+    """Admin: Get all payouts"""
+    payouts = await db.referral_payouts.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return {"payouts": payouts}
 
 # ==================== NOTES ROUTES ====================
 

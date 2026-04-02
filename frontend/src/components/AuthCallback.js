@@ -25,16 +25,19 @@ const AuthCallback = () => {
       }
 
       const sessionId = sessionIdMatch[1];
+      // Retrieve referral code stored during login page visit
+      const referralCode = sessionStorage.getItem('referral_code') || '';
 
       try {
         const response = await axios.post(
           `${API_URL}/api/auth/session`,
-          { session_id: sessionId },
+          { session_id: sessionId, referral_code: referralCode },
           { withCredentials: true }
         );
 
         if (response.data.user) {
           setUser(response.data.user);
+          sessionStorage.removeItem('referral_code');
           // Clear the hash and redirect to dashboard
           window.history.replaceState(null, '', '/dashboard');
           navigate('/dashboard', { state: { user: response.data.user }, replace: true });

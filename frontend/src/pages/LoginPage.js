@@ -1,10 +1,19 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { Link } from 'react-router-dom';
-import { LogIn, Shield } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { LogIn, Shield, Gift } from 'lucide-react';
 
 const LoginPage = () => {
   const { login } = useAuth();
+  const [searchParams] = useSearchParams();
+  const refCode = searchParams.get('ref');
+
+  useEffect(() => {
+    // Store referral code in sessionStorage so AuthCallback can pick it up
+    if (refCode) {
+      sessionStorage.setItem('referral_code', refCode);
+    }
+  }, [refCode]);
 
   return (
     <div className="min-h-screen flex">
@@ -21,6 +30,12 @@ const LoginPage = () => {
           </div>
 
           <div className="bg-white border border-[#E4DFD5] rounded-xl p-8 shadow-sm">
+            {refCode && (
+              <div className="mb-4 p-3 bg-[#D95D39]/10 border border-[#D95D39]/20 rounded-lg flex items-center gap-2" data-testid="referral-banner">
+                <Gift className="w-4 h-4 text-[#D95D39]" />
+                <p className="text-sm text-[#D95D39] font-medium">You were referred! Sign up to get started.</p>
+              </div>
+            )}
             <h2 className="font-heading text-2xl font-semibold text-[#1A2E16] mb-2 text-center">
               Welcome Back
             </h2>
