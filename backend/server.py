@@ -48,7 +48,10 @@ class User(BaseModel):
     name: str
     picture: Optional[str] = None
     subscription_status: str = "free"
+    subscription_plan: str = "free"
     subscription_expires: Optional[datetime] = None
+    lesson_period_start: Optional[str] = None
+    lesson_period_count: int = 0
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class UserSession(BaseModel):
@@ -360,7 +363,7 @@ async def get_dashboard_data(current_admin: Admin = Depends(get_current_admin)):
     free_users = await db.users.count_documents({"subscription_plan": "free"})
     basic_users = await db.users.count_documents({"subscription_plan": "basic"})
     premium_users = await db.users.count_documents({"subscription_plan": "premium"})
-    enterprise_users = await db.users.count_documents({"subscription_plan": "enterprise"})
+    enterprise_users = await db.users.count_documents({"subscription_plan": {"$in": ["enterprise", "master"]}})
     basic_revenue = basic_users * 9999
     premium_revenue = premium_users * 19999
     enterprise_revenue = enterprise_users * 29999
@@ -375,7 +378,7 @@ async def get_dashboard_data(current_admin: Admin = Depends(get_current_admin)):
     total_commission = total_commission[0]["total"] if total_commission else 0
     return {
         "overview": {"total_users": total_users, "active_users": active_users, "blocked_users": blocked_users, "total_revenue": total_revenue},
-        "subscriptions": {"free": free_users, "basic": basic_users, "premium": premium_users, "enterprise": enterprise_users},
+        "subscriptions": {"free": free_users, "basic": basic_users, "premium": premium_users, "master": enterprise_users},
         "recent_activity": {"new_users_7d": recent_users, "lessons_created_7d": recent_lessons},
         "referrals": {"total_referrals": total_referrals, "total_commission": total_commission}
     }
@@ -489,12 +492,12 @@ async def get_revenue_analytics(current_admin: Admin = Depends(get_current_admin
     if not check_admin_permission(current_admin, "advanced_reports"):
         raise HTTPException(status_code=403, detail="No permission")
     revenue_data = await db.users.aggregate([
-        {"$match": {"subscription_plan": {"$in": ["basic", "premium", "enterprise"]}}},
+        {"$match": {"subscription_plan": {"$in": ["basic", "premium", "master", "enterprise"]}}},
         {"$group": {"_id": "$subscription_plan", "count": {"$sum": 1},
             "revenue": {"$sum": {"$switch": {"branches": [
                 {"case": {"$eq": ["$subscription_plan", "basic"]}, "then": 9999},
                 {"case": {"$eq": ["$subscription_plan", "premium"]}, "then": 19999},
-                {"case": {"$eq": ["$subscription_plan", "enterprise"]}, "then": 29999}
+                {"case": {"$in": ["$subscription_plan", ["enterprise", "master"]]}, "then": 29999}
             ], "default": 0}}}}}
     ]).to_list(10)
     return {"revenue_breakdown": revenue_data}
@@ -786,7 +789,10 @@ async def create_session(request: Request, response: Response):
             "name": name,
             "picture": picture,
             "subscription_status": "free",
+            "subscription_plan": "free",
             "subscription_expires": None,
+            "lesson_period_start": datetime.now(timezone.utc).isoformat(),
+            "lesson_period_count": 0,
             "created_at": datetime.now(timezone.utc).isoformat()
         }
         await db.users.insert_one(new_user)
@@ -826,7 +832,81 @@ async def get_me(user: User = Depends(get_current_user)):
     user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
     if not user_doc:
         return user.model_dump()
+    # Ensure subscription_plan is set
+    if "subscription_plan" not in user_doc:
+        plan = "free"
+        if user_doc.get("subscription_status") == "active":
+            plan = "basic"
+        user_doc["subscription_plan"] = plan
     return user_doc
+
+# ==================== FEATURE ACCESS & TIER GATING ====================
+
+PLAN_LIMITS = {
+    "free": 10,
+    "basic": 50,
+    "premium": None,  # unlimited
+    "master": None,   # unlimited
+}
+
+PLAN_FEATURES = {
+    "free": {"my-files", "profile-settings", "payment-settings", "my-activities"},
+    "basic": {"my-files", "profile-settings", "payment-settings", "my-activities", "create-notes", "shared-links"},
+    "premium": {"my-files", "profile-settings", "payment-settings", "my-activities", "create-notes", "shared-links", "upload-materials", "scheme-of-work", "templates", "dictation"},
+    "master": {"my-files", "profile-settings", "payment-settings", "my-activities", "create-notes", "shared-links", "upload-materials", "scheme-of-work", "templates", "dictation", "refer-and-earn"},
+}
+
+def _get_user_plan(user_doc: dict) -> str:
+    plan = user_doc.get("subscription_plan", "free")
+    if plan == "enterprise":
+        plan = "master"
+    if plan not in PLAN_LIMITS:
+        plan = "free"
+    return plan
+
+async def _get_lesson_usage(user_id: str, plan: str) -> dict:
+    """Get lesson count for current 30-day period"""
+    user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    period_start_str = user_doc.get("lesson_period_start") if user_doc else None
+    now = datetime.now(timezone.utc)
+
+    # Check if period needs reset (30 days elapsed or no period set)
+    needs_reset = True
+    if period_start_str:
+        try:
+            period_start = datetime.fromisoformat(period_start_str.replace("Z", "+00:00")) if isinstance(period_start_str, str) else period_start_str
+            if hasattr(period_start, 'tzinfo') and period_start.tzinfo is None:
+                period_start = period_start.replace(tzinfo=timezone.utc)
+            if (now - period_start).days < 30:
+                needs_reset = False
+        except Exception:
+            pass
+
+    if needs_reset:
+        period_start = now
+        await db.users.update_one(
+            {"user_id": user_id},
+            {"$set": {"lesson_period_start": now.isoformat(), "lesson_period_count": 0}}
+        )
+        return {"used": 0, "limit": PLAN_LIMITS.get(plan), "period_start": now.isoformat(), "days_remaining": 30}
+    
+    used = user_doc.get("lesson_period_count", 0) if user_doc else 0
+    days_elapsed = (now - period_start).days
+    days_remaining = max(0, 30 - days_elapsed)
+    return {"used": used, "limit": PLAN_LIMITS.get(plan), "period_start": period_start.isoformat(), "days_remaining": days_remaining}
+
+@api_router.get("/user/feature-access")
+async def get_feature_access(user: User = Depends(get_current_user)):
+    """Return which features are accessible for user's subscription tier"""
+    user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
+    plan = _get_user_plan(user_doc or {})
+    features = PLAN_FEATURES.get(plan, PLAN_FEATURES["free"])
+    usage = await _get_lesson_usage(user.user_id, plan)
+    return {
+        "plan": plan,
+        "features": list(features),
+        "lesson_usage": usage,
+    }
 
 @api_router.post("/auth/logout")
 async def logout(request: Request, response: Response):
@@ -1028,13 +1108,16 @@ async def generate_lesson(
     user: User = Depends(get_current_user)
 ):
     """Generate a new lesson plan using AI"""
-    # Check subscription for free users (limit 3 lessons)
-    if user.subscription_status == "free":
-        lesson_count = await db.lesson_plans.count_documents({"user_id": user.user_id})
-        if lesson_count >= 3:
+    user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
+    plan = _get_user_plan(user_doc or {})
+    limit = PLAN_LIMITS.get(plan)
+    
+    if limit is not None:
+        usage = await _get_lesson_usage(user.user_id, plan)
+        if usage["used"] >= limit:
             raise HTTPException(
                 status_code=403, 
-                detail="Free plan limit reached. Please subscribe to generate more lessons."
+                detail=f"{plan.title()} plan limit reached ({limit} lessons/month). Please upgrade to generate more lessons."
             )
     
     # Generate lesson content
@@ -1062,6 +1145,12 @@ async def generate_lesson(
     lesson_doc["updated_at"] = lesson_doc["updated_at"].isoformat()
     
     await db.lesson_plans.insert_one(lesson_doc)
+    
+    # Increment lesson period count
+    await db.users.update_one(
+        {"user_id": user.user_id},
+        {"$inc": {"lesson_period_count": 1}}
+    )
     
     # Return without _id
     lesson_doc.pop("_id", None)
@@ -1205,11 +1294,11 @@ async def get_plans():
     return {
         "plans": [
             {"id": "basic", "name": "Basic Plan", "price": 9999, "currency": "TZS", "period": "month",
-             "features": ["Unlimited lesson plans", "Export to Word", "Scheme of Work generator", "Priority support"]},
+             "features": ["50 lesson plans per month", "Create Notes", "Resource sharing", "My Activities"]},
             {"id": "premium", "name": "Premium Plan", "price": 19999, "currency": "TZS", "period": "month",
-             "features": ["Everything in Basic", "Premium templates", "Dictation tool", "Custom templates", "Save 33%"]},
-            {"id": "enterprise", "name": "Enterprise Plan", "price": 29999, "currency": "TZS", "period": "month",
-             "features": ["Everything in Premium", "Team accounts", "Custom branding", "API access", "Dedicated support"]}
+             "features": ["Unlimited lesson plans", "All Basic features", "Templates & Dictation", "Upload Materials & Scheme of Work", "Advanced analytics"]},
+            {"id": "master", "name": "Master Plan", "price": 29999, "currency": "TZS", "period": "month",
+             "features": ["Everything in Premium", "Refer & Earn access", "Dedicated support"]}
         ]
     }
 
@@ -1217,7 +1306,7 @@ async def get_plans():
 async def subscription_checkout(request: Request, user: User = Depends(get_current_user)):
     data = await request.json()
     plan_id = data.get("plan_id")
-    plan_prices = {"basic": 9999, "premium": 19999, "enterprise": 29999}
+    plan_prices = {"basic": 9999, "premium": 19999, "master": 29999}
     if plan_id not in plan_prices:
         raise HTTPException(status_code=400, detail="Invalid plan selected")
     amount = plan_prices[plan_id]
@@ -1270,7 +1359,7 @@ async def subscribe(request: Request, user: User = Depends(get_current_user)):
     """Fallback local plan activation"""
     data = await request.json()
     plan_id = data.get("plan_id")
-    if plan_id not in ["basic", "premium", "monthly", "yearly"]:
+    if plan_id not in ["basic", "premium", "master", "monthly", "yearly"]:
         raise HTTPException(status_code=400, detail="Invalid plan")
     if plan_id in ["yearly"]:
         expires = datetime.now(timezone.utc) + timedelta(days=365)

@@ -20,12 +20,12 @@ const SubscriptionModal = ({ isOpen, onClose }) => {
       price: '9,999',
       currency: 'TZS',
       period: '/month',
+      badge: 'Starter',
       features: [
         '50 lesson plans per month',
-        'MyHub access (workspace)',
-        'File uploads & Scheme of Work',
-        'Notes & Templates',
-        'Resource sharing'
+        'Create Notes',
+        'Resource sharing',
+        'My Activities',
       ]
     },
     premium: {
@@ -34,28 +34,27 @@ const SubscriptionModal = ({ isOpen, onClose }) => {
       price: '19,999',
       currency: 'TZS',
       period: '/month',
-      badge: 'Most Popular',
+      badge: 'Pro',
       features: [
         'Unlimited lesson plans',
         'All Basic features',
-        'Full monetization features',
-        'Priority support',
+        'Templates & Dictation',
+        'Upload Materials & Scheme of Work',
         'Advanced analytics'
       ]
     },
-    enterprise: {
-      id: 'enterprise',
-      name: 'Enterprise Plan',
+    master: {
+      id: 'master',
+      name: 'Master Plan',
       price: '29,999',
       currency: 'TZS',
       period: '/month',
-      badge: 'Best Value',
+      badge: 'Elite',
       features: [
         'Everything in Premium',
-        'Team accounts',
-        'Custom branding',
-        'API access',
-        'Dedicated support'
+        'Refer & Earn access',
+        'Dedicated support',
+        'Priority feature requests'
       ]
     }
   };
@@ -63,7 +62,6 @@ const SubscriptionModal = ({ isOpen, onClose }) => {
   const handleSubscribe = async () => {
     setLoading(true);
     try {
-      // Try PesaPal checkout first
       const checkoutRes = await axios.post(
         `${API_URL}/api/subscription/checkout`,
         { plan_id: selectedPlan },
@@ -74,20 +72,9 @@ const SubscriptionModal = ({ isOpen, onClose }) => {
         window.location.href = checkoutRes.data.checkout_url;
         return;
       }
+      toast.error('Could not create checkout session.');
     } catch (err) {
-      // PesaPal unavailable, fall back to local
-    }
-    try {
-      await axios.post(
-        `${API_URL}/api/subscription/subscribe`,
-        { plan_id: selectedPlan },
-        { withCredentials: true }
-      );
-      await refreshUser();
-      onClose();
-      toast.success(`${selectedPlan.charAt(0).toUpperCase() + selectedPlan.slice(1)} plan activated!`);
-    } catch (error) {
-      toast.error('Subscription failed. Please try again.');
+      toast.error(err.response?.data?.detail || 'Payment service unavailable. Please try again later.');
     } finally {
       setLoading(false);
     }

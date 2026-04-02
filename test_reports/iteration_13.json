@@ -1,0 +1,77 @@
+{
+  "summary": "Completed testing of subscription tier gating system. All backend APIs and frontend UI components working correctly. Plans renamed from 'enterprise' to 'master', badges (Starter/Pro/Elite) display correctly, lock icons and upgrade modal functioning properly.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "POST /api/subscription/checkout (premium/master)",
+        "issue": "PesaPal rejects amounts >9999 TZS with 'amount_exceeds_limit' error. This is a PesaPal account configuration issue, not a code bug.",
+        "priority": "MEDIUM"
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "Backend: GET /api/subscription/plans returns 3 plans: basic, premium, master (NOT enterprise)",
+    "Backend: Plans have correct TZS prices (9999, 19999, 29999)",
+    "Backend: POST /api/subscription/checkout accepts plan_id='master'",
+    "Backend: POST /api/subscription/checkout rejects plan_id='enterprise' with 400",
+    "Backend: GET /api/user/feature-access returns plan, features array, lesson_usage object",
+    "Backend: Premium tier user gets 10 features (templates, dictation, upload-materials, scheme-of-work included)",
+    "Backend: Premium tier has unlimited lessons (limit=null)",
+    "Frontend MyHub: Sidebar shows all 11 menu items with correct data-testids",
+    "Frontend MyHub: Lock icon displays on 'Refer & Earn' for premium user (feature not in plan)",
+    "Frontend MyHub: Clicking locked item shows upgrade modal with 'Upgrade Required' text",
+    "Frontend MyHub: Upgrade modal has 'View Plans' button",
+    "Frontend MyHub: Lesson counter widget displays (data-testid='lesson-counter') showing 'Unlimited lessons'",
+    "Frontend MyHub: Plan badge displays 'Pro' next to 'MyHub' title (data-testid='plan-badge')",
+    "Frontend MyHub: Refer & Earn menu item exists in sidebar",
+    "Frontend Dashboard: Plan status bar shows 'Premium Plan' and 'Unlimited lessons · 30d in period'",
+    "Frontend PaymentSettings: Shows 4 plan cards (Free, Basic, Premium, Master) with correct badges",
+    "Frontend PaymentSettings: Badges are Starter (blue), Pro (purple), Elite (amber)",
+    "Frontend PaymentSettings: No 'Enterprise' plan - correctly renamed to 'Master'",
+    "Frontend SubscriptionModal: Code review confirms plans are basic, premium, master (NOT enterprise)"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_tier_gating.py",
+    "/app/test_reports/pytest/pytest_tier_gating.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_tier_gating.py"
+  ],
+  "success_rate": {
+    "backend": "100% (20/20 tests passed)",
+    "frontend": "100% (all UI elements verified)"
+  },
+  "test_credentials": {
+    "test_session_token": "test_session_tts_001",
+    "test_user_plan": "premium",
+    "admin_email": "admin@milessonplan.com",
+    "admin_password": "password"
+  },
+  "seed_data_creation": "None - used existing test user with premium plan",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Tier gating system fully implemented and tested. Test user (test_session_tts_001) has premium plan. All plan names correctly use 'master' instead of 'enterprise'. Badges are Starter/Pro/Elite. Lock icons work on MyHub sidebar. Upgrade modal triggers correctly. PesaPal checkout works for basic plan but fails for premium/master due to external PesaPal account transaction limit (not a code issue).",
+  "features_verified": {
+    "backend_api": {
+      "subscription_plans": "Returns basic, premium, master with TZS prices",
+      "subscription_checkout": "Accepts master, rejects enterprise",
+      "feature_access": "Returns plan, features array, lesson_usage with used/limit/days_remaining"
+    },
+    "frontend_ui": {
+      "myhub_sidebar": "All 11 menu items with lock icons on restricted features",
+      "upgrade_modal": "Shows 'Upgrade Required' with 'View Plans' button",
+      "lesson_counter": "Displays in sidebar with usage stats",
+      "plan_badge": "Shows Starter/Pro/Elite based on plan",
+      "payment_settings": "4 plan cards with correct badges and prices",
+      "dashboard_status_bar": "Shows plan name and lesson usage"
+    }
+  }
+}

@@ -4,7 +4,7 @@ import axios from 'axios';
 import Header from '../components/Header';
 import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'sonner';
-import { Crown, Check, Zap, ArrowLeft, Loader2 } from 'lucide-react';
+import { Crown, Check, Zap, ArrowLeft, Loader2, Shield, Star } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -21,16 +21,15 @@ const SubscribePage = () => {
       price: '9,999',
       currency: 'TZS',
       period: 'month',
-      lessonLimit: 50,
+      badge: 'Starter',
+      badgeColor: 'bg-blue-500',
+      badgeIcon: Zap,
       features: [
         '50 lesson plans per month',
-        'All Free tier features',
-        'MyHub access (personal workspace)',
-        'File uploads',
-        'Scheme of work creation',
-        'Notes creation',
-        'Templates access',
-        'Resource sharing'
+        'Create Notes',
+        'Resource sharing',
+        'My Activities',
+        'My Files & Profile',
       ]
     },
     {
@@ -39,34 +38,33 @@ const SubscribePage = () => {
       price: '19,999',
       currency: 'TZS',
       period: 'month',
-      badge: 'Unlimited',
-      lessonLimit: 'Unlimited',
+      badge: 'Pro',
+      badgeColor: 'bg-purple-600',
+      badgeIcon: Star,
+      popular: true,
       features: [
         'Unlimited lesson plans',
         'All Basic features',
+        'Templates & Dictation',
+        'Upload Materials & Scheme of Work',
         'Full resource sharing & monetization',
-        'Priority support',
         'Advanced analytics',
-        'Custom templates',
-        'Bulk operations',
-        'Export to multiple formats'
       ]
     },
     {
-      id: 'enterprise',
-      name: 'Enterprise Plan',
+      id: 'master',
+      name: 'Master Plan',
       price: '29,999',
       currency: 'TZS',
       period: 'month',
-      badge: 'Best Value',
-      lessonLimit: 'Unlimited',
+      badge: 'Elite',
+      badgeColor: 'bg-amber-600',
+      badgeIcon: Crown,
       features: [
         'Everything in Premium',
-        'Team accounts',
-        'Custom branding',
-        'API access',
+        'Refer & Earn access',
         'Dedicated support',
-        'White-label options'
+        'Priority feature requests',
       ]
     }
   ];
@@ -121,7 +119,7 @@ const SubscribePage = () => {
               You're Subscribed!
             </h1>
             <p className="text-[#7A8A76] mb-2">
-              You're on the <strong>{currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1)}</strong> plan.
+              You're on the <strong>{currentPlan === 'enterprise' ? 'Master' : currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1)}</strong> plan.
             </p>
             {user?.subscription_expires && (
               <p className="text-sm text-[#7A8A76] mb-6">
@@ -154,51 +152,53 @@ const SubscribePage = () => {
 
             {/* Plans */}
             <div className="grid sm:grid-cols-3 gap-6 mb-8">
-              {plans.map((plan) => (
-                <div
-                  key={plan.id}
-                  onClick={() => setSelectedPlan(plan.id)}
-                  className={`relative bg-white border-2 rounded-2xl p-6 cursor-pointer transition-all ${
-                    selectedPlan === plan.id
-                      ? 'border-[#2D5A27] shadow-lg'
-                      : 'border-[#E4DFD5] hover:border-[#8E9E82]'
-                  }`}
-                  data-testid={`plan-card-${plan.id}`}
-                >
-                  {plan.badge && (
-                    <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-[#E5A93D] text-[#1A2E16] text-xs font-bold px-3 py-1 rounded-full whitespace-nowrap">
+              {plans.map((plan) => {
+                const BadgeIcon = plan.badgeIcon;
+                return (
+                  <div
+                    key={plan.id}
+                    onClick={() => setSelectedPlan(plan.id)}
+                    className={`relative bg-white border-2 rounded-2xl p-6 cursor-pointer transition-all ${
+                      selectedPlan === plan.id
+                        ? 'border-[#2D5A27] shadow-lg'
+                        : 'border-[#E4DFD5] hover:border-[#8E9E82]'
+                    } ${plan.popular ? 'ring-2 ring-purple-200' : ''}`}
+                    data-testid={`plan-card-${plan.id}`}
+                  >
+                    <span className={`absolute -top-3 left-1/2 -translate-x-1/2 ${plan.badgeColor} text-white text-xs font-bold px-3 py-1 rounded-full whitespace-nowrap flex items-center gap-1`}>
+                      <BadgeIcon className="w-3 h-3" />
                       {plan.badge}
                     </span>
-                  )}
 
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-heading text-xl font-semibold text-[#1A2E16]">
-                      {plan.name}
-                    </h3>
-                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
-                      selectedPlan === plan.id
-                        ? 'bg-[#2D5A27] border-[#2D5A27]'
-                        : 'border-[#E4DFD5]'
-                    }`}>
-                      {selectedPlan === plan.id && <Check className="w-4 h-4 text-white" />}
+                    <div className="flex items-center justify-between mb-4 mt-2">
+                      <h3 className="font-heading text-xl font-semibold text-[#1A2E16]">
+                        {plan.name}
+                      </h3>
+                      <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
+                        selectedPlan === plan.id
+                          ? 'bg-[#2D5A27] border-[#2D5A27]'
+                          : 'border-[#E4DFD5]'
+                      }`}>
+                        {selectedPlan === plan.id && <Check className="w-4 h-4 text-white" />}
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="mb-6">
-                    <span className="text-3xl font-bold text-[#1A2E16]">{plan.currency} {plan.price}</span>
-                    <span className="text-[#7A8A76]">/{plan.period}</span>
-                  </div>
+                    <div className="mb-6">
+                      <span className="text-3xl font-bold text-[#1A2E16]">{plan.currency} {plan.price}</span>
+                      <span className="text-[#7A8A76]">/{plan.period}</span>
+                    </div>
 
-                  <ul className="space-y-2.5">
-                    {plan.features.map((feature, i) => (
-                      <li key={i} className="flex items-center gap-2.5 text-sm text-[#4A5B46]">
-                        <Check className="w-4 h-4 text-[#2D5A27] flex-shrink-0" />
-                        {feature}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
+                    <ul className="space-y-2.5">
+                      {plan.features.map((feature, i) => (
+                        <li key={i} className="flex items-center gap-2.5 text-sm text-[#4A5B46]">
+                          <Check className="w-4 h-4 text-[#2D5A27] flex-shrink-0" />
+                          {feature}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })}
             </div>
 
             {/* Subscribe Button */}

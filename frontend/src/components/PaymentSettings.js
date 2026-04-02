@@ -2,10 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { CreditCard, Crown, Check, AlertCircle, Loader2, ExternalLink, Clock } from 'lucide-react';
+import { CreditCard, Crown, Check, Loader2, ExternalLink, Clock, Zap, Star, Shield } from 'lucide-react';
 import { toast } from 'sonner';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
+
+const PLAN_BADGES = {
+  basic: { icon: Zap, color: 'bg-blue-500' },
+  premium: { icon: Star, color: 'bg-purple-600' },
+  master: { icon: Crown, color: 'bg-amber-600' },
+};
 
 const PaymentSettings = () => {
   const { user, refreshUser } = useAuth();
@@ -14,7 +20,8 @@ const PaymentSettings = () => {
   const [loadingTx, setLoadingTx] = useState(true);
   const [subscribing, setSubscribing] = useState(null);
 
-  const subscriptionPlan = user?.subscription_plan || (user?.subscription_status === 'active' ? 'basic' : 'free');
+  const rawPlan = user?.subscription_plan || (user?.subscription_status === 'active' ? 'basic' : 'free');
+  const subscriptionPlan = rawPlan === 'enterprise' ? 'master' : rawPlan;
   const isSubscribed = subscriptionPlan !== 'free';
 
   const plans = [
@@ -25,56 +32,51 @@ const PaymentSettings = () => {
       currency: 'TZS',
       period: '/month',
       features: [
-        '20 lesson plans per month',
-        'Core lesson planning tools',
-        'Print lesson plans',
-        'No MyHub, uploads, or monetization'
+        '10 lesson plans per month',
+        'My Files & Profile',
+        'My Activities',
       ]
     },
     {
       id: 'basic',
       name: 'Basic Plan',
+      badge: 'Starter',
       price: '9,999',
-      priceNum: 9999,
       currency: 'TZS',
       period: '/month',
       features: [
         '50 lesson plans per month',
-        'MyHub access',
-        'File uploads & Scheme of Work',
-        'Notes & Templates access',
-        'Resource sharing'
+        'Create Notes',
+        'Resource sharing',
+        'My Activities',
       ]
     },
     {
       id: 'premium',
       name: 'Premium Plan',
+      badge: 'Pro',
+      popular: true,
       price: '19,999',
-      priceNum: 19999,
       currency: 'TZS',
       period: '/month',
-      badge: 'Most Popular',
       features: [
         'Unlimited lesson plans',
-        'Full resource sharing & monetization',
-        'Priority support',
-        'Advanced analytics',
-        'Custom templates'
+        'Templates & Dictation',
+        'Upload Materials & Scheme of Work',
+        'Full resource sharing',
       ]
     },
     {
-      id: 'enterprise',
-      name: 'Enterprise Plan',
+      id: 'master',
+      name: 'Master Plan',
+      badge: 'Elite',
       price: '29,999',
-      priceNum: 29999,
       currency: 'TZS',
       period: '/month',
       features: [
         'Everything in Premium',
-        'Team accounts',
-        'Custom branding',
-        'API access',
-        'Dedicated support'
+        'Refer & Earn access',
+        'Dedicated support',
       ]
     }
   ];
@@ -85,9 +87,8 @@ const PaymentSettings = () => {
 
   const fetchTransactions = async () => {
     try {
-      const res = await axios.get(`${API_URL}/api/subscription/plans`, { withCredentials: true });
-      // Transaction history would need a user-facing endpoint - for now show empty
-    } catch (err) {
+      await axios.get(`${API_URL}/api/subscription/plans`, { withCredentials: true });
+    } catch {
       // Silent fail
     }
     setLoadingTx(false);
@@ -136,12 +137,12 @@ const PaymentSettings = () => {
             </h3>
             <p className="text-white/80">
               {subscriptionPlan === 'free'
-                ? 'Upgrade to Basic, Premium, or Enterprise for more features.'
+                ? 'Upgrade to Basic, Premium, or Master for more features.'
                 : subscriptionPlan === 'basic'
                 ? 'You have 50 lessons per month and core workspace features.'
                 : subscriptionPlan === 'premium'
-                ? 'You have unlimited lesson plans and advanced monetization features.'
-                : 'You have full enterprise features including team accounts and API access.'}
+                ? 'You have unlimited lesson plans and advanced features.'
+                : 'You have full Master features including Refer & Earn and dedicated support.'}
             </p>
             {user?.subscription_expires && (
               <p className="text-white/60 text-sm mt-1 flex items-center gap-1">
@@ -157,16 +158,19 @@ const PaymentSettings = () => {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8" data-testid="plans-grid">
         {plans.map((plan) => {
           const isCurrent = subscriptionPlan === plan.id;
+          const badgeInfo = PLAN_BADGES[plan.id];
+          const BadgeIcon = badgeInfo?.icon;
           return (
             <div
               key={plan.id}
               className={`bg-white border rounded-xl p-5 relative transition-shadow hover:shadow-md ${
                 isCurrent ? 'border-[#2D5A27] ring-2 ring-[#2D5A27]/20' : 'border-[#E4DFD5]'
-              }`}
+              } ${plan.popular ? 'ring-2 ring-purple-200' : ''}`}
               data-testid={`plan-card-${plan.id}`}
             >
-              {plan.badge && (
-                <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-[#E5A93D] text-[#1A2E16] text-xs font-bold px-3 py-1 rounded-full whitespace-nowrap">
+              {plan.badge && badgeInfo && (
+                <span className={`absolute -top-3 left-1/2 -translate-x-1/2 ${badgeInfo.color} text-white text-xs font-bold px-3 py-1 rounded-full whitespace-nowrap flex items-center gap-1`}>
+                  <BadgeIcon className="w-3 h-3" />
                   {plan.badge}
                 </span>
               )}
@@ -176,7 +180,7 @@ const PaymentSettings = () => {
                 </span>
               )}
 
-              <h3 className="font-heading text-lg font-bold text-[#1A2E16] mb-2">{plan.name}</h3>
+              <h3 className="font-heading text-lg font-bold text-[#1A2E16] mb-2 mt-1">{plan.name}</h3>
               <div className="mb-4">
                 <span className="text-2xl font-bold text-[#1A2E16]">{plan.currency} {plan.price}</span>
                 <span className="text-sm text-[#7A8A76]">{plan.period}</span>
