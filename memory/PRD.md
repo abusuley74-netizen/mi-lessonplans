@@ -3,23 +3,44 @@
 ## Overview
 AI-powered lesson planning platform for Tanzanian teachers, supporting Tanzania Mainland & Zanzibar syllabi. Built with React + FastAPI + MongoDB.
 
+## Subscription Tiers & Feature Access
+
+| Feature | Free | Basic (9,999) | Premium (19,999) | Master (29,999) |
+|---|---|---|---|---|
+| Lesson plans | 10/month | 50/month | Unlimited | Unlimited |
+| My Files | Yes | Yes | Yes | Yes |
+| Profile Settings | Yes | Yes | Yes | Yes |
+| Payment Settings | Yes | Yes | Yes | Yes |
+| My Activities | Yes | Yes | Yes | Yes |
+| Create Notes | - | Yes | Yes | Yes |
+| Shared Links | - | Yes | Yes | Yes |
+| Upload Materials | - | - | Yes | Yes |
+| Scheme of Work | - | - | Yes | Yes |
+| Templates | - | - | Yes | Yes |
+| Dictation | - | - | Yes | Yes |
+| Refer & Earn | - | - | - | Yes |
+
+Plan Badges: Basic=Starter (blue), Premium=Pro (purple), Master=Elite (amber)
+Lesson count resets every 30 days from subscription start date.
+
 ## Core Features (Implemented)
 - **Google OAuth Login** (Emergent-managed) for teachers
 - **Admin Login** (email/password) accessible from main login page
 - **AI Lesson Plan Generator** (GPT-5.2 via Emergent LLM Key)
-- **MyHub Dashboard** with sidebar navigation
+- **Subscription Tier Gating** — sidebar lock icons, upgrade modal, lesson counter
+- **MyHub Dashboard** with tier-gated sidebar navigation
 - **Dictation Tool** (OpenAI TTS with GPT-5.2 auto-translation)
 - **Rich Text Notes Editor** (CreateNotes with formatting toolbar)
 - **Scheme of Work Generator** with AI, Add Row, Save, Export DOCX
 - **MyFiles Manager** with delete modals, blob downloads, audio playback, share buttons
 - **Profile Settings** with custom picture upload
 - **6 Specialized Template Editors** (Basic, Scientific, Geography, Mathematics, Physics, Chemistry)
-- **Shared Link Pipeline** — share resources via public links, auto-expire after 1 download, rating system
-- **MHTML Document Export** — Word documents with embedded images for templates
-- **Admin System** — Full admin dashboard with login, user management, analytics, content management, Lucide sidebar icons
-- **Referral & Earn System** — Teacher referrals with commission tracking
-- **PesaPal Payment Integration** — REAL production checkout via PesaPal API (OAuth 1.0, 302 redirect handling)
-- **Subscription Management** — Basic (TZS 9,999), Premium (TZS 19,999), Enterprise (TZS 29,999)
+- **Shared Link Pipeline** — share resources via public links, auto-expire
+- **MHTML Document Export** — Word documents with embedded images
+- **Admin System** — Full admin dashboard with login, user management, analytics, Lucide sidebar icons
+- **Referral & Earn System** — Teacher referrals with commission tracking (Master tier only)
+- **PesaPal Payment Integration** — PRODUCTION checkout via PesaPal API
+- **Subscription Management** — Basic (TZS 9,999), Premium (TZS 19,999), Master (TZS 29,999)
 - **Promo Banner System** — Admin-managed promotional banners
 - **Communication System** — Admin-to-user notifications
 - **Cron Subscription Renewal** — Auto-renew expired subscriptions
@@ -28,7 +49,7 @@ AI-powered lesson planning platform for Tanzanian teachers, supporting Tanzania 
 ```
 /app
 ├── backend/
-│   └── server.py              # FastAPI (79+ API routes)
+│   └── server.py              # FastAPI (80+ API routes)
 ├── frontend/src/
 │   ├── components/
 │   │   ├── Templates.js, MathTemplate.js, PhysicsTemplate.js, ChemistryTemplate.js
@@ -45,12 +66,12 @@ AI-powered lesson planning platform for Tanzanian teachers, supporting Tanzania 
 │   ├── pages/ (MyHub.js, Dashboard.js, SubscribePage.js, AdminDashboard.js, AdminLogin.js, LoginPage.js)
 │   ├── lib/ (utils.js, referralService.js)
 │   └── App.js
-├── cron_renew_subscriptions.py
 └── memory/ (PRD.md, test_credentials.md)
 ```
 
 ## DB Collections
-- `users`, `user_sessions`, `lesson_plans`, `notes`, `dictations`, `schemes`, `templates`, `uploads`
+- `users` (with subscription_plan, lesson_period_start, lesson_period_count)
+- `user_sessions`, `lesson_plans`, `notes`, `dictations`, `schemes`, `templates`, `uploads`
 - `shared_links`, `admins`, `admin_sessions`, `referrals`
 - `pesapal_transactions`, `notifications`, `promo_banners`
 
@@ -58,25 +79,12 @@ AI-powered lesson planning platform for Tanzanian teachers, supporting Tanzania 
 - Emergent Google Auth (teacher login)
 - OpenAI GPT-5.2 (AI generation) via Emergent LLM Key
 - OpenAI TTS tts-1 (dictation) via Emergent LLM Key
-- PesaPal (payments) — PRODUCTION keys configured
-
-## Completed (as of Apr 2, 2026)
-- [x] All teacher-facing features (lessons, notes, schemes, templates, dictation, files)
-- [x] Shared Link Pipeline with auto-expiry and ratings
-- [x] MHTML Word exports with embedded images
-- [x] Full Admin System (dashboard, user mgmt, analytics, content, subscriptions)
-- [x] Admin login page with email/password (linked from main login)
-- [x] Admin dashboard sidebar with Lucide icons
-- [x] Referral & Earn System
-- [x] PesaPal Payment Integration (production — Basic plan verified working)
-- [x] Promo Banner + Communication systems
-- [x] Cron subscription renewal
-- [x] Demo mode fallback removed from subscription flows
+- PesaPal (payments) — PRODUCTION keys
 
 ## Known External Issues
-- PesaPal account has transaction limit of TZS 9,999. Premium (19,999) and Enterprise (29,999) plans fail with 'amount_exceeds_limit'. User needs to contact PesaPal to increase their account limit.
+- PesaPal account has transaction limit of TZS 9,999. Premium and Master plans fail at checkout. User needs to contact PesaPal to increase their account limit.
 
 ## Backlog
 - P2: Granular loading spinners per input field during AI generation
-- P3: Route modularization (refactor server.py 2400+ lines into routes/)
+- P3: Route modularization (server.py 2500+ lines → routes/)
 - P3: Team accounts, mobile app, offline mode, Swahili UI
