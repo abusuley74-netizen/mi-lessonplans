@@ -3,6 +3,12 @@ import { useAdmin } from '../contexts/AdminContext';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import AdminRoutes from '../components/AdminRoutes';
 import axios from 'axios';
+import { BarChart3, Handshake, Banknote, Users, BookOpen, CreditCard, LayoutTemplate, MessageSquare, Target } from 'lucide-react';
+
+const iconMap = {
+  chart: BarChart3, handshake: Handshake, money: Banknote, users: Users,
+  book: BookOpen, card: CreditCard, template: LayoutTemplate, message: MessageSquare, target: Target,
+};
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -89,7 +95,7 @@ const AdminDashboard = () => {
                       : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                   }`}
                 >
-                  <span className="mr-3">{item.icon}</span>
+                  {(() => { const Icon = iconMap[item.icon]; return Icon ? <Icon className="w-4 h-4 mr-3" /> : <span className="mr-3">{item.icon}</span>; })()}
                   {item.name}
                 </Link>
               ))}

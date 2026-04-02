@@ -107,28 +107,11 @@ const PaymentSettings = () => {
         toast.success('Redirecting to PesaPal checkout...');
         window.location.href = checkout_url;
       } else {
-        // Fallback to local activation
-        await axios.post(
-          `${API_URL}/api/subscription/subscribe`,
-          { plan_id: planId },
-          { withCredentials: true }
-        );
-        toast.success(`${planId.charAt(0).toUpperCase() + planId.slice(1)} plan activated!`);
-        if (refreshUser) refreshUser();
+        toast.error('Could not create checkout session. Please try again.');
       }
     } catch (error) {
-      // If PesaPal fails, fall back to local activation
-      try {
-        await axios.post(
-          `${API_URL}/api/subscription/subscribe`,
-          { plan_id: planId },
-          { withCredentials: true }
-        );
-        toast.success(`${planId.charAt(0).toUpperCase() + planId.slice(1)} plan activated (Demo Mode)`);
-        if (refreshUser) refreshUser();
-      } catch (fallbackErr) {
-        toast.error('Subscription failed. Please try again.');
-      }
+      console.error('Checkout error:', error);
+      toast.error(error.response?.data?.detail || 'Payment service unavailable. Please try again later.');
     } finally {
       setSubscribing(null);
     }
@@ -238,7 +221,6 @@ const PaymentSettings = () => {
           <h4 className="font-medium text-[#1E40AF]">PesaPal Payment Integration</h4>
           <p className="text-sm text-[#1D4ED8]">
             Payments are processed securely via PesaPal. You'll be redirected to PesaPal's checkout page when you upgrade.
-            If PesaPal checkout is unavailable, your plan will be activated in demo mode.
           </p>
         </div>
       </div>

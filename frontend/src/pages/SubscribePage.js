@@ -74,7 +74,6 @@ const SubscribePage = () => {
   const handleSubscribe = async () => {
     setLoading(true);
     try {
-      // Try PesaPal checkout first
       const response = await axios.post(
         `${API_URL}/api/subscription/checkout`,
         { plan_id: selectedPlan },
@@ -87,22 +86,10 @@ const SubscribePage = () => {
         window.location.href = checkout_url;
         return;
       }
+      toast.error('Could not create checkout session. Please try again.');
     } catch (error) {
-      console.error('PesaPal checkout error:', error);
-    }
-
-    // Fallback to local activation
-    try {
-      await axios.post(
-        `${API_URL}/api/subscription/subscribe`,
-        { plan_id: selectedPlan },
-        { withCredentials: true }
-      );
-      toast.success(`${selectedPlan.charAt(0).toUpperCase() + selectedPlan.slice(1)} plan activated!`);
-      if (refreshUser) refreshUser();
-      navigate('/dashboard');
-    } catch (fallbackErr) {
-      toast.error('Subscription failed. Please try again.');
+      console.error('Checkout error:', error);
+      toast.error(error.response?.data?.detail || 'Payment service unavailable. Please try again later.');
     } finally {
       setLoading(false);
     }

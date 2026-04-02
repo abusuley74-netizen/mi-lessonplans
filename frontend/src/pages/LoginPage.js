@@ -1,6 +1,7 @@
 import React from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { LogIn } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { LogIn, Shield } from 'lucide-react';
 
 const LoginPage = () => {
   const { login } = useAuth();
@@ -55,6 +56,15 @@ const LoginPage = () => {
           <p className="text-center text-[#7A8A76] text-sm mt-6">
             Supporting Tanzania Mainland & Zanzibar Syllabi
           </p>
+
+          <Link
+            to="/admin/login"
+            data-testid="admin-login-link"
+            className="mt-4 flex items-center justify-center gap-2 text-sm text-[#7A8A76] hover:text-[#2D5A27] transition-colors"
+          >
+            <Shield className="w-4 h-4" />
+            Admin Login
+          </Link>
         </div>
       </div>
 
