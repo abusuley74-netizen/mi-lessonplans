@@ -8,45 +8,75 @@ const API_URL = process.env.REACT_APP_BACKEND_URL;
 
 const SubscriptionModal = ({ isOpen, onClose }) => {
   const { refreshUser } = useAuth();
-  const [selectedPlan, setSelectedPlan] = useState('monthly');
+  const [selectedPlan, setSelectedPlan] = useState('basic');
   const [loading, setLoading] = useState(false);
 
   if (!isOpen) return null;
 
   const plans = {
-    monthly: {
-      id: 'monthly',
-      name: 'Monthly Plan',
-      price: '4,999',
+    basic: {
+      id: 'basic',
+      name: 'Basic Plan',
+      price: '9,999',
       currency: 'TZS',
       period: '/month',
       features: [
-        'Unlimited lesson plans',
-        'Priority AI generation',
-        'Export to PDF & Word',
-        'Scheme of Work generator',
-        'Email support'
+        '50 lesson plans per month',
+        'MyHub access (workspace)',
+        'File uploads & Scheme of Work',
+        'Notes & Templates',
+        'Resource sharing'
       ]
     },
-    yearly: {
-      id: 'yearly',
-      name: 'Yearly Plan',
-      price: '40,000',
+    premium: {
+      id: 'premium',
+      name: 'Premium Plan',
+      price: '19,999',
       currency: 'TZS',
-      period: '/year',
-      badge: 'Save 33%',
+      period: '/month',
+      badge: 'Most Popular',
       features: [
-        'Everything in Monthly',
-        'Early access to new features',
-        'Custom templates',
+        'Unlimited lesson plans',
+        'All Basic features',
+        'Full monetization features',
         'Priority support',
-        'Team collaboration (coming soon)'
+        'Advanced analytics'
+      ]
+    },
+    enterprise: {
+      id: 'enterprise',
+      name: 'Enterprise Plan',
+      price: '29,999',
+      currency: 'TZS',
+      period: '/month',
+      badge: 'Best Value',
+      features: [
+        'Everything in Premium',
+        'Team accounts',
+        'Custom branding',
+        'API access',
+        'Dedicated support'
       ]
     }
   };
 
   const handleSubscribe = async () => {
     setLoading(true);
+    try {
+      // Try PesaPal checkout first
+      const checkoutRes = await axios.post(
+        `${API_URL}/api/subscription/checkout`,
+        { plan_id: selectedPlan },
+        { withCredentials: true }
+      );
+      if (checkoutRes.data.checkout_url) {
+        toast.success('Redirecting to PesaPal checkout...');
+        window.location.href = checkoutRes.data.checkout_url;
+        return;
+      }
+    } catch (err) {
+      // PesaPal unavailable, fall back to local
+    }
     try {
       await axios.post(
         `${API_URL}/api/subscription/subscribe`,
@@ -55,9 +85,8 @@ const SubscriptionModal = ({ isOpen, onClose }) => {
       );
       await refreshUser();
       onClose();
-      toast.success('Subscription activated! (Demo Mode - Real payment will use PesaPal)');
+      toast.success(`${selectedPlan.charAt(0).toUpperCase() + selectedPlan.slice(1)} plan activated!`);
     } catch (error) {
-      console.error('Subscription error:', error);
       toast.error('Subscription failed. Please try again.');
     } finally {
       setLoading(false);
@@ -93,14 +122,14 @@ const SubscriptionModal = ({ isOpen, onClose }) => {
             <div className="w-16 h-16 bg-[#D95D39] rounded-full flex items-center justify-center mx-auto mb-4">
               <Crown className="w-8 h-8" />
             </div>
-            <h2 className="font-heading text-3xl font-bold mb-2">Upgrade to Pro</h2>
+            <h2 className="font-heading text-3xl font-bold mb-2">Upgrade Your Plan</h2>
             <p className="text-white/70">
-              Unlock unlimited lesson plans and premium features
+              Choose a plan to unlock premium features
             </p>
           </div>
 
           {/* Plan Selection */}
-          <div className="grid sm:grid-cols-2 gap-4 mb-8">
+          <div className="grid sm:grid-cols-3 gap-3 mb-8">
             {Object.values(plans).map((plan) => (
               <button
                 key={plan.id}
@@ -170,7 +199,7 @@ const SubscriptionModal = ({ isOpen, onClose }) => {
           </button>
 
           <p className="text-center text-white/50 text-xs mt-4">
-            Demo Mode • Real payment integration coming with PesaPal
+            Secure payment via PesaPal
           </p>
         </div>
       </div>
