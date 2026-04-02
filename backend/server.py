@@ -24,7 +24,7 @@ db = client[os.environ['DB_NAME']]
 PESAPAL_CONSUMER_KEY = os.environ.get('PESAPAL_CONSUMER_KEY', 'Sp9V76FmwL0dS4qAaVcL7PoIuH/gkInm')
 PESAPAL_CONSUMER_SECRET = os.environ.get('PESAPAL_CONSUMER_SECRET', 'ukStYbZKDpjgb6Rgk/AP2bFuy8I=')
 PESAPAL_CALLBACK_URL = os.environ.get('PESAPAL_CALLBACK_URL', 'https://Mi-LessonPlan.site/listentowebsitepaymentsipn.php')
-PESAPAL_USE_SANDBOX = os.environ.get('PESAPAL_USE_SANDBOX', 'true').lower() in ['true', '1', 'yes']
+PESAPAL_USE_SANDBOX = os.environ.get('PESAPAL_USE_SANDBOX', 'false').lower() in ['true', '1', 'yes']
 PESAPAL_BASE_URL = 'https://cybqa.pesapal.com' if PESAPAL_USE_SANDBOX else 'https://www.pesapal.com'
 
 # Create the main app
@@ -1152,28 +1152,60 @@ async def sync_admin_referrals(admin_id: str):
 # ==================== PESAPAL PAYMENT HELPERS ====================
 
 def _build_pesapal_request_data(reference: str, amount: int, description: str, user: User):
-    first_name = (user.name or '').split(' ')[0] if user.name else ''
-    last_name = (user.name or '').split(' ')[-1] if user.name else ''
-    return f"""<PesapalDirectOrderInfo xmlns="http://www.pesapal.com">
-  <Amount>{amount}</Amount><Description>{description}</Description><Type>MERCHANT</Type>
-  <Reference>{reference}</Reference><FirstName>{first_name}</FirstName>
-  <LastName>{last_name}</LastName><Email>{user.email}</Email><PhoneNumber></PhoneNumber>
-</PesapalDirectOrderInfo>""".strip()
+    first_name = (user.name or 'Customer').split(' ')[0]
+    last_name = (user.name or 'Customer').split(' ')[-1] if user.name and ' ' in user.name else ''
+    email = user.email or ''
+    # PesaPal API v2 uses attribute-based self-closing XML
+    return (
+        f'<PesapalDirectOrderInfo '
+        f'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" '
+        f'xmlns:xsd="http://www.w3.org/2001/XMLSchema" '
+        f'Amount="{amount}" '
+        f'Description="{description}" '
+        f'Type="MERCHANT" '
+        f'Reference="{reference}" '
+        f'FirstName="{first_name}" '
+        f'LastName="{last_name}" '
+        f'Email="{email}" '
+        f'PhoneNumber="" '
+        f'Currency="TZS" '
+        f'xmlns="http://www.pesapal.com" />'
+    )
 
 async def _create_pesapal_checkout_url(reference: str, amount: int, description: str, user: User) -> str:
     import requests as http_requests
     from requests_oauthlib import OAuth1
+
     endpoint = f"{PESAPAL_BASE_URL}/API/PostPesapalDirectOrderV4"
     pesapal_request_data = _build_pesapal_request_data(reference, amount, description, user)
-    params = {'oauth_callback': PESAPAL_CALLBACK_URL, 'pesapal_request_data': pesapal_request_data}
+
+    params = {
+        'oauth_callback': PESAPAL_CALLBACK_URL,
+        'pesapal_request_data': pesapal_request_data
+    }
     auth = OAuth1(PESAPAL_CONSUMER_KEY, client_secret=PESAPAL_CONSUMER_SECRET, signature_type='query')
-    response = http_requests.post(endpoint, params=params, auth=auth, timeout=30)
-    if response.status_code != 200:
-        raise HTTPException(status_code=502, detail=f"PesaPal responded with {response.status_code}")
-    checkout_url = response.text.strip()
-    if not checkout_url.startswith('http'):
-        raise HTTPException(status_code=502, detail="Invalid PesaPal checkout URL returned")
-    return checkout_url
+
+    # PesaPal API returns a 302 redirect to the checkout page
+    response = http_requests.get(endpoint, params=params, auth=auth, timeout=30, allow_redirects=False)
+
+    # 302 redirect — the Location header contains the checkout URL
+    if response.status_code == 302:
+        location = response.headers.get('Location', '')
+        if location:
+            return location
+        raise HTTPException(status_code=502, detail="PesaPal returned 302 but no Location header")
+
+    # 200 — PesaPal may return a direct URL or HTML
+    if response.status_code == 200:
+        response_text = response.text.strip()
+        if response_text.startswith('http'):
+            return response_text
+        if '<!doctype' in response_text.lower() or '<html' in response_text.lower():
+            return response.url
+        if 'Problem' in response_text:
+            raise HTTPException(status_code=502, detail=f"PesaPal error: {response_text[:200]}")
+
+    raise HTTPException(status_code=502, detail=f"PesaPal responded with {response.status_code}")
 
 # ==================== SUBSCRIPTION ROUTES ====================
 
