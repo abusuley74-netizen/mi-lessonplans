@@ -21,8 +21,9 @@ const LoginPage = () => {
       <div className="flex-1 flex items-center justify-center p-8 bg-[#FDFBF7]">
         <div className="w-full max-w-md">
           <div className="text-center mb-10">
+            <img src="/logo.jpg" alt="miLessonPlan" className="w-20 h-20 mx-auto mb-4 rounded-xl object-contain" />
             <h1 className="font-heading text-4xl font-bold text-[#1A2E16] mb-3">
-              MiLesson Plan
+              miLessonPlan
             </h1>
             <p className="text-[#4A5B46] text-lg">
               AI-Powered Lesson Planning for Tanzanian Teachers
@@ -95,7 +96,7 @@ const LoginPage = () => {
           <div className="absolute bottom-0 left-0 right-0 p-12">
             <div className="bg-white/10 backdrop-blur-md rounded-xl p-6 border border-white/20">
               <p className="text-white text-xl font-medium mb-2">
-                "MiLesson Plan has transformed how I prepare for my classes. 
+                "miLessonPlan has transformed how I prepare for my classes. 
                 It saves me hours every week!"
               </p>
               <p className="text-white/80">

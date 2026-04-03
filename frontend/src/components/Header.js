@@ -1,7 +1,9 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { BookOpen, LayoutDashboard, LogOut, Crown, Menu, X } from 'lucide-react';
+import { LayoutDashboard, LogOut, Crown, Menu, X, BookOpen } from 'lucide-react';
+
+const LOGO_URL = process.env.PUBLIC_URL + '/logo.jpg';
 
 const Header = () => {
   const { user, logout } = useAuth();
@@ -21,8 +23,8 @@ const Header = () => {
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <Link to="/dashboard" className="flex items-center gap-2" data-testid="logo-link">
-            <BookOpen className="w-8 h-8 text-[#2D5A27]" />
-            <span className="font-heading font-bold text-xl text-[#1A2E16]">MiLesson Plan</span>
+            <img src={LOGO_URL} alt="miLessonPlan" className="w-9 h-9 rounded-md object-contain" />
+            <span className="font-heading font-bold text-xl text-[#1A2E16]">miLessonPlan</span>
           </Link>
 
           {/* Desktop Navigation */}

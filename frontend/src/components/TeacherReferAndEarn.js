@@ -58,7 +58,7 @@ const TeacherReferAndEarn = ({ currentUser }) => {
 
   const shareOnSocial = (platform) => {
     if (!codeData) return;
-    const text = `Join MiLesson Plans - Create amazing lesson plans with AI! Use my referral link:`;
+    const text = `Join miLessonPlan - Create amazing lesson plans with AI! Use my referral link:`;
     const url = encodeURIComponent(codeData.referral_link);
     let shareUrl = '';
     switch (platform) {
@@ -72,7 +72,7 @@ const TeacherReferAndEarn = ({ currentUser }) => {
         shareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${url}`;
         break;
       case 'email':
-        shareUrl = `mailto:?subject=${encodeURIComponent('Join MiLesson Plans')}&body=${encodeURIComponent(text + '\n\n' + codeData.referral_link)}`;
+        shareUrl = `mailto:?subject=${encodeURIComponent('Join miLessonPlan')}&body=${encodeURIComponent(text + '\n\n' + codeData.referral_link)}`;
         break;
       default: return;
     }
@@ -94,7 +94,7 @@ const TeacherReferAndEarn = ({ currentUser }) => {
       {/* Header */}
       <div>
         <h2 className="font-heading text-2xl font-bold text-[#1A2E16] mb-1">Refer & Earn</h2>
-        <p className="text-[#7A8A76]">Share MiLesson Plans with fellow teachers and earn 30% commission on every subscription!</p>
+        <p className="text-[#7A8A76]">Share miLessonPlan with fellow teachers and earn 30% commission on every subscription!</p>
       </div>
 
       {/* Stats Cards */}

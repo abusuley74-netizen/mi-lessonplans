@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { AdminProvider } from './contexts/AdminContext';
@@ -12,6 +12,7 @@ import AdminDashboard from './pages/AdminDashboard';
 import AdminProfileManager from './components/AdminProfileManager';
 import UserManagement from './components/UserManagement';
 import SharedView from './components/SharedView';
+import InstallPrompt from './components/InstallPrompt';
 import { Toaster } from './components/ui/sonner';
 import './index.css';
 
@@ -97,10 +98,20 @@ const AppRouter = () => {
 };
 
 function App() {
+  useEffect(() => {
+    // Register service worker for PWA
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/service-worker.js').catch(() => {});
+      });
+    }
+  }, []);
+
   return (
     <AuthProvider>
       <BrowserRouter>
         <AppRouter />
+        <InstallPrompt />
         <Toaster position="top-right" richColors closeButton />
       </BrowserRouter>
     </AuthProvider>

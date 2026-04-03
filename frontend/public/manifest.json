@@ -1,0 +1,31 @@
+{
+  "short_name": "miLessonPlan",
+  "name": "miLessonPlan - AI Lesson Planning",
+  "description": "AI-Powered Lesson Planning for Tanzanian Teachers",
+  "icons": [
+    {
+      "src": "favicon.ico",
+      "sizes": "16x16 32x32",
+      "type": "image/x-icon"
+    },
+    {
+      "src": "icon-192x192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512x512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#2D5A27",
+  "background_color": "#FDFBF7",
+  "orientation": "any",
+  "scope": "/",
+  "categories": ["education", "productivity"]
+}
