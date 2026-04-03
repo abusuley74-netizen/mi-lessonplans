@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { 
   BookOpen, Trash2, Eye, Download, Search,
-  Printer, X, FileText, Mic, Upload, FolderOpen, Play, Volume2, Calendar, Link2
+  X, FileText, Mic, Upload, FolderOpen, Play, Volume2, Calendar, Link2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import ShareModal from './ShareModal';
@@ -349,7 +349,7 @@ const MyFiles = () => {
               <button onClick={() => fetchAndView(`${API_URL}/api/lessons/${file.lesson_id}/view`, setViewHtml)} className="flex items-center gap-1 text-sm text-[#2D5A27] font-medium hover:text-[#21441C]" data-testid={`view-lesson-${file.lesson_id}`}>
                 <Eye className="w-4 h-4" />View
               </button>
-              <button onClick={() => fetchAndDownload(`${API_URL}/api/lessons/${file.lesson_id}/export`, `${file.subject}_${file.topic}_lesson.txt`)} className="flex items-center gap-1 text-sm text-[#8E44AD] font-medium hover:text-[#6C3483]" data-testid={`download-lesson-${file.lesson_id}`}>
+              <button onClick={() => fetchAndDownload(`${API_URL}/api/lessons/${file.lesson_id}/export`, `${file.subject}_${file.topic}_lesson.doc`)} className="flex items-center gap-1 text-sm text-[#8E44AD] font-medium hover:text-[#6C3483]" data-testid={`download-lesson-${file.lesson_id}`}>
                 <Download className="w-4 h-4" />Download
               </button>
             </div>
@@ -439,8 +439,24 @@ const MyFiles = () => {
           </div>
           <h3 className="font-heading font-semibold text-[#1A2E16] mb-2 line-clamp-2">{file.name}</h3>
           <div className="text-sm text-[#7A8A76] mb-4">{file.type}</div>
-          <div className="pt-3 border-t border-[#E4DFD5]">
+          <div className="flex items-center justify-between pt-3 border-t border-[#E4DFD5]">
             <span className="text-xs text-[#7A8A76]">{new Date(file.created_at).toLocaleDateString()}</span>
+            <div className="flex items-center gap-3">
+              <button onClick={() => setShareTarget({ type: 'upload', id: file.upload_id, name: file.name })} className="flex items-center gap-1 text-sm text-[#3498db] font-medium hover:text-[#2176ad]" data-testid={`share-upload-${file.upload_id}`}>
+                <Link2 className="w-4 h-4" />Share
+              </button>
+              {file.content_type?.startsWith('image/') || file.type?.includes('image') ? (
+                <button onClick={() => { setViewHtml(`<html><body style="margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#f5f5f5"><img src="${API_URL}/api/uploads/${file.upload_id}/download" style="max-width:100%;max-height:90vh;" /></body></html>`); }}
+                  className="flex items-center gap-1 text-sm text-[#2D5A27] font-medium hover:text-[#21441C]" data-testid={`view-upload-${file.upload_id}`}>
+                  <Eye className="w-4 h-4" />View
+                </button>
+              ) : (
+                <button onClick={() => fetchAndDownload(`${API_URL}/api/uploads/${file.upload_id}/download`, file.name)}
+                  className="flex items-center gap-1 text-sm text-[#8E44AD] font-medium hover:text-[#6C3483]" data-testid={`download-upload-${file.upload_id}`}>
+                  <Download className="w-4 h-4" />Download
+                </button>
+              )}
+            </div>
           </div>
         </div>
       );
@@ -609,31 +625,15 @@ const MyFiles = () => {
         </div>
       )}
 
-      {/* HTML View Modal (Lesson/Scheme full view with Print) */}
+      {/* HTML View Modal (Lesson/Scheme/Upload view — read-only) */}
       {viewHtml && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-auto" data-testid="html-view-modal">
           <div className="bg-white rounded-xl max-w-6xl w-full max-h-[95vh] overflow-auto shadow-2xl">
             <div className="sticky top-0 bg-white border-b border-[#E4DFD5] p-4 flex items-center justify-between z-10">
               <h2 className="font-heading text-lg font-semibold text-[#1A2E16]">Document Preview</h2>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => {
-                    const printW = window.open('', '_blank');
-                    if (printW) {
-                      printW.document.write(viewHtml);
-                      printW.document.close();
-                      printW.onload = () => printW.print();
-                    }
-                  }}
-                  className="flex items-center gap-2 px-4 py-2 bg-[#4a5568] text-white rounded-lg hover:bg-[#2d3748] text-sm font-medium"
-                  data-testid="view-print-btn"
-                >
-                  <Printer className="w-4 h-4" />Print
-                </button>
-                <button onClick={() => setViewHtml(null)} className="p-2 text-[#7A8A76] hover:text-[#1A2E16] hover:bg-[#F2EFE8] rounded-lg">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
+              <button onClick={() => setViewHtml(null)} className="p-2 text-[#7A8A76] hover:text-[#1A2E16] hover:bg-[#F2EFE8] rounded-lg" data-testid="close-view-btn">
+                <X className="w-5 h-5" />
+              </button>
             </div>
             <div className="p-6">
               <iframe
@@ -641,7 +641,7 @@ const MyFiles = () => {
                 title="Document View"
                 className="w-full border-0"
                 style={{ minHeight: '600px', height: '75vh' }}
-                sandbox="allow-same-origin"
+                sandbox="allow-same-origin allow-downloads"
                 data-testid="view-iframe"
               />
             </div>
