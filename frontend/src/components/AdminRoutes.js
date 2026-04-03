@@ -4,6 +4,7 @@ import AdminProfileManager from '../components/AdminProfileManager';
 import UserManagement from '../components/UserManagement';
 import PesaPalTransactionManager from '../components/PesaPalTransactionManager';
 import ReferralRegistry from '../components/ReferralRegistry';
+import AdminReferAndEarn from '../components/AdminReferAndEarn';
 
 const AdminRoutes = () => {
   return (
@@ -13,7 +14,7 @@ const AdminRoutes = () => {
       <Route path="/profiles" element={<AdminProfileManager />} />
       <Route path="/users" element={<UserManagement />} />
       <Route path="/referral-registry" element={<ReferralRegistry />} />
-      <Route path="/refer-and-earn" element={<ReferralRegistry />} />
+      <Route path="/refer-and-earn" element={<AdminReferAndEarn />} />
       <Route path="/content" element={<div>Content Management</div>} />
       <Route path="/analytics" element={<div>Analytics</div>} />
       <Route path="/reports" element={<div>Advanced Reports</div>} />

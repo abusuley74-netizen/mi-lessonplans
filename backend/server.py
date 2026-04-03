@@ -794,6 +794,10 @@ async def create_session(request: Request, response: Response):
             referrer = await db.users.find_one({"referral_code": ref_by_code}, {"_id": 0})
             if referrer:
                 referred_by_id = referrer["user_id"]
+            else:
+                admin_referrer = await db.admins.find_one({"referral_code": ref_by_code}, {"_id": 0})
+                if admin_referrer:
+                    referred_by_id = admin_referrer["admin_id"]
         new_user = {
             "user_id": user_id,
             "email": email,
@@ -1623,6 +1627,49 @@ async def admin_get_payouts(current_admin: Admin = Depends(get_current_admin)):
     """Admin: Get all payouts"""
     payouts = await db.referral_payouts.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
     return {"payouts": payouts}
+
+@api_router.get("/admin/my-referral-code")
+async def admin_get_my_referral_code(current_admin: Admin = Depends(get_current_admin)):
+    """Admin: Get or generate the admin's own referral code"""
+    admin_doc = await db.admins.find_one({"admin_id": current_admin.admin_id}, {"_id": 0})
+    code = admin_doc.get("referral_code") if admin_doc else None
+    if not code:
+        code = f"ML{uuid.uuid4().hex[:6].upper()}"
+        await db.admins.update_one({"admin_id": current_admin.admin_id}, {"$set": {"referral_code": code}})
+    base_url = "https://mi-learning-hub.preview.emergentagent.com"
+    return {"referral_code": code, "referral_link": f"{base_url}/login?ref={code}"}
+
+@api_router.get("/admin/my-referrals")
+async def admin_get_my_referrals(current_admin: Admin = Depends(get_current_admin)):
+    """Admin: Get list of users referred by this admin"""
+    admin_doc = await db.admins.find_one({"admin_id": current_admin.admin_id}, {"_id": 0})
+    admin_code = admin_doc.get("referral_code") if admin_doc else None
+    if not admin_code:
+        return {"referrals": [], "total_referrals": 0, "total_earned": 0, "pending_payout": 0}
+    # Find users who signed up with this admin's referral code (stored as referred_by = admin_id)
+    referred_users = await db.users.find(
+        {"referred_by": current_admin.admin_id},
+        {"_id": 0, "user_id": 1, "name": 1, "email": 1, "subscription_plan": 1, "created_at": 1}
+    ).sort("created_at", -1).to_list(500)
+    plan_prices = {"basic": 9999, "premium": 19999, "master": 29999, "enterprise": 29999}
+    total_earned = 0
+    pending = 0
+    referrals_with_earnings = []
+    for u in referred_users:
+        plan = u.get("subscription_plan", "free")
+        price = plan_prices.get(plan, 0)
+        commission = round(price * 0.3)
+        paid_amount = 0
+        payouts = await db.referral_payouts.find({"referrer_id": current_admin.admin_id, "referee_id": u["user_id"]}, {"_id": 0}).to_list(100)
+        paid_amount = sum(p.get("amount", 0) for p in payouts)
+        unpaid = commission - paid_amount if commission > 0 else 0
+        total_earned += commission
+        pending += max(0, unpaid)
+        referrals_with_earnings.append({
+            "user_id": u["user_id"], "name": u.get("name", "Unknown"), "email": u.get("email", ""),
+            "plan": plan, "commission_per_cycle": commission, "total_paid": paid_amount, "joined": u.get("created_at"),
+        })
+    return {"referrals": referrals_with_earnings, "total_referrals": len(referred_users), "total_earned": total_earned, "pending_payout": pending}
 
 # ==================== NOTES ROUTES ====================
 
