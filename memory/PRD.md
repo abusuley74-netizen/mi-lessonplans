@@ -1,7 +1,7 @@
-# MiLesson Plan - Product Requirements Document
+# miLessonPlan - Product Requirements Document
 
 ## Overview
-AI-powered lesson planning platform for Tanzanian teachers, supporting Tanzania Mainland & Zanzibar syllabi. Built with React + FastAPI + MongoDB.
+AI-powered lesson planning platform for Tanzanian teachers, supporting Tanzania Mainland & Zanzibar syllabi. Built with React + FastAPI + MongoDB. Branded as **miLessonPlan** with custom logo, PWA support, and production domain `mi-lessonplan.site`.
 
 ## Subscription Tiers & Feature Access
 
@@ -21,10 +21,10 @@ AI-powered lesson planning platform for Tanzanian teachers, supporting Tanzania 
 | Refer & Earn | - | - | - | Yes |
 
 ## Admin Dashboard Pages (All Implemented)
-- **Dashboard/Analytics & Reports**: KPI cards (users, revenue, lessons, active users), subscription distribution bars, revenue by plan, popular subjects, content summary, user growth chart, top creators
-- **Content Management**: Content stats grid (6 types), most active creators leaderboard, searchable lessons table with preview/delete, pagination
-- **Referral Registry**: All referrers with expandable referee lists, commission tracking, payout schedule settings, record payouts
-- **Refer and Earn**: Admin's own referral code, shareable link, social sharing, commission rates, earnings dashboard
+- **Dashboard/Analytics & Reports**: KPI cards, subscription distribution, revenue by plan, popular subjects, user growth
+- **Content Management**: Content stats, most active creators, searchable lessons table
+- **Referral Registry**: All referrers with commission tracking, payout management
+- **Refer and Earn**: Admin's own referral code, shareable link, social sharing
 - **User Management**: User list with roles and actions
 - **Subscription Management**: PesaPal transaction viewer
 - **Admin Profiles**: Admin account management
@@ -38,7 +38,7 @@ AI-powered lesson planning platform for Tanzanian teachers, supporting Tanzania 
 - Dictation Tool (OpenAI TTS with GPT-5.2 auto-translation)
 - Rich Text Notes Editor
 - Scheme of Work Generator with AI
-- MyFiles Manager — View/Download all file types
+- MyFiles Manager — View/Download all file types (lessons, templates, dictations, uploads, schemes)
 - Profile Settings with custom picture upload
 - 6 Specialized Template Editors
 - Shared Link Pipeline — share resources via public links, auto-expire
@@ -46,15 +46,17 @@ AI-powered lesson planning platform for Tanzanian teachers, supporting Tanzania 
 - Referral & Earn System — 30% commission, admin payout management
 - PesaPal Payment Integration — PRODUCTION checkout
 - Subscription Management — Basic, Premium, Master plans
+- **PWA Support** — manifest.json, service worker, install prompt for PC & mobile
 
-## My Files - View & Download (Completed 2026-04-03)
-- **Zanzibar Lessons**: View shows exact bilingual table format (ANDALIO LA SOMO) with enrollment table, lesson development stages, teacher evaluation
-- **Tanzania Mainland Lessons**: View shows bilingual tables with 4 stages (Introduction, Competence Development, Design, Realisation)
-- **Templates**: View renders HTML with images/questions; Download as .doc (GET endpoint reads from DB)
-- **Dictations**: Play inline + Download as real MP3 audio via TTS API
-- **Uploads**: Download actual files (stored as base64 in MongoDB)
-- **View Modal**: No print/download buttons inside iframe content
-- **Performance**: GET /uploads excludes file_data from listing
+## Branding (Updated 2026-04-03)
+- App name: **miLessonPlan** (not "MiLesson Plan")
+- Logo: Custom infinity/teacher logo at `/public/logo.jpg`
+- Favicon: Custom icons at 16x16, 32x32, 192x192, 512x512
+- Page title: "miLessonPlan"
+- No "Made with Emergent" badge
+- Production domain: `mi-lessonplan.site`
+- Referral links: `https://mi-lessonplan.site/login?ref=CODE`
+- Shared links: `{origin}/shared/{code}` (domain-agnostic)
 
 ## 3rd Party Integrations
 - Emergent Google Auth, OpenAI GPT-5.2, OpenAI TTS tts-1, PesaPal (PRODUCTION)
