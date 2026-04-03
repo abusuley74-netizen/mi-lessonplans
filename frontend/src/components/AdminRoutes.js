@@ -5,19 +5,21 @@ import UserManagement from '../components/UserManagement';
 import PesaPalTransactionManager from '../components/PesaPalTransactionManager';
 import ReferralRegistry from '../components/ReferralRegistry';
 import AdminReferAndEarn from '../components/AdminReferAndEarn';
+import ContentManagement from '../components/ContentManagement';
+import AnalyticsReports from '../components/AnalyticsReports';
 
 const AdminRoutes = () => {
   return (
     <Routes>
-      <Route path="/" element={<div>Dashboard Home</div>} />
-      <Route path="/dashboard" element={<div>Dashboard Home</div>} />
+      <Route path="/" element={<AnalyticsReports />} />
+      <Route path="/dashboard" element={<AnalyticsReports />} />
       <Route path="/profiles" element={<AdminProfileManager />} />
       <Route path="/users" element={<UserManagement />} />
       <Route path="/referral-registry" element={<ReferralRegistry />} />
       <Route path="/refer-and-earn" element={<AdminReferAndEarn />} />
-      <Route path="/content" element={<div>Content Management</div>} />
-      <Route path="/analytics" element={<div>Analytics</div>} />
-      <Route path="/reports" element={<div>Advanced Reports</div>} />
+      <Route path="/content" element={<ContentManagement />} />
+      <Route path="/analytics" element={<AnalyticsReports />} />
+      <Route path="/reports" element={<AnalyticsReports />} />
       <Route path="/subscriptions" element={<PesaPalTransactionManager />} />
       <Route path="/templates" element={<div>Template Management</div>} />
       <Route path="/communication" element={<div>Communication</div>} />
