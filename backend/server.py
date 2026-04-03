@@ -1821,8 +1821,8 @@ async def get_uploads(user: User = Depends(get_current_user)):
 
 @api_router.post("/uploads")
 async def upload_file(request: Request, user: User = Depends(get_current_user)):
-    """Upload a file"""
-    from fastapi import UploadFile, File, Form
+    """Upload a file — store file data as base64 in MongoDB"""
+    import base64
     
     form = await request.form()
     file = form.get("file")
@@ -1830,20 +1830,53 @@ async def upload_file(request: Request, user: User = Depends(get_current_user)):
     file_type = form.get("type", "unknown")
     size = form.get("size", 0)
     
+    # Read and store file data
+    file_data_b64 = None
+    content_type = ""
+    if file and hasattr(file, 'read'):
+        raw = await file.read()
+        file_data_b64 = base64.b64encode(raw).decode('utf-8')
+        content_type = getattr(file, 'content_type', file_type) or file_type
+    
     upload = {
         "upload_id": f"upload_{uuid.uuid4().hex[:12]}",
         "user_id": user.user_id,
         "name": name,
         "type": file_type,
+        "content_type": content_type,
         "size": int(size),
+        "file_data": file_data_b64,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     
-    # In production, save file to cloud storage (S3, GCS, etc.)
-    # For now, just save the metadata
     await db.uploads.insert_one(upload)
     upload.pop("_id", None)
+    upload.pop("file_data", None)  # Don't return file data in response
     return upload
+
+@api_router.get("/uploads/{upload_id}/download")
+async def download_upload(upload_id: str, user: User = Depends(get_current_user)):
+    """Download an uploaded file"""
+    import base64
+    from fastapi.responses import Response as FastAPIResponse
+    
+    upload = await db.uploads.find_one({"upload_id": upload_id, "user_id": user.user_id}, {"_id": 0})
+    if not upload:
+        raise HTTPException(status_code=404, detail="Upload not found")
+    
+    file_data_b64 = upload.get("file_data")
+    if not file_data_b64:
+        raise HTTPException(status_code=404, detail="File data not available")
+    
+    raw = base64.b64decode(file_data_b64)
+    content_type = upload.get("content_type", "application/octet-stream")
+    name = upload.get("name", "download")
+    
+    return FastAPIResponse(
+        content=raw,
+        media_type=content_type,
+        headers={"Content-Disposition": f'attachment; filename="{name}"'}
+    )
 
 @api_router.delete("/uploads/{upload_id}")
 async def delete_upload(upload_id: str, user: User = Depends(get_current_user)):
@@ -2081,8 +2114,70 @@ async def export_template(template_id: str, request: Request, user: User = Depen
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
 
-
-@api_router.get("/schemes/{scheme_id}/export")
+@api_router.get("/templates/{template_id}/view")
+async def view_template_html(template_id: str, user: User = Depends(get_current_user)):
+    """View a saved template as rendered HTML with images/formulas"""
+    from fastapi.responses import HTMLResponse
+    
+    template = await db.templates.find_one({"template_id": template_id, "user_id": user.user_id}, {"_id": 0})
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    
+    content = template.get("content", {})
+    t_type = template.get("type", "basic")
+    title = content.get("title", "Untitled Template")
+    subject = content.get("subject", "")
+    category = content.get("category", "")
+    body = content.get("body", "")
+    images = content.get("images", [])
+    
+    images_html = ""
+    for img in images:
+        if isinstance(img, dict):
+            src = img.get("data", img.get("url", ""))
+            caption = img.get("caption", "")
+            if src:
+                images_html += f'<div style="margin:12px 0;text-align:center"><img src="{src}" style="max-width:100%;max-height:400px;border:1px solid #ddd;border-radius:4px" />'
+                if caption:
+                    images_html += f'<p style="color:#666;font-size:10pt;margin-top:4px;font-style:italic">{caption}</p>'
+                images_html += '</div>'
+        elif isinstance(img, str) and img.startswith('data:'):
+            images_html += f'<div style="margin:12px 0;text-align:center"><img src="{img}" style="max-width:100%;max-height:400px;border:1px solid #ddd;border-radius:4px" /></div>'
+    
+    questions_html = ""
+    questions = content.get("questions", [])
+    for i, q in enumerate(questions):
+        if q:
+            questions_html += f'<div style="margin:8px 0;padding:10px 14px;background:#f8f8f8;border-left:3px solid #4B0082"><strong>Q{i+1}:</strong> {q}</div>'
+    
+    if t_type == "scientific":
+        layout = f"""<div style="display:flex;gap:20px;flex-wrap:wrap">
+            <div style="flex:1;min-width:200px">{images_html or '<p style="color:#999">No images</p>'}</div>
+            <div style="flex:2;min-width:300px"><div>{body}</div></div></div>"""
+    elif t_type == "geography":
+        layout = f"""<div>{body}</div>{images_html}<h3>Questions</h3>{questions_html or '<p style="color:#999">No questions</p>'}"""
+    elif t_type in ("mathematics", "physics", "chemistry"):
+        layout = f"""<div style="white-space:pre-wrap;font-family:'Courier New',monospace;line-height:1.8">{body}</div>{images_html}"""
+    else:
+        layout = f"""<div>{body}</div>{images_html}"""
+    
+    html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><title>{title}</title>
+    <style>
+      * {{ margin:0; padding:0; box-sizing:border-box; }}
+      body {{ font-family:'Segoe UI',Tahoma,sans-serif; padding:24px 30px; background:#fff; font-size:11pt; line-height:1.6; color:#333; }}
+      h1 {{ font-size:18pt; color:#1a1a1a; border-bottom:2px solid #e5e7eb; padding-bottom:10px; margin-bottom:8px; }}
+      h2 {{ font-size:13pt; color:#2D5A27; margin:16px 0 8px; }}
+      h3 {{ font-size:12pt; color:#2D5A27; margin:14px 0 6px; }}
+      .meta {{ color:#6b7280; font-size:10pt; margin-bottom:16px; }}
+      img {{ max-width:100%; }}
+    </style></head><body>
+    <h1>{title}</h1>
+    <div class="meta"><strong>Subject:</strong> {subject} | <strong>Category:</strong> {category} | <strong>Type:</strong> {t_type.title()}</div>
+    {layout}
+    <p style="text-align:center;margin-top:20px;font-size:9pt;color:#888;">Generated by MiLesson Plan</p>
+    </body></html>"""
+    
+    return HTMLResponse(content=html)
 async def export_scheme_docx(scheme_id: str, user: User = Depends(get_current_user)):
     """Export a scheme of work as a downloadable .doc file"""
     from fastapi.responses import Response as FastAPIResponse
@@ -2254,22 +2349,55 @@ async def export_lesson_txt(lesson_id: str, user: User = Depends(get_current_use
           <tr><th>REMARKS: MAELEZO</th></tr><tr><td>{safe(content.get('remarks'))}</td></tr></table>"""
     else:
         stages = content.get("stages", {})
-        stages_html = ""
-        for name, data in stages.items():
-            if isinstance(data, dict):
-                label = name.replace('_', ' ').title()
-                stages_html += f"<tr><td><b>{label}</b></td><td>{safe(data.get('time'))}</td><td>{safe(data.get('teachingActivities'))}</td><td>{safe(data.get('learningActivities'))}</td><td>{safe(data.get('assessment'))}</td></tr>"
-        body = f"""<h1>LESSON PLAN</h1>
-        <table><tr><th>Subject</th><td>{subject}</td><th>Grade/Class</th><td>{grade}</td></tr>
-          <tr><th>Topic</th><td colspan="3">{topic}</td></tr>
-          <tr><th colspan="4">MAIN COMPETENCE</th></tr><tr><td colspan="4">{safe(content.get('mainCompetence'))}</td></tr>
-          <tr><th colspan="4">SPECIFIC COMPETENCE</th></tr><tr><td colspan="4">{safe(content.get('specificCompetence'))}</td></tr>
-          <tr><th colspan="4">MAIN ACTIVITY</th></tr><tr><td colspan="4">{safe(content.get('mainActivity'))}</td></tr>
-          <tr><th colspan="4">TEACHING RESOURCES</th></tr><tr><td colspan="4">{safe(content.get('teachingResources'))}</td></tr></table>
-        <h2>LESSON STAGES</h2>
-        <table><tr><th>Stage</th><th>Time</th><th>Teaching Activities</th><th>Learning Activities</th><th>Assessment</th></tr>
-          {stages_html}</table>
-        <table><tr><th>REMARKS</th></tr><tr><td>{safe(content.get('remarks'))}</td></tr></table>"""
+        intro = stages.get("introduction", {})
+        comp_dev = stages.get("competenceDevelopment", {})
+        design = stages.get("design", {})
+        realisation = stages.get("realisation", {})
+        day_date = form_data.get("dayDate", "dd/mm/yyyy")
+        session_val = form_data.get("session", "")
+        cls = form_data.get("class", grade)
+        periods = form_data.get("periods", "")
+        minutes = form_data.get("time", form_data.get("minutes", ""))
+        eg = form_data.get("enrolledGirls", "")
+        eb = form_data.get("enrolledBoys", "")
+        pg = form_data.get("presentGirls", "")
+        pb = form_data.get("presentBoys", "")
+        te = (int(eg) if eg else 0) + (int(eb) if eb else 0)
+        tp = (int(pg) if pg else 0) + (int(pb) if pb else 0)
+        body = f"""<h1>LESSON PLAN (ANDALIO LA SOMO)</h1>
+        <table><tr><th>DAY &amp; DATE<br>SIKU &amp; TAREHE</th><th>SESSION<br>MKONDO</th><th>CLASS<br>DARASA</th>
+          <th>PERIODS<br>VIPINDI</th><th>TIME<br>MUDA</th><th>ENROLLED / PRESENT<br>WALIOANDIKISHWA / WALIOHUDHURIA</th></tr>
+        <tr><td>{day_date}</td><td>{session_val}</td><td>{cls}</td><td>{periods}</td><td>{minutes}</td>
+          <td>Enrolled Girls: {eg}<br>Enrolled Boys: {eb}<br>Present Girls: {pg}<br>Present Boys: {pb}<br>
+          <b>Total Enrolled: {te}</b><br><b>Total Present: {tp}</b></td></tr></table>
+        <table><tr><th colspan="2">GENERAL LEARNING OUTCOME: MATOKEO YA JUMLA YA KUJIFUNZA</th></tr>
+          <tr><td colspan="2">{safe(content.get('mainCompetence'))}</td></tr>
+          <tr><th>MAIN TOPIC: MADA KUU</th><th>SUB TOPIC: MADA NDOGO</th></tr>
+          <tr><td>{safe(content.get('mainActivity'))}</td><td>{safe(content.get('specificActivity'))}</td></tr>
+          <tr><th colspan="2">SPECIFIC LEARNING OUTCOME: MATOKEO MAHSUSI YA KUJIFUNZA</th></tr>
+          <tr><td colspan="2">{safe(content.get('specificCompetence'))}</td></tr>
+          <tr><th colspan="2">LEARNING RESOURCES: RASILIMALI ZA KUJIFUNZA</th></tr>
+          <tr><td colspan="2">{safe(content.get('teachingResources'))}</td></tr>
+          <tr><th colspan="2">REFERENCES: REJEA</th></tr>
+          <tr><td colspan="2">{safe(content.get('references'))}</td></tr></table>
+        <h2>LESSON DEVELOPMENT (MAENDELEO YA SOMO)</h2>
+        <table><tr><th>STEPS / HATUA</th><th>TIME / MUDA</th><th>TEACHING ACTIVITIES / VITENDO VYA KUFUNDISHIA</th>
+          <th>LEARNING ACTIVITIES / VITENDO VYA KUJIFUNZIA</th><th>ASSESSMENT / TATHMINI</th></tr>
+          <tr><td><b>1. INTRODUCTION / UTANGULIZI</b></td><td>{safe(intro.get('time'))}</td>
+            <td>{safe(intro.get('teachingActivities'))}</td><td>{safe(intro.get('learningActivities'))}</td>
+            <td>{safe(intro.get('assessment'))}</td></tr>
+          <tr><td><b>2. COMPETENCE DEVELOPMENT / KUJENGA MAARIFA</b></td><td>{safe(comp_dev.get('time'))}</td>
+            <td>{safe(comp_dev.get('teachingActivities'))}</td><td>{safe(comp_dev.get('learningActivities'))}</td>
+            <td>{safe(comp_dev.get('assessment'))}</td></tr>
+          <tr><td><b>3. DESIGN / UBUNIFU</b></td><td>{safe(design.get('time'))}</td>
+            <td>{safe(design.get('teachingActivities'))}</td><td>{safe(design.get('learningActivities'))}</td>
+            <td>{safe(design.get('assessment'))}</td></tr>
+          <tr><td><b>4. REALISATION / UTEKELEZAJI</b></td><td>{safe(realisation.get('time'))}</td>
+            <td>{safe(realisation.get('teachingActivities'))}</td><td>{safe(realisation.get('learningActivities'))}</td>
+            <td>{safe(realisation.get('assessment'))}</td></tr></table>
+        <table><tr><th>TEACHER'S EVALUATION: TATHMINI YA MWALIMU</th></tr><tr><td>{safe(content.get('teacherEvaluation'))}</td></tr>
+          <tr><th>PUPIL'S WORK: KAZI YA MWANAFUNZI</th></tr><tr><td>{safe(content.get('pupilWork'))}</td></tr>
+          <tr><th>REMARKS: MAELEZO</th></tr><tr><td>{safe(content.get('remarks'))}</td></tr></table>"""
     
     html = f"""<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
     <head><meta charset="utf-8"><style>
@@ -2397,47 +2525,108 @@ async def view_lesson_html(lesson_id: str, user: User = Depends(get_current_user
         </table>
         """
     else:
-        # Tanzania Mainland format
+        # Tanzania Mainland format — same bilingual table layout as Zanzibar
         stages = content.get("stages", {})
-        stages_html = ""
-        for name, data in stages.items():
-            if isinstance(data, dict):
-                label = name.replace('_', ' ').replace('stage', 'Stage').replace('And', ' and ').title()
-                stages_html += f"""<tr>
-                  <td><strong>{label}</strong></td>
-                  <td>{safe(data.get('time'))}</td>
-                  <td>{safe(data.get('teachingActivities'))}</td>
-                  <td>{safe(data.get('learningActivities'))}</td>
-                  <td>{safe(data.get('assessment'))}</td>
-                </tr>"""
+        intro = stages.get("introduction", {})
+        comp_dev = stages.get("competenceDevelopment", {})
+        design = stages.get("design", {})
+        realisation = stages.get("realisation", {})
+        
+        day_date = form_data.get("dayDate", "dd/mm/yyyy")
+        session = form_data.get("session", "")
+        cls = form_data.get("class", grade)
+        periods = form_data.get("periods", "")
+        minutes = form_data.get("time", form_data.get("minutes", ""))
+        eg = form_data.get("enrolledGirls", "")
+        eb = form_data.get("enrolledBoys", "")
+        pg = form_data.get("presentGirls", "")
+        pb = form_data.get("presentBoys", "")
+        te = (int(eg) if eg else 0) + (int(eb) if eb else 0)
+        tp = (int(pg) if pg else 0) + (int(pb) if pb else 0)
         
         body = f"""
-        <h1>LESSON PLAN</h1>
-        <table class="info-table">
-          <tr><th>Subject</th><td>{subject}</td><th>Grade/Class</th><td>{grade}</td></tr>
-          <tr><th>Topic</th><td colspan="3">{topic}</td></tr>
-          <tr><th colspan="4">MAIN COMPETENCE</th></tr>
-          <tr><td colspan="4">{safe(content.get('mainCompetence'))}</td></tr>
-          <tr><th colspan="4">SPECIFIC COMPETENCE</th></tr>
-          <tr><td colspan="4">{safe(content.get('specificCompetence'))}</td></tr>
-          <tr><th colspan="4">MAIN ACTIVITY</th></tr>
-          <tr><td colspan="4">{safe(content.get('mainActivity'))}</td></tr>
-          <tr><th colspan="4">TEACHING RESOURCES</th></tr>
-          <tr><td colspan="4">{safe(content.get('teachingResources'))}</td></tr>
-        </table>
-        <h2>LESSON STAGES</h2>
+        <h1>LESSON PLAN (ANDALIO LA SOMO)</h1>
         <table>
           <tr>
-            <th style="width:15%">Stage</th>
-            <th style="width:10%">Time</th>
-            <th style="width:25%">Teaching Activities</th>
-            <th style="width:25%">Learning Activities</th>
-            <th style="width:25%">Assessment</th>
+            <th>DAY & DATE<br><small>SIKU & TAREHE</small></th>
+            <th>SESSION<br><small>MKONDO</small></th>
+            <th>CLASS<br><small>DARASA</small></th>
+            <th>PERIODS<br><small>VIPINDI</small></th>
+            <th>TIME<br><small>MUDA</small></th>
+            <th>ENROLLED / PRESENT<br><small>WALIOANDIKISHWA / WALIOHUDHURIA</small></th>
           </tr>
-          {stages_html}
+          <tr>
+            <td>{day_date}</td>
+            <td>{session}</td>
+            <td>{cls}</td>
+            <td>{periods}</td>
+            <td>{minutes}</td>
+            <td>
+              Enrolled Girls: {eg}<br>Enrolled Boys: {eb}<br>
+              Present Girls: {pg}<br>Present Boys: {pb}<br>
+              <strong>Total Enrolled: {te}</strong><br><strong>Total Present: {tp}</strong>
+            </td>
+          </tr>
         </table>
+        
         <table class="info-table">
-          <tr><th colspan="2">REMARKS</th></tr>
+          <tr><th colspan="2">GENERAL LEARNING OUTCOME: MATOKEO YA JUMLA YA KUJIFUNZA</th></tr>
+          <tr><td colspan="2">{safe(content.get('mainCompetence'))}</td></tr>
+          <tr><th>MAIN TOPIC: MADA KUU</th><th>SUB TOPIC: MADA NDOGO</th></tr>
+          <tr><td>{safe(content.get('mainActivity'))}</td><td>{safe(content.get('specificActivity'))}</td></tr>
+          <tr><th colspan="2">SPECIFIC LEARNING OUTCOME: MATOKEO MAHSUSI YA KUJIFUNZA</th></tr>
+          <tr><td colspan="2">{safe(content.get('specificCompetence'))}</td></tr>
+          <tr><th colspan="2">LEARNING RESOURCES: RASILIMALI ZA KUJIFUNZA</th></tr>
+          <tr><td colspan="2">{safe(content.get('teachingResources'))}</td></tr>
+          <tr><th colspan="2">REFERENCES: REJEA</th></tr>
+          <tr><td colspan="2">{safe(content.get('references'))}</td></tr>
+        </table>
+        
+        <h2>LESSON DEVELOPMENT (MAENDELEO YA SOMO)</h2>
+        <table>
+          <tr>
+            <th style="width:20%">STEPS<br><small>HATUA</small></th>
+            <th style="width:10%">TIME<br><small>MUDA</small></th>
+            <th style="width:25%">TEACHING ACTIVITIES<br><small>VITENDO VYA KUFUNDISHIA</small></th>
+            <th style="width:25%">LEARNING ACTIVITIES<br><small>VITENDO VYA KUJIFUNZIA</small></th>
+            <th style="width:20%">ASSESSMENT<br><small>TATHMINI</small></th>
+          </tr>
+          <tr>
+            <td><strong>1. INTRODUCTION</strong><br><small>UTANGULIZI</small></td>
+            <td>{safe(intro.get('time'))}</td>
+            <td>{safe(intro.get('teachingActivities'))}</td>
+            <td>{safe(intro.get('learningActivities'))}</td>
+            <td>{safe(intro.get('assessment'))}</td>
+          </tr>
+          <tr>
+            <td><strong>2. BUILDING NEW KNOWLEDGE AND SKILLS</strong><br><small>KUJENGA MAARIFA MAPYA NA UJUZI</small></td>
+            <td>{safe(comp_dev.get('time'))}</td>
+            <td>{safe(comp_dev.get('teachingActivities'))}</td>
+            <td>{safe(comp_dev.get('learningActivities'))}</td>
+            <td>{safe(comp_dev.get('assessment'))}</td>
+          </tr>
+          <tr>
+            <td><strong>3. DESIGN</strong><br><small>UBUNIFU</small></td>
+            <td>{safe(design.get('time'))}</td>
+            <td>{safe(design.get('teachingActivities'))}</td>
+            <td>{safe(design.get('learningActivities'))}</td>
+            <td>{safe(design.get('assessment'))}</td>
+          </tr>
+          <tr>
+            <td><strong>4. REALISATION</strong><br><small>UTEKELEZAJI</small></td>
+            <td>{safe(realisation.get('time'))}</td>
+            <td>{safe(realisation.get('teachingActivities'))}</td>
+            <td>{safe(realisation.get('learningActivities'))}</td>
+            <td>{safe(realisation.get('assessment'))}</td>
+          </tr>
+        </table>
+        
+        <table class="info-table">
+          <tr><th colspan="2">TEACHER'S EVALUATION: TATHMINI YA MWALIMU</th></tr>
+          <tr><td colspan="2">{safe(content.get('teacherEvaluation'))}</td></tr>
+          <tr><th colspan="2">PUPIL'S WORK: KAZI YA MWANAFUNZI</th></tr>
+          <tr><td colspan="2">{safe(content.get('pupilWork'))}</td></tr>
+          <tr><th colspan="2">REMARKS: MAELEZO</th></tr>
           <tr><td colspan="2">{safe(content.get('remarks'))}</td></tr>
         </table>
         """
