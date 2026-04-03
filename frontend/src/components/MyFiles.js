@@ -407,19 +407,26 @@ const MyFiles = () => {
                 <Link2 className="w-4 h-4" />Share
               </button>
               <button
-              onClick={() => handlePlayDictation(file)}
-              disabled={isGenerating}
-              className={`flex items-center gap-1 text-sm font-medium transition-colors ${isPlaying ? 'text-[#D95D39]' : 'text-[#2D5A27] hover:text-[#21441C]'}`}
-              data-testid={`play-dictation-${file.dictation_id}`}
-            >
-              {isGenerating ? (
-                <><div className="w-4 h-4 border-2 border-[#2D5A27] border-t-transparent rounded-full animate-spin" />Loading...</>
-              ) : isPlaying ? (
-                <><Volume2 className="w-4 h-4" />Playing...</>
-              ) : (
-                <><Play className="w-4 h-4" />Play</>
-              )}
-            </button>
+                onClick={() => handlePlayDictation(file)}
+                disabled={isGenerating}
+                className={`flex items-center gap-1 text-sm font-medium transition-colors ${isPlaying ? 'text-[#D95D39]' : 'text-[#2D5A27] hover:text-[#21441C]'}`}
+                data-testid={`play-dictation-${file.dictation_id}`}
+              >
+                {isGenerating ? (
+                  <><div className="w-4 h-4 border-2 border-[#2D5A27] border-t-transparent rounded-full animate-spin" />Loading...</>
+                ) : isPlaying ? (
+                  <><Volume2 className="w-4 h-4" />Playing...</>
+                ) : (
+                  <><Play className="w-4 h-4" />Play</>
+                )}
+              </button>
+              <button
+                onClick={() => fetchAndDownload(`${API_URL}/api/dictations/${file.dictation_id}/download`, `${file.title || 'dictation'}.mp3`)}
+                className="flex items-center gap-1 text-sm text-[#8E44AD] font-medium hover:text-[#6C3483]"
+                data-testid={`download-dictation-${file.dictation_id}`}
+              >
+                <Download className="w-4 h-4" />Download
+              </button>
             </div>
           </div>
         </div>
@@ -478,9 +485,17 @@ const MyFiles = () => {
           {file.description && <p className="text-sm text-[#7A8A76] mb-4 line-clamp-2">{file.description}</p>}
           <div className="flex items-center justify-between pt-3 border-t border-[#E4DFD5]">
             <span className="text-xs text-[#7A8A76]">{new Date(file.updated_at || file.created_at).toLocaleDateString()}</span>
-            <button onClick={() => setShareTarget({ type: 'template', id: file.template_id, name: file.name || 'Template' })} className="flex items-center gap-1 text-sm text-[#3498db] font-medium hover:text-[#2176ad]" data-testid={`share-template-${file.template_id}`}>
-              <Link2 className="w-4 h-4" />Share
-            </button>
+            <div className="flex items-center gap-3">
+              <button onClick={() => setShareTarget({ type: 'template', id: file.template_id, name: file.name || 'Template' })} className="flex items-center gap-1 text-sm text-[#3498db] font-medium hover:text-[#2176ad]" data-testid={`share-template-${file.template_id}`}>
+                <Link2 className="w-4 h-4" />Share
+              </button>
+              <button onClick={() => fetchAndView(`${API_URL}/api/templates/${file.template_id}/view`, setViewHtml)} className="flex items-center gap-1 text-sm text-[#2D5A27] font-medium hover:text-[#21441C]" data-testid={`view-template-${file.template_id}`}>
+                <Eye className="w-4 h-4" />View
+              </button>
+              <button onClick={() => fetchAndDownload(`${API_URL}/api/templates/${file.template_id}/export`, `${file.name || 'template'}.doc`)} className="flex items-center gap-1 text-sm text-[#8E44AD] font-medium hover:text-[#6C3483]" data-testid={`download-template-${file.template_id}`}>
+                <Download className="w-4 h-4" />Download
+              </button>
+            </div>
           </div>
         </div>
       );

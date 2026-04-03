@@ -1808,6 +1808,59 @@ async def delete_dictation(dictation_id: str, user: User = Depends(get_current_u
         raise HTTPException(status_code=404, detail="Dictation not found")
     return {"message": "Dictation deleted"}
 
+@api_router.get("/dictations/{dictation_id}/download")
+async def download_dictation_audio(dictation_id: str, user: User = Depends(get_current_user)):
+    """Generate and download dictation audio as MP3 file"""
+    from fastapi.responses import Response as FastAPIResponse
+    from emergentintegrations.llm.openai import OpenAITextToSpeech
+
+    dictation = await db.dictations.find_one({"dictation_id": dictation_id, "user_id": user.user_id}, {"_id": 0})
+    if not dictation:
+        raise HTTPException(status_code=404, detail="Dictation not found")
+
+    text = dictation.get("text", "")
+    language = dictation.get("language", "en-GB")
+    title = dictation.get("title", "dictation")
+
+    if not text.strip():
+        raise HTTPException(status_code=400, detail="Dictation has no text")
+
+    voice_map = {"en-GB": "nova", "sw": "onyx", "ar": "echo", "tr": "fable", "fr": "shimmer"}
+    voice = voice_map.get(language, "alloy")
+
+    api_key = os.environ.get("EMERGENT_LLM_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="TTS service not configured")
+
+    try:
+        tts_text = text
+        if language != "en-GB":
+            from emergentintegrations.llm.chat import LlmChat, UserMessage
+            lang_names = {"sw": "Swahili", "ar": "Arabic", "tr": "Turkish", "fr": "French"}
+            target_lang = lang_names.get(language, "English")
+            chat = LlmChat(
+                api_key=api_key,
+                session_id=f"translate_{uuid.uuid4().hex[:8]}",
+                system_message=f"You are a translator. Translate the following text to {target_lang}. Return ONLY the translated text, nothing else."
+            ).with_model("openai", "gpt-5.2")
+            translation = await chat.send_message(UserMessage(text=text))
+            tts_text = translation.strip()
+
+        tts = OpenAITextToSpeech(api_key=api_key)
+        audio_bytes = await tts.generate_speech(
+            text=tts_text, model="tts-1", voice=voice, response_format="mp3", speed=1.0
+        )
+
+        safe_title = "".join(c for c in title if c.isalnum() or c in " _-").strip().replace(" ", "_")
+        return FastAPIResponse(
+            content=audio_bytes,
+            media_type="audio/mpeg",
+            headers={"Content-Disposition": f'attachment; filename="{safe_title}_{language}.mp3"'}
+        )
+    except Exception as e:
+        logger.error(f"Dictation download TTS error: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate audio: {str(e)}")
+
 # ==================== UPLOADS ROUTES ====================
 
 @api_router.get("/uploads")
@@ -1815,7 +1868,7 @@ async def get_uploads(user: User = Depends(get_current_user)):
     """Get all uploads for the current user"""
     uploads = await db.uploads.find(
         {"user_id": user.user_id},
-        {"_id": 0}
+        {"_id": 0, "file_data": 0}
     ).sort("created_at", -1).to_list(100)
     return {"uploads": uploads}
 
@@ -2108,6 +2161,79 @@ async def export_template(template_id: str, request: Request, user: User = Depen
     else:
         content_bytes = f'\ufeff{html}'.encode('utf-8')
     
+    return FastAPIResponse(
+        content=content_bytes,
+        media_type="application/msword",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+@api_router.get("/templates/{template_id}/export")
+async def export_template_get(template_id: str, user: User = Depends(get_current_user)):
+    """Export a saved template as Word doc from DB (GET for MyFiles download)"""
+    from fastapi.responses import Response as FastAPIResponse
+
+    template = await db.templates.find_one({"template_id": template_id, "user_id": user.user_id}, {"_id": 0})
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    content = template.get("content", {})
+    template_type = template.get("type", "basic")
+    title = content.get("title", "Document")
+    subject = content.get("subject", "General")
+    category = content.get("category", "General")
+    body = content.get("body", "")
+    images = content.get("images", [])
+
+    meta = f'<strong>Subject:</strong> {subject} | <strong>Category:</strong> {category}'
+
+    styles = """body{font-family:'Segoe UI',Tahoma,sans-serif;margin:30px;line-height:1.6;color:#374151}
+    h1{color:#1f2937;border-bottom:2px solid #e5e7eb;padding-bottom:10px;margin-bottom:20px}
+    h2{color:#2D5A27;margin:20px 0 10px;font-size:14pt}
+    h3{color:#2D5A27;margin:18px 0 8px}
+    .meta{color:#6b7280;font-size:14px;margin-bottom:20px}.content{line-height:1.8}
+    .img-container{margin:16px 0;text-align:center;page-break-inside:avoid}
+    .img-caption{color:#6b7280;font-size:10px;margin-top:6px;text-align:center;font-style:italic}
+    .question-block{margin:10px 0;padding:12px 16px;background:#f8fafc;border-left:3px solid #4B0082;font-size:11pt}"""
+
+    image_registry = []
+    images_html = _build_images_html(images, image_registry)
+
+    if template_type == "scientific":
+        body_html = f"""<div style="display:table;width:100%">
+            <div style="display:table-cell;width:35%;vertical-align:top;padding:15px;background:#f8fafc;border:1px solid #e2e8f0">
+                <h3 style="margin-top:0">Diagrams &amp; Photos</h3>
+                {images_html or '<p style="color:#9ca3af;font-size:12px">No images uploaded</p>'}
+            </div>
+            <div style="display:table-cell;width:65%;vertical-align:top;padding-left:20px">
+                <h1>{title}</h1><div class="meta">{meta}</div><div class="content">{body}</div>
+            </div></div>"""
+    elif template_type == "geography":
+        questions = content.get("questions", [])
+        q_html = "".join(f'<div class="question-block"><strong>Q{i+1}:</strong> {q}</div>' for i, q in enumerate(questions) if q)
+        body_html = f"""<h1>{title}</h1><div class="meta">{meta}</div>
+            <h2>Geography Images / Maps</h2>
+            {images_html or '<p style="color:#9ca3af;font-size:12px">No images uploaded</p>'}
+            <h2>Questions</h2>{q_html or '<p style="color:#9ca3af">No questions added</p>'}"""
+    elif template_type in ("mathematics", "physics", "chemistry"):
+        styles += " .content{white-space:pre-wrap;font-family:'Courier New',monospace}"
+        body_html = f'<h1>{title}</h1><div class="meta">{meta}</div><div class="content">{body}</div>'
+    else:
+        body_html = f'<h1>{title}</h1><div class="meta">{meta}</div><div class="content">{body}</div>'
+        if images_html:
+            body_html += f'<h2>Attachments</h2>{images_html}'
+
+    word_ns = 'xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"'
+    html = f"""<html {word_ns}>
+    <head><meta charset="utf-8"><style>{styles}</style></head>
+    <body>{body_html}</body></html>"""
+
+    filename = f"{title.replace(' ','_')}_{template_type}.doc"
+
+    if image_registry:
+        content_bytes = _build_mhtml(html, image_registry, filename)
+    else:
+        content_bytes = f'\ufeff{html}'.encode('utf-8')
+
     return FastAPIResponse(
         content=content_bytes,
         media_type="application/msword",
