@@ -38,7 +38,7 @@ AI-powered lesson planning platform for Tanzanian teachers, supporting Tanzania 
 - Dictation Tool (OpenAI TTS with GPT-5.2 auto-translation)
 - Rich Text Notes Editor
 - Scheme of Work Generator with AI
-- MyFiles Manager
+- MyFiles Manager — View/Download all file types
 - Profile Settings with custom picture upload
 - 6 Specialized Template Editors
 - Shared Link Pipeline — share resources via public links, auto-expire
@@ -46,6 +46,15 @@ AI-powered lesson planning platform for Tanzanian teachers, supporting Tanzania 
 - Referral & Earn System — 30% commission, admin payout management
 - PesaPal Payment Integration — PRODUCTION checkout
 - Subscription Management — Basic, Premium, Master plans
+
+## My Files - View & Download (Completed 2026-04-03)
+- **Zanzibar Lessons**: View shows exact bilingual table format (ANDALIO LA SOMO) with enrollment table, lesson development stages, teacher evaluation
+- **Tanzania Mainland Lessons**: View shows bilingual tables with 4 stages (Introduction, Competence Development, Design, Realisation)
+- **Templates**: View renders HTML with images/questions; Download as .doc (GET endpoint reads from DB)
+- **Dictations**: Play inline + Download as real MP3 audio via TTS API
+- **Uploads**: Download actual files (stored as base64 in MongoDB)
+- **View Modal**: No print/download buttons inside iframe content
+- **Performance**: GET /uploads excludes file_data from listing
 
 ## 3rd Party Integrations
 - Emergent Google Auth, OpenAI GPT-5.2, OpenAI TTS tts-1, PesaPal (PRODUCTION)
@@ -55,5 +64,5 @@ AI-powered lesson planning platform for Tanzanian teachers, supporting Tanzania 
 
 ## Backlog
 - P2: Granular loading spinners per input field during AI generation
-- P3: Route modularization (server.py 2800+ lines → routes/)
-- P3: Team accounts, mobile app, offline mode, Swahili UI
+- P3: Route modularization (server.py 3200+ lines -> routes/)
+- P4: Team accounts, mobile app, offline mode, Swahili UI
