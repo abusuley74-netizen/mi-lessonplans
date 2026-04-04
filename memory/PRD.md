@@ -1,7 +1,7 @@
-# miLessonPlan - Product Requirements Document
+# Mi-LessonPlan - Product Requirements Document
 
 ## Overview
-AI-powered lesson planning platform for Tanzanian teachers, supporting Tanzania Mainland & Zanzibar syllabi. Built with React + FastAPI + MongoDB. Branded as **miLessonPlan** with custom logo, PWA support, and production domain `mi-lessonplan.site`.
+AI-powered lesson planning platform for Tanzanian teachers, supporting Tanzania Mainland & Zanzibar syllabi. Built with React + FastAPI + MongoDB. Branded as **Mi-LessonPlan** with custom logo, PWA support, and production domain `mi-lessonplan.site`.
 
 ## Subscription Tiers & Feature Access
 
@@ -48,15 +48,21 @@ AI-powered lesson planning platform for Tanzanian teachers, supporting Tanzania 
 - Subscription Management — Basic, Premium, Master plans
 - **PWA Support** — manifest.json, service worker, install prompt for PC & mobile
 
-## Branding (Updated 2026-04-03)
-- App name: **miLessonPlan** (not "MiLesson Plan")
+## Branding (Updated 2026-04-04)
+- App name: **Mi-LessonPlan** (with hyphen)
 - Logo: Custom infinity/teacher logo at `/public/logo.jpg`
 - Favicon: Custom icons at 16x16, 32x32, 192x192, 512x512
-- Page title: "miLessonPlan"
+- Page title: "Mi-LessonPlan"
 - No "Made with Emergent" badge
 - Production domain: `mi-lessonplan.site`
 - Referral links: `https://mi-lessonplan.site/login?ref=CODE`
 - Shared links: `{origin}/shared/{code}` (domain-agnostic)
+
+## My Files (Updated 2026-04-04)
+- Cards use `overflow-hidden`, `truncate`, compact `text-xs` buttons
+- Upload cards truncate long content_type strings
+- Dictation cards support Share, Play, Download with flex-wrap
+- Shared dictation links now download real MP3 audio via TTS API
 
 ## 3rd Party Integrations
 - Emergent Google Auth, OpenAI GPT-5.2, OpenAI TTS tts-1, PesaPal (PRODUCTION)
