@@ -1,8 +1,8 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { GoogleOAuthProvider } from '@react-oauth/google';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { AdminProvider } from './contexts/AdminContext';
-import AuthCallback from './components/AuthCallback';
 import LoginPage from './pages/LoginPage';
 import Dashboard from './pages/Dashboard';
 import MyHub from './pages/MyHub';
@@ -15,6 +15,8 @@ import SharedView from './components/SharedView';
 import InstallPrompt from './components/InstallPrompt';
 import { Toaster } from './components/ui/sonner';
 import './index.css';
+
+const GOOGLE_CLIENT_ID = process.env.REACT_APP_GOOGLE_CLIENT_ID;
 
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
@@ -46,14 +48,6 @@ const ProtectedRoute = ({ children }) => {
 
 // App Router Component
 const AppRouter = () => {
-  const location = useLocation();
-
-  // Check URL fragment for session_id SYNCHRONOUSLY during render
-  // This prevents race conditions with ProtectedRoute
-  if (location.hash?.includes('session_id=')) {
-    return <AuthCallback />;
-  }
-
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
@@ -108,13 +102,15 @@ function App() {
   }, []);
 
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <AppRouter />
-        <InstallPrompt />
-        <Toaster position="top-right" richColors closeButton />
-      </BrowserRouter>
-    </AuthProvider>
+    <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+      <AuthProvider>
+        <BrowserRouter>
+          <AppRouter />
+          <InstallPrompt />
+          <Toaster position="top-right" richColors closeButton />
+        </BrowserRouter>
+      </AuthProvider>
+    </GoogleOAuthProvider>
   );
 }
 

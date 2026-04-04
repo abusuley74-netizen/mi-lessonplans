@@ -742,6 +742,102 @@ async def get_current_user(request: Request) -> User:
 
 # ==================== AUTH ROUTES ====================
 
+@api_router.post("/auth/google")
+async def google_auth(request: Request, response: Response):
+    """Verify Google ID token and create session - direct Google OAuth, no intermediary"""
+    # REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
+    from google.oauth2 import id_token
+    from google.auth.transport import requests as google_requests
+
+    data = await request.json()
+    credential = data.get("credential")
+    referral_code = data.get("referral_code", "")
+
+    if not credential:
+        raise HTTPException(status_code=400, detail="Google credential required")
+
+    google_client_id = os.environ.get("GOOGLE_CLIENT_ID")
+    if not google_client_id:
+        raise HTTPException(status_code=500, detail="Google OAuth not configured")
+
+    try:
+        idinfo = id_token.verify_oauth2_token(
+            credential, google_requests.Request(), google_client_id
+        )
+
+        if idinfo["iss"] not in ["accounts.google.com", "https://accounts.google.com"]:
+            raise ValueError("Wrong issuer")
+
+        email = idinfo.get("email")
+        name = idinfo.get("name", email.split("@")[0])
+        picture = idinfo.get("picture", "")
+    except Exception as e:
+        logger.error(f"Google token verification failed: {e}")
+        raise HTTPException(status_code=401, detail="Invalid Google token")
+
+    # Check if user exists
+    existing_user = await db.users.find_one({"email": email}, {"_id": 0})
+
+    if existing_user:
+        user_id = existing_user["user_id"]
+        await db.users.update_one(
+            {"user_id": user_id},
+            {"$set": {"name": name, "picture": picture}}
+        )
+    else:
+        user_id = f"user_{uuid.uuid4().hex[:12]}"
+        ref_code = f"ML{uuid.uuid4().hex[:6].upper()}"
+        referred_by_id = None
+        if referral_code:
+            referrer = await db.users.find_one({"referral_code": referral_code}, {"_id": 0})
+            if referrer:
+                referred_by_id = referrer["user_id"]
+            else:
+                admin_referrer = await db.admins.find_one({"referral_code": referral_code}, {"_id": 0})
+                if admin_referrer:
+                    referred_by_id = admin_referrer["admin_id"]
+        new_user = {
+            "user_id": user_id,
+            "email": email,
+            "name": name,
+            "picture": picture,
+            "subscription_status": "free",
+            "subscription_plan": "free",
+            "subscription_expires": None,
+            "lesson_period_start": datetime.now(timezone.utc).isoformat(),
+            "lesson_period_count": 0,
+            "referral_code": ref_code,
+            "referred_by": referred_by_id,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.users.insert_one(new_user)
+
+    # Create session
+    session_token = f"sess_{uuid.uuid4().hex}"
+    expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+    session_doc = {
+        "user_id": user_id,
+        "session_token": session_token,
+        "expires_at": expires_at.isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+
+    await db.user_sessions.delete_many({"user_id": user_id})
+    await db.user_sessions.insert_one(session_doc)
+
+    response.set_cookie(
+        key="session_token",
+        value=session_token,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        path="/",
+        max_age=7 * 24 * 60 * 60
+    )
+
+    user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    return {"user": user_doc, "message": "Session created"}
+
 @api_router.post("/auth/session")
 async def create_session(request: Request, response: Response):
     """Exchange session_id from Emergent Auth for a session token"""

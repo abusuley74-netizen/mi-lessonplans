@@ -23,19 +23,28 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   useEffect(() => {
-    // CRITICAL: If returning from OAuth callback, skip the /me check.
-    // AuthCallback will exchange the session_id and establish the session first.
-    if (window.location.hash?.includes('session_id=')) {
-      setLoading(false);
-      return;
-    }
     checkAuth();
   }, [checkAuth]);
 
-  const login = () => {
-    // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
-    const redirectUrl = window.location.origin + '/dashboard';
-    window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
+  // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
+  const loginWithGoogle = async (credential) => {
+    const referralCode = sessionStorage.getItem('referral_code') || '';
+    try {
+      const response = await axios.post(
+        `${API_URL}/api/auth/google`,
+        { credential, referral_code: referralCode },
+        { withCredentials: true }
+      );
+      if (response.data.user) {
+        setUser(response.data.user);
+        sessionStorage.removeItem('referral_code');
+        return { success: true, user: response.data.user };
+      }
+      return { success: false, error: 'Login failed' };
+    } catch (error) {
+      console.error('Google auth error:', error);
+      return { success: false, error: error.response?.data?.detail || 'Authentication failed' };
+    }
   };
 
   const logout = async () => {
@@ -54,7 +63,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, refreshUser, setUser }}>
+    <AuthContext.Provider value={{ user, loading, loginWithGoogle, logout, refreshUser, setUser }}>
       {children}
     </AuthContext.Provider>
   );
