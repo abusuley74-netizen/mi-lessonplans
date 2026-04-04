@@ -49,7 +49,7 @@ const InstallPrompt = () => {
           <Smartphone className="w-5 h-5 text-[#2D5A27]" />
         </div>
         <div className="flex-1 min-w-0">
-          <h3 className="font-heading font-semibold text-[#1A2E16] text-sm">Install miLessonPlan</h3>
+          <h3 className="font-heading font-semibold text-[#1A2E16] text-sm">Install Mi-LessonPlan</h3>
           <p className="text-xs text-[#7A8A76] mt-0.5">Add to your home screen for quick access, even offline.</p>
           <div className="flex items-center gap-2 mt-3">
             <button

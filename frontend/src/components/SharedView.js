@@ -72,7 +72,9 @@ const SharedView = () => {
   const handleDownload = async () => {
     setDownloading(true);
     try {
-      const filename = `${linkData.title || 'download'}.doc`;
+      const isDictation = linkData?.resource_type === 'dictation';
+      const ext = isDictation ? '.mp3' : '.doc';
+      const filename = `${linkData.title || 'download'}${ext}`;
       await fetchAndDownloadBlob(`${API_URL}/api/links/${code}/download`, filename);
       setDownloaded(true);
       toast.success('Download started! This link is now expired.');
@@ -125,7 +127,7 @@ const SharedView = () => {
           <h1 className="text-2xl font-bold text-[#1A2E16] mb-2">Link Not Found</h1>
           <p className="text-[#7A8A76] mb-6">This shared link doesn't exist or has been removed.</p>
           <Link to="/login" className="inline-flex items-center gap-2 text-[#2D5A27] font-medium hover:underline">
-            <ArrowLeft className="w-4 h-4" /> Go to miLessonPlan
+            <ArrowLeft className="w-4 h-4" /> Go to Mi-LessonPlan
           </Link>
         </div>
       </div>
@@ -138,8 +140,8 @@ const SharedView = () => {
       <header className="bg-white border-b border-[#E4DFD5] px-4 py-3">
         <div className="max-w-3xl mx-auto flex items-center justify-between">
           <Link to="/login" className="flex items-center gap-2 text-[#2D5A27] font-bold text-lg" data-testid="shared-logo">
-            <img src="/logo.jpg" alt="miLessonPlan" className="w-8 h-8 rounded-md object-contain" />
-            miLessonPlan
+            <img src="/logo.jpg" alt="Mi-LessonPlan" className="w-8 h-8 rounded-md object-contain" />
+            Mi-LessonPlan
           </Link>
           <span className="text-xs text-[#7A8A76]">Shared Resource</span>
         </div>
@@ -302,7 +304,7 @@ const SharedView = () => {
 
       {/* Footer */}
       <footer className="text-center py-6">
-        <p className="text-xs text-[#7A8A76]">Powered by miLessonPlan</p>
+        <p className="text-xs text-[#7A8A76]">Powered by Mi-LessonPlan</p>
       </footer>
     </div>
   );

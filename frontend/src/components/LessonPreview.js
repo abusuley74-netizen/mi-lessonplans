@@ -236,7 +236,7 @@ const LessonPreview = ({ lessonData }) => {
         {/* Success Badge */}
         <div className="mt-8 pt-6 border-t border-[#E4DFD5] flex items-center justify-center gap-2 text-[#2D5A27]">
           <Check className="w-5 h-5" />
-          <span className="font-medium">Generated with miLessonPlan AI</span>
+          <span className="font-medium">Generated with Mi-LessonPlan AI</span>
         </div>
       </div>
     </div>
