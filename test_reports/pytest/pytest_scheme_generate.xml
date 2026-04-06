@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="9" time="221.175" timestamp="2026-04-06T08:43:40.609833+00:00" hostname="agent-env-b825922a-b23f-424c-be95-fb43d699a619"><testcase classname="backend.tests.test_scheme_generate.TestSchemeGenerateValidation" name="test_generate_requires_subject" time="1.803" /><testcase classname="backend.tests.test_scheme_generate.TestSchemeGenerateValidation" name="test_generate_requires_class" time="0.144" /><testcase classname="backend.tests.test_scheme_generate.TestSchemeGenerateZanzibar" name="test_generate_zanzibar_returns_competencies" time="24.781" /><testcase classname="backend.tests.test_scheme_generate.TestSchemeGenerateZanzibar" name="test_zanzibar_rows_have_all_required_fields" time="17.556" /><testcase classname="backend.tests.test_scheme_generate.TestSchemeGenerateMainland" name="test_generate_mainland_returns_competencies" time="36.912" /><testcase classname="backend.tests.test_scheme_generate.TestSchemeGenerateMainland" name="test_mainland_rows_have_bilingual_content" time="30.246" /><testcase classname="backend.tests.test_scheme_generate.TestSchemeGenerateNumRows" name="test_respects_num_rows_5" time="19.183" /><testcase classname="backend.tests.test_scheme_generate.TestSchemeGenerateNumRows" name="test_respects_num_rows_10" time="60.167"><failure message="assert 502 == 200&#10; +  where 502 = &lt;Response [502]&gt;.status_code">backend/tests/test_scheme_generate.py:186: in test_respects_num_rows_10
+    assert response.status_code == 200
+E   assert 502 == 200
+E    +  where 502 = &lt;Response [502]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_scheme_generate.TestSchemeSaveEndpoint" name="test_save_scheme_works" time="30.134"><failure message="requests.exceptions.ReadTimeout: HTTPSConnectionPool(host='mi-learning-hub.preview.emergentagent.com', port=443): Read timed out. (read timeout=30)">/root/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:534: in _make_request
+    response = conn.getresponse()
+               ^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/urllib3/connection.py:571: in getresponse
+    httplib_response = super().getresponse()
+                       ^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/http/client.py:1415: in getresponse
+    response.begin()
+/usr/local/lib/python3.11/http/client.py:330: in begin
+    version, status, reason = self._read_status()
+                              ^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/http/client.py:291: in _read_status
+    line = str(self.fp.readline(_MAXLINE + 1), "iso-8859-1")
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/socket.py:718: in readinto
+    return self._sock.recv_into(b)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/ssl.py:1314: in recv_into
+    return self.read(nbytes, buffer)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/ssl.py:1166: in read
+    return self._sslobj.read(len, buffer)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TimeoutError: The read operation timed out
+
+The above exception was the direct cause of the following exception:
+/root/.venv/lib/python3.11/site-packages/requests/adapters.py:644: in send
+    resp = conn.urlopen(
+/root/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:841: in urlopen
+    retries = retries.increment(
+/root/.venv/lib/python3.11/site-packages/urllib3/util/retry.py:490: in increment
+    raise reraise(type(error), error, _stacktrace)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/urllib3/util/util.py:39: in reraise
+    raise value
+/root/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:787: in urlopen
+    response = self._make_request(
+/root/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:536: in _make_request
+    self._raise_timeout(err=e, url=url, timeout_value=read_timeout)
+/root/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:367: in _raise_timeout
+    raise ReadTimeoutError(
+E   urllib3.exceptions.ReadTimeoutError: HTTPSConnectionPool(host='mi-learning-hub.preview.emergentagent.com', port=443): Read timed out. (read timeout=30)
+
+During handling of the above exception, another exception occurred:
+backend/tests/test_scheme_generate.py:197: in test_save_scheme_works
+    response = api_session.post(f"{BASE_URL}/api/schemes", json={
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:637: in post
+    return self.request("POST", url, data=data, json=json, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:589: in request
+    resp = self.send(prep, **send_kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:703: in send
+    r = adapter.send(request, **kwargs)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/adapters.py:690: in send
+    raise ReadTimeout(e, request=request)
+E   requests.exceptions.ReadTimeout: HTTPSConnectionPool(host='mi-learning-hub.preview.emergentagent.com', port=443): Read timed out. (read timeout=30)</failure></testcase></testsuite></testsuites>

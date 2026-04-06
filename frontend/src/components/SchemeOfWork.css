@@ -292,7 +292,7 @@
     margin-bottom: 10px;
   }
   
-  .scheme-toggle, .controls {
+  .scheme-toggle, .controls, .ai-generate-bar, .ai-progress-bar {
     display: none;
   }
   
@@ -302,6 +302,209 @@
     overflow: visible;
     height: auto;
   }
+}
+
+/* =========== AI Generate Bar =========== */
+.ai-generate-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(135deg, #2D5A27 0%, #3a7a32 100%);
+  border-radius: 10px;
+  padding: 14px 20px;
+  margin-bottom: 16px;
+  box-shadow: 0 4px 12px rgba(45, 90, 39, 0.25);
+}
+
+.ai-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ai-icon {
+  width: 22px;
+  height: 22px;
+  color: #FFD700;
+  filter: drop-shadow(0 0 4px rgba(255, 215, 0, 0.5));
+}
+
+.ai-label {
+  color: white;
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+}
+
+.ai-rows-selector {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 13px;
+}
+
+.ai-rows-selector select {
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 13px;
+  cursor: pointer;
+  outline: none;
+}
+
+.ai-rows-selector select option {
+  background: #2D5A27;
+  color: white;
+}
+
+.ai-generate-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #FFD700;
+  color: #1A2E16;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 22px;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 2px 8px rgba(255, 215, 0, 0.3);
+}
+
+.ai-generate-btn:hover:not(:disabled) {
+  background: #FFC107;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(255, 215, 0, 0.4);
+}
+
+.ai-generate-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-sparkle {
+  width: 18px;
+  height: 18px;
+}
+
+.spin-icon {
+  width: 18px;
+  height: 18px;
+  animation: spin 1s linear infinite;
+}
+
+.spin-icon-sm {
+  width: 16px;
+  height: 16px;
+  animation: spin 1s linear infinite;
+  color: #2D5A27;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* =========== AI Progress Bar =========== */
+.ai-progress-bar {
+  background: #f0faf0;
+  border: 1px solid #b8d4b0;
+  border-radius: 10px;
+  padding: 14px 20px;
+  margin-bottom: 16px;
+}
+
+.ai-progress-text {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #2D5A27;
+  margin-bottom: 10px;
+  font-weight: 500;
+}
+
+.ai-progress-track {
+  height: 6px;
+  background: #d5e8d0;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.ai-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #2D5A27, #3a9e32);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+/* =========== Row Loading Animations =========== */
+.row-filling {
+  background: #f8fef8 !important;
+}
+
+.row-filling td {
+  position: relative;
+}
+
+.row-filled {
+  animation: rowFadeIn 0.4s ease-out;
+}
+
+@keyframes rowFadeIn {
+  from {
+    background-color: #d5f5d0;
+    opacity: 0.7;
+  }
+  to {
+    background-color: transparent;
+    opacity: 1;
+  }
+}
+
+.cell-filling {
+  background: linear-gradient(135deg, #f0faf0, #e8f5e8) !important;
+}
+
+.cell-spinner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 80px;
+}
+
+.spinner-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #2D5A27;
+  animation: dotPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes dotPulse {
+  0%, 100% {
+    transform: scale(0.4);
+    opacity: 0.3;
+  }
+  50% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* =========== Button icon alignment =========== */
+.pagination button,
+.actions button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: center;
 }
 
 /* Responsive */
@@ -316,4 +519,6 @@
   .controls { flex-direction: column; align-items: stretch; }
   .pagination { justify-content: center; }
   .actions { justify-content: center; }
+  .ai-generate-bar { flex-direction: column; gap: 12px; }
+  .ai-bar-left { flex-wrap: wrap; }
 }

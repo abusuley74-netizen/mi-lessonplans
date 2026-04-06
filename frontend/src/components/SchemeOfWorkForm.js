@@ -1,10 +1,11 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import axios from 'axios';
+import { Sparkles, Save, Printer, FileDown, Plus, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 import './SchemeOfWork.css';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
-// Fetch file via auth cookie and trigger real download
 const fetchAndDownload = async (url, filename) => {
   try {
     const response = await fetch(url, { credentials: 'include' });
@@ -22,7 +23,7 @@ const fetchAndDownload = async (url, filename) => {
     };
     reader.readAsDataURL(blob);
   } catch (err) {
-    console.error('Download error:', err);
+    toast.error('Download failed');
   }
 };
 
@@ -65,8 +66,11 @@ const makeEmptyRow = () => ({
 const SchemeOfWorkForm = () => {
   const [syllabus, setSyllabus] = useState('Zanzibar');
   const [saving, setSaving] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [fillingRows, setFillingRows] = useState(new Set());
   const [savedMsg, setSavedMsg] = useState('');
   const [savedSchemeId, setSavedSchemeId] = useState(null);
+  const [numRows, setNumRows] = useState(10);
   const [formData, setFormData] = useState({
     school: '', teacher: '', subject: '',
     year: new Date().getFullYear(), term: '', class: '',
@@ -91,7 +95,6 @@ const SchemeOfWorkForm = () => {
     }
   };
 
-  // Auto-resize textareas
   const autoResize = useCallback((el) => {
     if (el) {
       el.style.height = 'auto';
@@ -104,13 +107,12 @@ const SchemeOfWorkForm = () => {
     autoResize(e.target);
   };
 
-  // Auto-resize all textareas on page change
   useEffect(() => {
     const timer = setTimeout(() => {
       document.querySelectorAll('.scheme-table textarea').forEach(autoResize);
     }, 50);
     return () => clearTimeout(timer);
-  }, [currentPage, autoResize]);
+  }, [currentPage, autoResize, formData.competencies]);
 
   const handlePageChange = (newPage) => {
     if (newPage >= 0 && newPage < totalPages) setCurrentPage(newPage);
@@ -118,16 +120,74 @@ const SchemeOfWorkForm = () => {
 
   const addRow = () => {
     setFormData({ ...formData, competencies: [...formData.competencies, makeEmptyRow()] });
-    // Jump to last page
     const newTotal = Math.ceil((formData.competencies.length + 1) / rowsPerPage);
     setCurrentPage(newTotal - 1);
   };
 
-  // Get non-empty competencies for saving
   const getNonEmptyRows = () => {
     return formData.competencies.filter(row =>
       Object.values(row).some(v => v.trim && v.trim() !== '')
     );
+  };
+
+  // AI Auto-fill
+  const handleAIGenerate = async () => {
+    if (!formData.subject.trim()) {
+      toast.error('Please enter a Subject first');
+      return;
+    }
+    if (!formData.class.trim()) {
+      toast.error('Please enter a Class first');
+      return;
+    }
+
+    setGenerating(true);
+    setSavedSchemeId(null);
+    setCurrentPage(0);
+
+    // Show all rows as filling
+    const rowIndices = new Set(Array.from({ length: numRows }, (_, i) => i));
+    setFillingRows(rowIndices);
+
+    try {
+      const res = await axios.post(`${API_URL}/api/schemes/generate`, {
+        syllabus,
+        subject: formData.subject,
+        class: formData.class,
+        term: formData.term || 'Term 1',
+        num_rows: numRows
+      }, { withCredentials: true });
+
+      const aiRows = res.data.competencies || [];
+
+      // Animate row-by-row fill
+      const newCompetencies = [...formData.competencies];
+      for (let i = 0; i < aiRows.length; i++) {
+        newCompetencies[i] = { ...makeEmptyRow(), ...aiRows[i] };
+      }
+
+      // Staggered reveal
+      for (let i = 0; i < aiRows.length; i++) {
+        await new Promise(r => setTimeout(r, 150));
+        setFillingRows(prev => {
+          const next = new Set(prev);
+          next.delete(i);
+          return next;
+        });
+        setFormData(prev => {
+          const updated = [...prev.competencies];
+          updated[i] = { ...makeEmptyRow(), ...aiRows[i] };
+          return { ...prev, competencies: updated };
+        });
+      }
+
+      toast.success(`Generated ${aiRows.length} rows for ${formData.subject}`);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'AI generation failed. Please try again.');
+    } finally {
+      setGenerating(false);
+      setFillingRows(new Set());
+    }
   };
 
   const saveToMyFiles = async () => {
@@ -136,19 +196,17 @@ const SchemeOfWorkForm = () => {
     try {
       const res = await axios.post(`${API_URL}/api/schemes`, {
         syllabus,
-        school: formData.school,
-        teacher: formData.teacher,
-        subject: formData.subject,
-        year: formData.year,
-        term: formData.term,
-        class: formData.class,
+        school: formData.school, teacher: formData.teacher,
+        subject: formData.subject, year: formData.year,
+        term: formData.term, class: formData.class,
         competencies: getNonEmptyRows()
       }, { withCredentials: true });
       setSavedSchemeId(res.data.scheme_id);
       setSavedMsg('Saved to My Files!');
+      toast.success('Scheme saved to My Files');
       setTimeout(() => setSavedMsg(''), 3000);
     } catch (err) {
-      console.error('Save error:', err);
+      toast.error('Failed to save');
     } finally {
       setSaving(false);
     }
@@ -156,7 +214,6 @@ const SchemeOfWorkForm = () => {
 
   const handlePrint = () => {
     if (savedSchemeId) {
-      // Fetch HTML and open in print window
       fetch(`${API_URL}/api/schemes/${savedSchemeId}/view`, { credentials: 'include' })
         .then(r => r.text())
         .then(html => {
@@ -181,23 +238,17 @@ const SchemeOfWorkForm = () => {
 
   const saveAndThen = async (action) => {
     setSaving(true);
-    setSavedMsg('');
     try {
       const res = await axios.post(`${API_URL}/api/schemes`, {
-        syllabus,
-        school: formData.school,
-        teacher: formData.teacher,
-        subject: formData.subject,
-        year: formData.year,
-        term: formData.term,
-        class: formData.class,
+        syllabus, school: formData.school, teacher: formData.teacher,
+        subject: formData.subject, year: formData.year,
+        term: formData.term, class: formData.class,
         competencies: getNonEmptyRows()
       }, { withCredentials: true });
       const newId = res.data.scheme_id;
       setSavedSchemeId(newId);
-      setSavedMsg('Saved!');
-      setTimeout(() => setSavedMsg(''), 3000);
-      
+      toast.success('Saved!');
+
       if (action === 'print') {
         fetch(`${API_URL}/api/schemes/${newId}/view`, { credentials: 'include' })
           .then(r => r.text())
@@ -212,7 +263,7 @@ const SchemeOfWorkForm = () => {
         );
       }
     } catch (err) {
-      console.error('Save error:', err);
+      toast.error('Failed to save');
     } finally {
       setSaving(false);
     }
@@ -269,6 +320,57 @@ const SchemeOfWorkForm = () => {
         </div>
       </div>
 
+      {/* AI Generate Bar */}
+      <div className="ai-generate-bar" data-testid="scheme-ai-bar">
+        <div className="ai-bar-left">
+          <Sparkles className="ai-icon" />
+          <span className="ai-label">AI Auto-Fill</span>
+          <div className="ai-rows-selector">
+            <label>Rows:</label>
+            <select value={numRows} onChange={(e) => setNumRows(parseInt(e.target.value))}
+              disabled={generating} data-testid="scheme-num-rows">
+              {[5, 8, 10, 12, 15, 20].map(n => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <button
+          onClick={handleAIGenerate}
+          disabled={generating || !formData.subject.trim() || !formData.class.trim()}
+          className="ai-generate-btn"
+          data-testid="scheme-ai-generate-btn"
+        >
+          {generating ? (
+            <>
+              <Loader2 className="spin-icon" />
+              <span>Generating...</span>
+            </>
+          ) : (
+            <>
+              <Sparkles className="btn-sparkle" />
+              <span>Generate with AI</span>
+            </>
+          )}
+        </button>
+      </div>
+
+      {/* Generating overlay progress */}
+      {generating && (
+        <div className="ai-progress-bar" data-testid="scheme-ai-progress">
+          <div className="ai-progress-text">
+            <Loader2 className="spin-icon-sm" />
+            Generating {numRows} rows for <strong>{formData.subject}</strong> ({syllabus}, {formData.class})...
+          </div>
+          <div className="ai-progress-track">
+            <div
+              className="ai-progress-fill"
+              style={{ width: `${((numRows - fillingRows.size) / numRows) * 100}%` }}
+            />
+          </div>
+        </div>
+      )}
+
       <div className="table-container" ref={printRef}>
         <table className="scheme-table">
           <thead>
@@ -279,48 +381,68 @@ const SchemeOfWorkForm = () => {
             </tr>
           </thead>
           <tbody>
-            {currentCompetencies.map((row, index) => (
-              <tr key={index}>
-                {columns.map(col => (
-                  <td key={col.key}>
-                    {col.type === 'textarea' ? (
-                      <textarea
-                        value={row[col.key]}
-                        onChange={(e) => handleTextareaChange(e, index, col.key)}
-                        onFocus={(e) => autoResize(e.target)}
-                        className="table-input"
-                        placeholder={col.label}
-                      />
-                    ) : (
-                      <input
-                        type="text"
-                        value={row[col.key]}
-                        onChange={(e) => handleInputChange(e, index, col.key)}
-                        className="table-input"
-                        placeholder={col.label.split(' ')[0]}
-                      />
-                    )}
-                  </td>
-                ))}
-              </tr>
-            ))}
+            {currentCompetencies.map((row, index) => {
+              const globalIndex = currentPage * rowsPerPage + index;
+              const isFilling = fillingRows.has(globalIndex);
+
+              return (
+                <tr key={index} className={isFilling ? 'row-filling' : row.main ? 'row-filled' : ''}>
+                  {columns.map(col => (
+                    <td key={col.key} className={isFilling ? 'cell-filling' : ''}>
+                      {isFilling ? (
+                        <div className="cell-spinner">
+                          <div className="spinner-dot" />
+                        </div>
+                      ) : col.type === 'textarea' ? (
+                        <textarea
+                          value={row[col.key]}
+                          onChange={(e) => handleTextareaChange(e, index, col.key)}
+                          onFocus={(e) => autoResize(e.target)}
+                          className="table-input"
+                          placeholder={col.label}
+                        />
+                      ) : (
+                        <input
+                          type="text"
+                          value={row[col.key]}
+                          onChange={(e) => handleInputChange(e, index, col.key)}
+                          className="table-input"
+                          placeholder={col.label.split(' ')[0]}
+                        />
+                      )}
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
 
       <div className="controls">
         <div className="pagination">
-          <button onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage === 0} data-testid="scheme-prev-page">Previous</button>
+          <button onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage === 0} data-testid="scheme-prev-page">
+            <ChevronLeft className="w-4 h-4" /> Previous
+          </button>
           <span>Page {currentPage + 1} of {totalPages}</span>
-          <button onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage === totalPages - 1} data-testid="scheme-next-page">Next</button>
+          <button onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage === totalPages - 1} data-testid="scheme-next-page">
+            Next <ChevronRight className="w-4 h-4" />
+          </button>
         </div>
         <div className="actions">
-          <button onClick={addRow} className="add-row-btn" data-testid="scheme-add-row">+ Add Row</button>
+          <button onClick={addRow} className="add-row-btn" data-testid="scheme-add-row">
+            <Plus className="w-4 h-4" /> Add Row
+          </button>
           <button onClick={saveToMyFiles} className="save-btn" disabled={saving} data-testid="scheme-save-template">
+            <Save className="w-4 h-4" />
             {saving ? 'Saving...' : savedMsg || 'Save to My Files'}
           </button>
-          <button onClick={handlePrint} className="print-btn" data-testid="scheme-print">Print</button>
-          <button onClick={exportToDocx} className="export-btn" data-testid="scheme-export-docx">Export as DOCX</button>
+          <button onClick={handlePrint} className="print-btn" data-testid="scheme-print">
+            <Printer className="w-4 h-4" /> Print
+          </button>
+          <button onClick={exportToDocx} className="export-btn" data-testid="scheme-export-docx">
+            <FileDown className="w-4 h-4" /> Export DOCX
+          </button>
         </div>
       </div>
     </div>

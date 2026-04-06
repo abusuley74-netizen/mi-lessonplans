@@ -2078,6 +2078,130 @@ async def delete_scheme(scheme_id: str, user: User = Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Scheme not found")
     return {"message": "Scheme deleted"}
 
+@api_router.post("/schemes/generate")
+async def generate_scheme_ai(request: Request, user: User = Depends(get_current_user)):
+    """Generate scheme of work competency rows with AI"""
+    from emergentintegrations.llm.chat import LlmChat, UserMessage
+
+    data = await request.json()
+    syllabus = data.get("syllabus", "Zanzibar")
+    subject = data.get("subject", "")
+    grade = data.get("class", "")
+    term = data.get("term", "")
+    num_rows = min(int(data.get("num_rows", 10)), 20)
+
+    if not subject or not grade:
+        raise HTTPException(status_code=400, detail="Subject and class are required")
+
+    api_key = os.environ.get("EMERGENT_LLM_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="AI service not configured")
+
+    try:
+        chat = LlmChat(
+            api_key=api_key,
+            session_id=f"scheme_{uuid.uuid4().hex[:8]}",
+            system_message="You are an expert Tanzanian education curriculum designer specializing in Scheme of Work planning. You know both Zanzibar and Tanzania Mainland syllabus formats deeply. Always respond with valid JSON only."
+        ).with_model("openai", "gpt-5.2")
+
+        if syllabus == "Zanzibar":
+            prompt = f"""Generate a Scheme of Work for the ZANZIBAR syllabus:
+- Subject: {subject}
+- Class: {grade}
+- Term: {term or "Term 1"}
+- Number of rows: {num_rows}
+
+Generate EXACTLY {num_rows} competency rows. Each row represents a week/topic in the scheme.
+Return a JSON array where each element has these exact keys:
+[
+  {{
+    "main": "Main Competence - the broad competence area",
+    "specific": "Specific Competences - detailed competences to be achieved",
+    "activities": "Learning Activities - what students will do",
+    "specificActivities": "Specific Activities - detailed student tasks",
+    "month": "Month name (e.g., January, February)",
+    "week": "Week number (e.g., Week 1, Week 2)",
+    "periods": "Number of periods (e.g., 4, 6)",
+    "methods": "Teaching and Learning Methods (e.g., Discussion, Group work, Demonstration)",
+    "resources": "Teaching and Learning Resources (e.g., Textbooks, Charts, Models)",
+    "assessment": "Assessment Tools (e.g., Oral questions, Written test, Portfolio)",
+    "references": "References (e.g., Syllabus page, Textbook chapter)",
+    "remarks": ""
+  }}
+]
+
+IMPORTANT:
+- Content MUST be appropriate for {grade} level in Tanzania
+- Progress from simpler to more complex topics across weeks
+- Use realistic Tanzanian curriculum topics for {subject}
+- Distribute across months of the term realistically
+- Make activities practical and age-appropriate
+- Return ONLY the JSON array, no other text"""
+        else:
+            prompt = f"""Generate a Scheme of Work for the TANZANIA MAINLAND syllabus:
+- Subject: {subject}
+- Class: {grade}
+- Term: {term or "Term 1"}
+- Number of rows: {num_rows}
+
+Generate EXACTLY {num_rows} competency rows. Each row represents a week/topic in the scheme.
+Return a JSON array where each element has these exact keys:
+[
+  {{
+    "main": "Umahiri Mkuu (Main Competence) - the broad competence area",
+    "specific": "Umahiri Mahususi (Specific Competence) - detailed competences",
+    "activities": "Shughuli Kuu (Main Activity) - main learning activity",
+    "specificActivities": "Shughuli Mahususi (Specific Activity) - detailed tasks",
+    "month": "Month name (e.g., Januari, Februari)",
+    "week": "Wiki ya (Week number, e.g., Wiki 1, Wiki 2)",
+    "periods": "Number of periods (e.g., 4, 6)",
+    "methods": "Teaching & Learning Methods (e.g., Majadiliano, Kazi ya vikundi, Maonyesho)",
+    "resources": "Teaching & Learning Resources (e.g., Vitabu, Chati, Modeli)",
+    "assessment": "Assessment Tools (e.g., Maswali ya mdomo, Mtihani wa maandishi)",
+    "references": "References (e.g., Mtaala uk., Kitabu sura)",
+    "remarks": ""
+  }}
+]
+
+IMPORTANT:
+- Content MUST be appropriate for {grade} level in Tanzania
+- Use Swahili terms where culturally appropriate (Mainland format uses bilingual terms)
+- Progress from simpler to more complex topics across weeks
+- Use realistic Tanzanian curriculum topics for {subject}
+- Distribute across months of the term realistically
+- Make activities practical and age-appropriate
+- Return ONLY the JSON array, no other text"""
+
+        response_text = await chat.send_message(UserMessage(text=prompt))
+        clean = response_text.strip()
+        if clean.startswith("```"):
+            clean = clean.split("\n", 1)[1] if "\n" in clean else clean[3:]
+            clean = clean.rsplit("```", 1)[0]
+        clean = clean.strip()
+
+        import json
+        rows = json.loads(clean)
+        if not isinstance(rows, list):
+            raise ValueError("Expected JSON array")
+
+        # Ensure all rows have required keys
+        required_keys = ["main", "specific", "activities", "specificActivities", "month", "week", "periods", "methods", "resources", "assessment", "references", "remarks"]
+        sanitized = []
+        for row in rows[:num_rows]:
+            sanitized_row = {}
+            for k in required_keys:
+                sanitized_row[k] = str(row.get(k, "")).strip()
+            sanitized.append(sanitized_row)
+
+        return {"competencies": sanitized, "count": len(sanitized)}
+
+    except json.JSONDecodeError as e:
+        logger.error(f"Scheme AI JSON parse error: {e}")
+        raise HTTPException(status_code=500, detail="AI returned invalid format. Please try again.")
+    except Exception as e:
+        logger.error(f"Scheme AI generation error: {e}")
+        raise HTTPException(status_code=500, detail=f"AI generation failed: {str(e)}")
+
 
 # ==================== TEMPLATE ROUTES ====================
 
