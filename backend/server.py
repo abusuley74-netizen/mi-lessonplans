@@ -9,6 +9,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 import uuid
+import base64
 from datetime import datetime, timezone, timedelta
 import httpx
 
@@ -2953,6 +2954,8 @@ async def resolve_resource(resource_type: str, resource_id: str, teacher_id: str
         return await db.templates.find_one({"template_id": resource_id, "user_id": teacher_id}, {"_id": 0})
     elif resource_type == "dictation":
         return await db.dictations.find_one({"dictation_id": resource_id, "user_id": teacher_id}, {"_id": 0})
+    elif resource_type == "upload":
+        return await db.uploads.find_one({"upload_id": resource_id, "user_id": teacher_id}, {"_id": 0})
     return None
 
 def build_resource_preview(resource_type: str, resource: dict) -> dict:
@@ -2970,6 +2973,8 @@ def build_resource_preview(resource_type: str, resource: dict) -> dict:
         return {"name": resource.get("name", ""), "type": resource.get("type", ""), "description": resource.get("description", "")}
     elif resource_type == "dictation":
         return {"title": resource.get("title", ""), "language": resource.get("language", ""), "text_preview": (resource.get("text", ""))[:150]}
+    elif resource_type == "upload":
+        return {"name": resource.get("name", ""), "content_type": resource.get("content_type", ""), "size": resource.get("size", 0)}
     return {}
 
 def build_download_content(resource_type: str, resource: dict) -> tuple:
@@ -3178,6 +3183,15 @@ def build_download_content(resource_type: str, resource: dict) -> tuple:
 
         return "AUDIO_TTS", language, title  # Signal to caller to generate audio
 
+    elif resource_type == "upload":
+        file_data_b64 = resource.get("file_data")
+        name = resource.get("name", "download")
+        content_type = resource.get("content_type", "application/octet-stream")
+        if file_data_b64:
+            raw = base64.b64decode(file_data_b64)
+            return raw, content_type, name
+        return b"", "application/octet-stream", name
+
     return b"", "application/octet-stream", "download"
 
 @api_router.post("/links")
@@ -3190,7 +3204,7 @@ async def create_shared_link(request: Request, user: User = Depends(get_current_
     price = data.get("price", 0) if is_paid else 0
     description = data.get("description", "")
 
-    if resource_type not in ("lesson", "note", "scheme", "template", "dictation"):
+    if resource_type not in ("lesson", "note", "scheme", "template", "dictation", "upload"):
         raise HTTPException(status_code=400, detail="Invalid resource_type")
     if not resource_id:
         raise HTTPException(status_code=400, detail="resource_id required")
