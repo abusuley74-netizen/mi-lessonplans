@@ -20,57 +20,47 @@ AI-powered lesson planning platform for Tanzanian teachers, supporting Tanzania 
 | Dictation | - | - | Yes | Yes |
 | Refer & Earn | - | - | - | Yes |
 
-## Admin Dashboard Pages (All Implemented)
-- **Dashboard/Analytics & Reports**: KPI cards, subscription distribution, revenue by plan, popular subjects, user growth
-- **Content Management**: Content stats, most active creators, searchable lessons table
-- **Referral Registry**: All referrers with commission tracking, payout management
-- **Refer and Earn**: Admin's own referral code, shareable link, social sharing
-- **User Management**: User list with roles and actions
-- **Subscription Management**: PesaPal transaction viewer
-- **Admin Profiles**: Admin account management
-
 ## Core Features (Implemented)
-- Google OAuth Login (Emergent-managed) for teachers
-- Admin Login (email/password) accessible from main login page
+- **Direct Google OAuth** — user's own Google Client ID, no Emergent intermediary
 - AI Lesson Plan Generator (GPT-5.2 via Emergent LLM Key)
 - Subscription Tier Gating — sidebar lock icons, upgrade modal, lesson counter
 - MyHub Dashboard with tier-gated sidebar navigation
 - Dictation Tool (OpenAI TTS with GPT-5.2 auto-translation)
 - Rich Text Notes Editor
 - Scheme of Work Generator with AI
-- MyFiles Manager — View/Download all file types (lessons, templates, dictations, uploads, schemes)
+- MyFiles Manager — View/Download all file types
 - Profile Settings with custom picture upload
 - 6 Specialized Template Editors
-- Shared Link Pipeline — share resources via public links, auto-expire
+- Shared Link Pipeline — share all resource types including uploads, WhatsApp integration
 - MHTML Document Export — Word documents with embedded images
 - Referral & Earn System — 30% commission, admin payout management
 - PesaPal Payment Integration — PRODUCTION checkout
-- Subscription Management — Basic, Premium, Master plans
-- **PWA Support** — manifest.json, service worker, install prompt for PC & mobile
+- PWA Support — manifest.json, service worker, install prompt for PC & mobile
 
-## Branding (Updated 2026-04-04)
+## Branding
 - App name: **Mi-LessonPlan** (with hyphen)
-- Logo: Custom infinity/teacher logo at `/public/logo.jpg`
-- Favicon: Custom icons at 16x16, 32x32, 192x192, 512x512
-- Page title: "Mi-LessonPlan"
+- Slogan: "Secure Tanzania Mindset"
+- Logo: Custom logo at `/public/logo.jpg`
+- Header: Light green background (#D5E8D0)
 - No "Made with Emergent" badge
 - Production domain: `mi-lessonplan.site`
-- Referral links: `https://mi-lessonplan.site/login?ref=CODE`
-- Shared links: `{origin}/shared/{code}` (domain-agnostic)
 
-## My Files (Updated 2026-04-04)
-- Cards use `overflow-hidden`, `truncate`, compact `text-xs` buttons
-- Upload cards truncate long content_type strings
-- Dictation cards support Share, Play, Download with flex-wrap
-- Shared dictation links now download real MP3 audio via TTS API
+## Auth (Updated 2026-04-06)
+- Direct Google OAuth via @react-oauth/google + google-auth backend verification
+- Google Client ID: 994004322929-jrp5mo9go5s6qs4tl4trl93sqsjue7kn.apps.googleusercontent.com
+- After auth → straight to /dashboard
+- Admin login: separate /admin/login with email/password
+
+## Sharing (Updated 2026-04-06)
+- All resource types supported: lesson, note, scheme, template, dictation, upload
+- WhatsApp share button with pre-filled message
+- Copy link button
+- 1-download auto-expire links
 
 ## 3rd Party Integrations
-- Emergent Google Auth, OpenAI GPT-5.2, OpenAI TTS tts-1, PesaPal (PRODUCTION)
-
-## Known External Issues
-- PesaPal account has transaction limit of TZS 9,999. Premium/Master plans blocked.
+- Direct Google OAuth (user's own Client ID), OpenAI GPT-5.2, OpenAI TTS tts-1, PesaPal (PRODUCTION)
 
 ## Backlog
 - P2: Granular loading spinners per input field during AI generation
-- P3: Route modularization (server.py 3200+ lines -> routes/)
+- P3: Route modularization (server.py 3400+ lines -> routes/)
 - P4: Team accounts, mobile app, offline mode, Swahili UI
