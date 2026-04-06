@@ -2525,153 +2525,117 @@ async def view_template_html(template_id: str, user: User = Depends(get_current_
     </body></html>"""
     
     return HTMLResponse(content=html)
-async def export_scheme_docx(scheme_id: str, user: User = Depends(get_current_user)):
-    """Export a scheme of work as a downloadable .doc file"""
-    from fastapi.responses import Response as FastAPIResponse
-    
-    scheme = await db.schemes.find_one({"scheme_id": scheme_id, "user_id": user.user_id}, {"_id": 0})
-    if not scheme:
-        raise HTTPException(status_code=404, detail="Scheme not found")
-    
-    cols = ["Main Competence", "Specific Competences", "Learning Activities", "Specific Activities",
-            "Month", "Week", "Periods", "Methods", "Resources", "Assessment", "References", "Remarks"]
-    col_keys = ["main", "specific", "activities", "specificActivities", "month", "week", "periods",
-                "methods", "resources", "assessment", "references", "remarks"]
-    
-    rows_html = ""
-    for row in scheme.get("competencies", []):
-        cells = "".join(f'<td style="border:1px solid #000;padding:5px 4px;vertical-align:top;">{row.get(k, "")}</td>' for k in col_keys)
-        rows_html += f"<tr>{cells}</tr>"
-    
-    html = f"""<html xmlns:o="urn:schemas-microsoft-com:office:office"
-          xmlns:w="urn:schemas-microsoft-com:office:word"
-          xmlns="http://www.w3.org/TR/REC-html40">
-    <head><meta charset="utf-8">
-    <style>
-      body {{ font-family: 'Times New Roman', serif; font-size: 11pt; }}
-      table {{ border-collapse: collapse; width: 100%; }}
-      th, td {{ border: 1px solid #000; padding: 4px 6px; vertical-align: top; font-size: 9pt; }}
-      th {{ background-color: #3498db; color: white; text-align: center; }}
-    </style></head><body>
-    <h1 style="text-align:center;">SCHEME OF WORK</h1>
-    <h2 style="text-align:center;color:#555;">{scheme.get('syllabus', '').upper()}</h2>
-    <table style="width:100%;margin-bottom:15px;">
-      <tr><td style="font-weight:bold;width:150px;">School:</td><td>{scheme.get('school', '')}</td></tr>
-      <tr><td style="font-weight:bold;">Teacher:</td><td>{scheme.get('teacher', '')}</td></tr>
-      <tr><td style="font-weight:bold;">Subject:</td><td>{scheme.get('subject', '')}</td></tr>
-      <tr><td style="font-weight:bold;">Year:</td><td>{scheme.get('year', '')} &nbsp; Term: {scheme.get('term', '')} &nbsp; Class: {scheme.get('class_name', '')}</td></tr>
-    </table>
-    <table style="width:100%;font-size:9pt;">
-      <thead><tr>{"".join(f'<th>{c}</th>' for c in cols)}</tr></thead>
-      <tbody>{rows_html}</tbody>
-    </table>
-    </body></html>"""
-    
-    subject = scheme.get("subject", "untitled")
-    syllabus = scheme.get("syllabus", "")
-    filename = f"Scheme_of_Work_{subject}_{syllabus}.doc"
-    
-    return FastAPIResponse(
-        content=f'\ufeff{html}'.encode('utf-8'),
-        media_type="application/msword",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
-    )
 
-@api_router.get("/schemes/{scheme_id}/view")
-async def view_scheme_html(scheme_id: str, user: User = Depends(get_current_user)):
-    """View a scheme of work as rendered HTML"""
-    from fastapi.responses import HTMLResponse
-    
-    scheme = await db.schemes.find_one({"scheme_id": scheme_id, "user_id": user.user_id}, {"_id": 0})
-    if not scheme:
-        raise HTTPException(status_code=404, detail="Scheme not found")
-    
-    cols = ["Main Competence", "Specific Competences", "Learning Activities", "Specific Activities",
-            "Month", "Week", "Periods", "Methods", "Resources", "Assessment", "References", "Remarks"]
+def _build_scheme_html(scheme: dict, for_word: bool = False) -> str:
+    """Build the full scheme of work HTML - shared by view, export, and shared links"""
+    syllabus = scheme.get("syllabus", "")
+    is_mainland = "mainland" in syllabus.lower()
+
+    if is_mainland:
+        cols = ["Umahiri Mkuu<br>(Main Competence)", "Umahiri Mahususi<br>(Specific Competence)",
+                "Shughuli Kuu<br>(Main Activity)", "Shughuli Mahususi<br>(Specific Activity)",
+                "Month", "Week", "Periods", "Methods", "Resources", "Assessment", "References", "Remarks"]
+    else:
+        cols = ["Main Competence", "Specific Competences", "Learning Activities", "Specific Activities",
+                "Month", "Week", "Periods", "Methods", "Resources", "Assessment", "References", "Remarks"]
+
     col_keys = ["main", "specific", "activities", "specificActivities", "month", "week", "periods",
                 "methods", "resources", "assessment", "references", "remarks"]
-    
+
     rows_html = ""
     for row in scheme.get("competencies", []):
         cells = "".join(f'<td>{row.get(k, "")}</td>' for k in col_keys)
         rows_html += f"<tr>{cells}</tr>"
-    
-    html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><title>Scheme of Work - {scheme.get('subject','')}</title>
+
+    word_ns = ' xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"' if for_word else ''
+    word_page = """
+    <!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View>
+    <w:Zoom>100</w:Zoom><w:DoNotOptimizeForBrowser/></w:WordDocument></xml>
+    <xml><o:OfficeDocumentSettings><o:AllowPNG/></o:OfficeDocumentSettings></xml><![endif]-->
+    """ if for_word else ""
+
+    html = f"""{'<!DOCTYPE html>' if not for_word else ''}<html{word_ns}><head><meta charset="utf-8">
+    <title>Scheme of Work - {scheme.get('subject','')}</title>
+    {word_page}
     <style>
+      @page {{ size: landscape; margin: 8mm; }}
       * {{ margin:0; padding:0; box-sizing:border-box; }}
-      body {{ font-family:'Times New Roman',serif; padding:30px; background:#fff; }}
-      h1 {{ text-align:center; font-size:22pt; margin-bottom:5px; }}
-      h2 {{ text-align:center; font-size:14pt; color:#555; margin-bottom:20px; }}
-      .info {{ margin-bottom:20px; }}
-      .info td {{ padding:4px 10px; }}
-      .info td:first-child {{ font-weight:bold; width:130px; }}
-      .data {{ width:100%; border-collapse:collapse; font-size:10pt; }}
-      .data th {{ background:#3498db; color:#fff; padding:8px 5px; border:1px solid #999; text-align:center; font-size:9pt; }}
-      .data td {{ border:1px solid #999; padding:6px 5px; vertical-align:top; }}
-      .actions {{ text-align:center; margin:25px 0; }}
-      .actions button {{ padding:10px 24px; margin:0 8px; border:none; border-radius:5px; font-weight:bold; cursor:pointer; font-size:14px; }}
-      .print-btn {{ background:#4a5568; color:#fff; }}
-      .download-btn {{ background:#9b59b6; color:#fff; }}
-      @media print {{ .actions {{ display:none; }} @page {{ size:landscape; margin:10mm; }} }}
+      body {{ font-family:'Times New Roman',serif; padding:15px; background:#fff; }}
+      h1 {{ text-align:center; font-size:16pt; margin-bottom:3px; }}
+      h2 {{ text-align:center; font-size:12pt; color:#555; margin-bottom:12px; }}
+      .info {{ margin-bottom:12px; }}
+      .info td {{ padding:2px 8px; font-size:10pt; }}
+      .info td:first-child {{ font-weight:bold; width:100px; }}
+      .data {{ width:100%; border-collapse:collapse; font-size:8pt; table-layout:fixed; }}
+      .data th {{ background:#2D5A27; color:#fff; padding:5px 3px; border:1px solid #666; text-align:center; font-size:7pt; word-wrap:break-word; }}
+      .data td {{ border:1px solid #999; padding:4px 3px; vertical-align:top; word-wrap:break-word; overflow-wrap:break-word; font-size:8pt; }}
+      .data td:nth-child(1), .data td:nth-child(2) {{ width:12%; }}
+      .data td:nth-child(3), .data td:nth-child(4) {{ width:11%; }}
+      .data td:nth-child(5) {{ width:6%; }}
+      .data td:nth-child(6) {{ width:5%; }}
+      .data td:nth-child(7) {{ width:4%; }}
+      .data td:nth-child(8), .data td:nth-child(9), .data td:nth-child(10) {{ width:9%; }}
+      .data td:nth-child(11) {{ width:8%; }}
+      .data td:nth-child(12) {{ width:6%; }}
+      .footer {{ text-align:center; margin-top:10px; font-size:8pt; color:#888; }}
+      @media print {{ @page {{ size:landscape; margin:8mm; }} }}
     </style></head><body>
     <h1>SCHEME OF WORK</h1>
-    <h2>{scheme.get('syllabus','').upper()}</h2>
+    <h2>{syllabus.upper()}</h2>
     <table class="info">
-      <tr><td>School:</td><td>{scheme.get('school','')}</td></tr>
-      <tr><td>Teacher:</td><td>{scheme.get('teacher','')}</td></tr>
-      <tr><td>Subject:</td><td>{scheme.get('subject','')}</td></tr>
-      <tr><td>Year:</td><td>{scheme.get('year','')} &nbsp;&nbsp; Term: {scheme.get('term','')} &nbsp;&nbsp; Class: {scheme.get('class_name','')}</td></tr>
+      <tr><td>School:</td><td>{scheme.get('school','')}</td><td style="font-weight:bold">Subject:</td><td>{scheme.get('subject','')}</td></tr>
+      <tr><td>Teacher:</td><td>{scheme.get('teacher','')}</td><td style="font-weight:bold">Year:</td><td>{scheme.get('year','')} &nbsp; Term: {scheme.get('term','')} &nbsp; Class: {scheme.get('class_name','')}</td></tr>
     </table>
     <table class="data">
       <thead><tr>{"".join(f'<th>{c}</th>' for c in cols)}</tr></thead>
       <tbody>{rows_html}</tbody>
     </table>
-    <p style="text-align:center;margin-top:20px;font-size:9pt;color:#888;">Generated by Mi-LessonPlan</p>
+    <p class="footer">Generated by Mi-LessonPlan</p>
     </body></html>"""
-    
-    return HTMLResponse(content=html)
+    return html
 
-@api_router.get("/lessons/{lesson_id}/export")
-async def export_lesson_txt(lesson_id: str, user: User = Depends(get_current_user)):
-    """Export a lesson plan as Word .doc with proper table formatting"""
-    from fastapi.responses import Response as FastAPIResponse
-    
-    lesson = await db.lesson_plans.find_one({"lesson_id": lesson_id, "user_id": user.user_id}, {"_id": 0})
-    if not lesson:
-        raise HTTPException(status_code=404, detail="Lesson not found")
-    
+def _build_lesson_html(lesson: dict, for_word: bool = False) -> str:
+    """Build lesson plan HTML - shared by view, export, and shared links"""
     content = lesson.get("content", {})
     form_data = lesson.get("form_data", {})
     syllabus = lesson.get("syllabus", "")
     subject = lesson.get("subject", "")
     grade = lesson.get("grade", "")
     topic = lesson.get("topic", "")
-    
+
     def safe(val, default=""):
-        if isinstance(val, list):
-            return "<br>".join(str(v) for v in val)
+        if isinstance(val, list): return "<br>".join(str(v) for v in val)
         return str(val) if val else default
-    
+
+    day_date = form_data.get("dayDate", "dd/mm/yyyy")
+    session_val = form_data.get("session", "")
+    cls = form_data.get("class", grade)
+    periods = form_data.get("periods", "")
+    minutes = form_data.get("time", form_data.get("minutes", ""))
+    eg = form_data.get("enrolledGirls", "")
+    eb = form_data.get("enrolledBoys", "")
+    pg = form_data.get("presentGirls", "")
+    pb = form_data.get("presentBoys", "")
+    te = (int(eg) if eg else 0) + (int(eb) if eb else 0)
+    tp = (int(pg) if pg else 0) + (int(pb) if pb else 0)
+
+    enroll_block = f"""Enrolled Girls: {eg}<br>Enrolled Boys: {eb}<br>Present Girls: {pg}<br>Present Boys: {pb}<br>
+        <b>Total Enrolled: {te}</b><br><b>Total Present: {tp}</b>"""
+
+    header_table = f"""<table><tr>
+        <th>DAY &amp; DATE<br>SIKU &amp; TAREHE</th><th>SESSION<br>MKONDO</th><th>CLASS<br>DARASA</th>
+        <th>PERIODS<br>VIPINDI</th><th>TIME<br>MUDA</th><th>ENROLLED / PRESENT<br>WALIOANDIKISHWA / WALIOHUDHURIA</th></tr>
+        <tr><td>{day_date}</td><td>{session_val}</td><td>{cls}</td><td>{periods}</td><td>{minutes}</td>
+        <td>{enroll_block}</td></tr></table>"""
+
+    eval_table = f"""<table><tr><th>TEACHER'S EVALUATION: TATHMINI YA MWALIMU</th></tr><tr><td>{safe(content.get('teacherEvaluation'))}</td></tr>
+        <tr><th>PUPIL'S WORK: KAZI YA MWANAFUNZI</th></tr><tr><td>{safe(content.get('pupilWork'))}</td></tr>
+        <tr><th>REMARKS: MAELEZO</th></tr><tr><td>{safe(content.get('remarks'))}</td></tr></table>"""
+
     if syllabus == "Zanzibar":
         intro = content.get("introductionActivities", {})
         new_know = content.get("newKnowledgeActivities", {})
-        day_date = form_data.get("dayDate", "dd/mm/yyyy")
-        session_val = form_data.get("session", "")
-        cls = form_data.get("class", grade)
-        periods = form_data.get("periods", "")
-        minutes = form_data.get("minutes", "")
-        eg = form_data.get("enrolledGirls", "")
-        eb = form_data.get("enrolledBoys", "")
-        pg = form_data.get("presentGirls", "")
-        pb = form_data.get("presentBoys", "")
-        te = (int(eg) if eg else 0) + (int(eb) if eb else 0)
-        tp = (int(pg) if pg else 0) + (int(pb) if pb else 0)
-        body = f"""<h1>LESSON PLAN (ANDALIO LA SOMO)</h1>
-        <table><tr><th>DAY &amp; DATE<br>SIKU &amp; TAREHE</th><th>SESSION<br>MKONDO</th><th>CLASS<br>DARASA</th>
-          <th>PERIODS<br>VIPINDI</th><th>TIME<br>MUDA</th><th>ENROLLED / PRESENT<br>WALIOANDIKISHWA / WALIOHUDHURIA</th></tr>
-        <tr><td>{day_date}</td><td>{session_val}</td><td>{cls}</td><td>{periods}</td><td>{minutes}</td>
-          <td>Enrolled Girls: {eg}<br>Enrolled Boys: {eb}<br>Present Girls: {pg}<br>Present Boys: {pb}<br>
-          <b>Total Enrolled: {te}</b><br><b>Total Present: {tp}</b></td></tr></table>
+        body = f"""<h1>LESSON PLAN (ANDALIO LA SOMO)</h1>{header_table}
         <table><tr><th colspan="2">GENERAL LEARNING OUTCOME: MATOKEO YA JUMLA YA KUJIFUNZA</th></tr>
           <tr><td colspan="2">{safe(content.get('generalOutcome'))}</td></tr>
           <tr><th>MAIN TOPIC: MADA KUU</th><th>SUB TOPIC: MADA NDOGO</th></tr>
@@ -2690,33 +2654,14 @@ async def export_lesson_txt(lesson_id: str, user: User = Depends(get_current_use
             <td>{safe(intro.get('assessment'))}</td></tr>
           <tr><td><b>2. NEW KNOWLEDGE / KUJENGA MAARIFA MAPYA</b></td><td>{safe(new_know.get('time'))}</td>
             <td>{safe(new_know.get('teachingActivities'))}</td><td>{safe(new_know.get('learningActivities'))}</td>
-            <td>{safe(new_know.get('assessment'))}</td></tr></table>
-        <table><tr><th>TEACHER'S EVALUATION: TATHMINI YA MWALIMU</th></tr><tr><td>{safe(content.get('teacherEvaluation'))}</td></tr>
-          <tr><th>PUPIL'S WORK: KAZI YA MWANAFUNZI</th></tr><tr><td>{safe(content.get('pupilWork'))}</td></tr>
-          <tr><th>REMARKS: MAELEZO</th></tr><tr><td>{safe(content.get('remarks'))}</td></tr></table>"""
+            <td>{safe(new_know.get('assessment'))}</td></tr></table>{eval_table}"""
     else:
         stages = content.get("stages", {})
         intro = stages.get("introduction", {})
         comp_dev = stages.get("competenceDevelopment", {})
         design = stages.get("design", {})
         realisation = stages.get("realisation", {})
-        day_date = form_data.get("dayDate", "dd/mm/yyyy")
-        session_val = form_data.get("session", "")
-        cls = form_data.get("class", grade)
-        periods = form_data.get("periods", "")
-        minutes = form_data.get("time", form_data.get("minutes", ""))
-        eg = form_data.get("enrolledGirls", "")
-        eb = form_data.get("enrolledBoys", "")
-        pg = form_data.get("presentGirls", "")
-        pb = form_data.get("presentBoys", "")
-        te = (int(eg) if eg else 0) + (int(eb) if eb else 0)
-        tp = (int(pg) if pg else 0) + (int(pb) if pb else 0)
-        body = f"""<h1>LESSON PLAN (ANDALIO LA SOMO)</h1>
-        <table><tr><th>DAY &amp; DATE<br>SIKU &amp; TAREHE</th><th>SESSION<br>MKONDO</th><th>CLASS<br>DARASA</th>
-          <th>PERIODS<br>VIPINDI</th><th>TIME<br>MUDA</th><th>ENROLLED / PRESENT<br>WALIOANDIKISHWA / WALIOHUDHURIA</th></tr>
-        <tr><td>{day_date}</td><td>{session_val}</td><td>{cls}</td><td>{periods}</td><td>{minutes}</td>
-          <td>Enrolled Girls: {eg}<br>Enrolled Boys: {eb}<br>Present Girls: {pg}<br>Present Boys: {pb}<br>
-          <b>Total Enrolled: {te}</b><br><b>Total Present: {tp}</b></td></tr></table>
+        body = f"""<h1>LESSON PLAN (ANDALIO LA SOMO)</h1>{header_table}
         <table><tr><th colspan="2">GENERAL LEARNING OUTCOME: MATOKEO YA JUMLA YA KUJIFUNZA</th></tr>
           <tr><td colspan="2">{safe(content.get('mainCompetence'))}</td></tr>
           <tr><th>MAIN TOPIC: MADA KUU</th><th>SUB TOPIC: MADA NDOGO</th></tr>
@@ -2741,260 +2686,91 @@ async def export_lesson_txt(lesson_id: str, user: User = Depends(get_current_use
             <td>{safe(design.get('assessment'))}</td></tr>
           <tr><td><b>4. REALISATION / UTEKELEZAJI</b></td><td>{safe(realisation.get('time'))}</td>
             <td>{safe(realisation.get('teachingActivities'))}</td><td>{safe(realisation.get('learningActivities'))}</td>
-            <td>{safe(realisation.get('assessment'))}</td></tr></table>
-        <table><tr><th>TEACHER'S EVALUATION: TATHMINI YA MWALIMU</th></tr><tr><td>{safe(content.get('teacherEvaluation'))}</td></tr>
-          <tr><th>PUPIL'S WORK: KAZI YA MWANAFUNZI</th></tr><tr><td>{safe(content.get('pupilWork'))}</td></tr>
-          <tr><th>REMARKS: MAELEZO</th></tr><tr><td>{safe(content.get('remarks'))}</td></tr></table>"""
-    
-    html = f"""<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
-    <head><meta charset="utf-8"><style>
+            <td>{safe(realisation.get('assessment'))}</td></tr></table>{eval_table}"""
+
+    word_ns = ' xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"' if for_word else ''
+    html = f"""{'<!DOCTYPE html>' if not for_word else ''}<html{word_ns}><head><meta charset="utf-8">
+    <style>
+      @page {{ size: portrait; margin: 15mm; }}
+      * {{ margin:0; padding:0; box-sizing:border-box; }}
       body {{ font-family:'Times New Roman',serif; font-size:11pt; line-height:1.4; padding:20px; }}
       h1 {{ text-align:center; font-size:14pt; margin-bottom:12px; }}
-      h2 {{ font-size:12pt; margin:15px 0 8px; border-bottom:1px solid #333; }}
+      h2 {{ font-size:12pt; margin:15px 0 8px; border-bottom:1px solid #333; padding-bottom:4px; }}
       table {{ width:100%; border-collapse:collapse; margin:8px 0 14px; }}
       th, td {{ border:1px solid #333; padding:5px 8px; vertical-align:top; font-size:10pt; }}
-      th {{ background:#e8e8e8; font-weight:bold; text-align:center; }}
-    </style></head><body>{body}</body></html>"""
-    
-    filename = f"{subject}_{topic}_lesson.doc"
+      th {{ background:#2D5A27; color:white; font-weight:bold; text-align:center; }}
+      .footer {{ text-align:center; margin-top:15px; font-size:8pt; color:#888; }}
+    </style></head><body>{body}
+    <p class="footer">Generated by Mi-LessonPlan</p>
+    </body></html>"""
+    return html
+
+def _html_to_pdf(html: str) -> bytes:
+    """Convert HTML to PDF using weasyprint"""
+    import weasyprint
+    pdf_bytes = weasyprint.HTML(string=html).write_pdf()
+    return pdf_bytes
+
+@api_router.get("/schemes/{scheme_id}/export")
+async def export_scheme_docx(scheme_id: str, user: User = Depends(get_current_user)):
+    """Export a scheme of work as landscape Word .doc"""
+    from fastapi.responses import Response as FastAPIResponse
+
+    scheme = await db.schemes.find_one({"scheme_id": scheme_id, "user_id": user.user_id}, {"_id": 0})
+    if not scheme:
+        raise HTTPException(status_code=404, detail="Scheme not found")
+
+    html = _build_scheme_html(scheme, for_word=True)
+    subject = scheme.get("subject", "untitled")
+    syllabus = scheme.get("syllabus", "")
+    filename = f"Scheme_of_Work_{subject}_{syllabus}.doc"
+
     return FastAPIResponse(
-        content=html.encode('utf-8'),
+        content=f'\ufeff{html}'.encode('utf-8'),
         media_type="application/msword",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
 
+@api_router.get("/schemes/{scheme_id}/view")
+async def view_scheme_html(scheme_id: str, user: User = Depends(get_current_user)):
+    """View a scheme of work as rendered HTML"""
+    from fastapi.responses import HTMLResponse
+
+    scheme = await db.schemes.find_one({"scheme_id": scheme_id, "user_id": user.user_id}, {"_id": 0})
+    if not scheme:
+        raise HTTPException(status_code=404, detail="Scheme not found")
+
+    html = _build_scheme_html(scheme, for_word=False)
+    return HTMLResponse(content=html)
+
+@api_router.get("/lessons/{lesson_id}/export")
+async def export_lesson_txt(lesson_id: str, user: User = Depends(get_current_user)):
+    """Export a lesson plan as Word .doc with proper table formatting"""
+    from fastapi.responses import Response as FastAPIResponse
+
+    lesson = await db.lesson_plans.find_one({"lesson_id": lesson_id, "user_id": user.user_id}, {"_id": 0})
+    if not lesson:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+
+    html = _build_lesson_html(lesson, for_word=True)
+    subject = lesson.get("subject", "")
+    topic = lesson.get("topic", "")
+    filename = f"{subject}_{topic}_lesson.doc"
+    return FastAPIResponse(
+        content=f'\ufeff{html}'.encode('utf-8'),
+        media_type="application/msword",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
 @api_router.get("/lessons/{lesson_id}/view")
 async def view_lesson_html(lesson_id: str, user: User = Depends(get_current_user)):
     """View a lesson plan as rendered HTML - proper Zanzibar/Mainland table format"""
     from fastapi.responses import HTMLResponse
-    
+
     lesson = await db.lesson_plans.find_one({"lesson_id": lesson_id, "user_id": user.user_id}, {"_id": 0})
     if not lesson:
         raise HTTPException(status_code=404, detail="Lesson not found")
-    
-    content = lesson.get("content", {})
-    form_data = lesson.get("form_data", {})
-    syllabus = lesson.get("syllabus", "")
-    subject = lesson.get("subject", "")
-    grade = lesson.get("grade", "")
-    topic = lesson.get("topic", "")
-    
-    def safe(val, default=""):
-        if isinstance(val, list):
-            return "<br>".join(str(v) for v in val)
-        return str(val) if val else default
-    
-    if syllabus == "Zanzibar":
-        intro = content.get("introductionActivities", {})
-        new_know = content.get("newKnowledgeActivities", {})
-        day_date = form_data.get("dayDate", "dd/mm/yyyy")
-        session = form_data.get("session", "")
-        cls = form_data.get("class", grade)
-        periods = form_data.get("periods", "")
-        minutes = form_data.get("minutes", "")
-        eg = form_data.get("enrolledGirls", "")
-        eb = form_data.get("enrolledBoys", "")
-        pg = form_data.get("presentGirls", "")
-        pb = form_data.get("presentBoys", "")
-        te = (int(eg) if eg else 0) + (int(eb) if eb else 0)
-        tp = (int(pg) if pg else 0) + (int(pb) if pb else 0)
-        
-        body = f"""
-        <h1>LESSON PLAN (ANDALIO LA SOMO)</h1>
-        <table>
-          <tr>
-            <th>DAY & DATE<br><small>SIKU & TAREHE</small></th>
-            <th>SESSION<br><small>MKONDO</small></th>
-            <th>CLASS<br><small>DARASA</small></th>
-            <th>PERIODS<br><small>VIPINDI</small></th>
-            <th>TIME<br><small>MUDA</small></th>
-            <th>ENROLLED / PRESENT<br><small>WALIOANDIKISHWA / WALIOHUDHURIA</small></th>
-          </tr>
-          <tr>
-            <td>{day_date}</td>
-            <td>{session}</td>
-            <td>{cls}</td>
-            <td>{periods}</td>
-            <td>{minutes}</td>
-            <td>
-              Enrolled Girls: {eg}<br>Enrolled Boys: {eb}<br>
-              Present Girls: {pg}<br>Present Boys: {pb}<br>
-              <strong>Total Enrolled: {te}</strong><br><strong>Total Present: {tp}</strong>
-            </td>
-          </tr>
-        </table>
-        
-        <table class="info-table">
-          <tr><th colspan="2">GENERAL LEARNING OUTCOME: MATOKEO YA JUMLA YA KUJIFUNZA</th></tr>
-          <tr><td colspan="2">{safe(content.get('generalOutcome'))}</td></tr>
-          <tr><th>MAIN TOPIC: MADA KUU</th><th>SUB TOPIC: MADA NDOGO</th></tr>
-          <tr><td>{safe(content.get('mainTopic'))}</td><td>{safe(content.get('subTopic'))}</td></tr>
-          <tr><th colspan="2">SPECIFIC LEARNING OUTCOME: MATOKEO MAHSUSI YA KUJIFUNZA</th></tr>
-          <tr><td colspan="2">{safe(content.get('specificOutcome'))}</td></tr>
-          <tr><th colspan="2">LEARNING RESOURCES: RASILIMALI ZA KUJIFUNZA</th></tr>
-          <tr><td colspan="2">{safe(content.get('learningResources'))}</td></tr>
-          <tr><th colspan="2">REFERENCES: REJEA</th></tr>
-          <tr><td colspan="2">{safe(content.get('references'))}</td></tr>
-        </table>
-        
-        <h2>LESSON DEVELOPMENT (MAENDELEO YA SOMO)</h2>
-        <table>
-          <tr>
-            <th style="width:20%">STEPS<br><small>HATUA</small></th>
-            <th style="width:10%">TIME<br><small>MUDA</small></th>
-            <th style="width:25%">TEACHING ACTIVITIES<br><small>VITENDO VYA KUFUNDISHIA</small></th>
-            <th style="width:25%">LEARNING ACTIVITIES<br><small>VITENDO VYA KUJIFUNZIA</small></th>
-            <th style="width:20%">ASSESSMENT<br><small>TATHMINI</small></th>
-          </tr>
-          <tr>
-            <td><strong>1. INTRODUCTION</strong><br><small>UTANGULIZI</small></td>
-            <td>{safe(intro.get('time'))}</td>
-            <td>{safe(intro.get('teachingActivities'))}</td>
-            <td>{safe(intro.get('learningActivities'))}</td>
-            <td>{safe(intro.get('assessment'))}</td>
-          </tr>
-          <tr>
-            <td><strong>2. BUILDING NEW KNOWLEDGE AND SKILLS</strong><br><small>KUJENGA MAARIFA MAPYA NA UJUZI</small></td>
-            <td>{safe(new_know.get('time'))}</td>
-            <td>{safe(new_know.get('teachingActivities'))}</td>
-            <td>{safe(new_know.get('learningActivities'))}</td>
-            <td>{safe(new_know.get('assessment'))}</td>
-          </tr>
-        </table>
-        
-        <table class="info-table">
-          <tr><th colspan="2">TEACHER'S EVALUATION: TATHMINI YA MWALIMU</th></tr>
-          <tr><td colspan="2">{safe(content.get('teacherEvaluation'))}</td></tr>
-          <tr><th colspan="2">PUPIL'S WORK: KAZI YA MWANAFUNZI</th></tr>
-          <tr><td colspan="2">{safe(content.get('pupilWork'))}</td></tr>
-          <tr><th colspan="2">REMARKS: MAELEZO</th></tr>
-          <tr><td colspan="2">{safe(content.get('remarks'))}</td></tr>
-        </table>
-        """
-    else:
-        # Tanzania Mainland format — same bilingual table layout as Zanzibar
-        stages = content.get("stages", {})
-        intro = stages.get("introduction", {})
-        comp_dev = stages.get("competenceDevelopment", {})
-        design = stages.get("design", {})
-        realisation = stages.get("realisation", {})
-        
-        day_date = form_data.get("dayDate", "dd/mm/yyyy")
-        session = form_data.get("session", "")
-        cls = form_data.get("class", grade)
-        periods = form_data.get("periods", "")
-        minutes = form_data.get("time", form_data.get("minutes", ""))
-        eg = form_data.get("enrolledGirls", "")
-        eb = form_data.get("enrolledBoys", "")
-        pg = form_data.get("presentGirls", "")
-        pb = form_data.get("presentBoys", "")
-        te = (int(eg) if eg else 0) + (int(eb) if eb else 0)
-        tp = (int(pg) if pg else 0) + (int(pb) if pb else 0)
-        
-        body = f"""
-        <h1>LESSON PLAN (ANDALIO LA SOMO)</h1>
-        <table>
-          <tr>
-            <th>DAY & DATE<br><small>SIKU & TAREHE</small></th>
-            <th>SESSION<br><small>MKONDO</small></th>
-            <th>CLASS<br><small>DARASA</small></th>
-            <th>PERIODS<br><small>VIPINDI</small></th>
-            <th>TIME<br><small>MUDA</small></th>
-            <th>ENROLLED / PRESENT<br><small>WALIOANDIKISHWA / WALIOHUDHURIA</small></th>
-          </tr>
-          <tr>
-            <td>{day_date}</td>
-            <td>{session}</td>
-            <td>{cls}</td>
-            <td>{periods}</td>
-            <td>{minutes}</td>
-            <td>
-              Enrolled Girls: {eg}<br>Enrolled Boys: {eb}<br>
-              Present Girls: {pg}<br>Present Boys: {pb}<br>
-              <strong>Total Enrolled: {te}</strong><br><strong>Total Present: {tp}</strong>
-            </td>
-          </tr>
-        </table>
-        
-        <table class="info-table">
-          <tr><th colspan="2">GENERAL LEARNING OUTCOME: MATOKEO YA JUMLA YA KUJIFUNZA</th></tr>
-          <tr><td colspan="2">{safe(content.get('mainCompetence'))}</td></tr>
-          <tr><th>MAIN TOPIC: MADA KUU</th><th>SUB TOPIC: MADA NDOGO</th></tr>
-          <tr><td>{safe(content.get('mainActivity'))}</td><td>{safe(content.get('specificActivity'))}</td></tr>
-          <tr><th colspan="2">SPECIFIC LEARNING OUTCOME: MATOKEO MAHSUSI YA KUJIFUNZA</th></tr>
-          <tr><td colspan="2">{safe(content.get('specificCompetence'))}</td></tr>
-          <tr><th colspan="2">LEARNING RESOURCES: RASILIMALI ZA KUJIFUNZA</th></tr>
-          <tr><td colspan="2">{safe(content.get('teachingResources'))}</td></tr>
-          <tr><th colspan="2">REFERENCES: REJEA</th></tr>
-          <tr><td colspan="2">{safe(content.get('references'))}</td></tr>
-        </table>
-        
-        <h2>LESSON DEVELOPMENT (MAENDELEO YA SOMO)</h2>
-        <table>
-          <tr>
-            <th style="width:20%">STEPS<br><small>HATUA</small></th>
-            <th style="width:10%">TIME<br><small>MUDA</small></th>
-            <th style="width:25%">TEACHING ACTIVITIES<br><small>VITENDO VYA KUFUNDISHIA</small></th>
-            <th style="width:25%">LEARNING ACTIVITIES<br><small>VITENDO VYA KUJIFUNZIA</small></th>
-            <th style="width:20%">ASSESSMENT<br><small>TATHMINI</small></th>
-          </tr>
-          <tr>
-            <td><strong>1. INTRODUCTION</strong><br><small>UTANGULIZI</small></td>
-            <td>{safe(intro.get('time'))}</td>
-            <td>{safe(intro.get('teachingActivities'))}</td>
-            <td>{safe(intro.get('learningActivities'))}</td>
-            <td>{safe(intro.get('assessment'))}</td>
-          </tr>
-          <tr>
-            <td><strong>2. BUILDING NEW KNOWLEDGE AND SKILLS</strong><br><small>KUJENGA MAARIFA MAPYA NA UJUZI</small></td>
-            <td>{safe(comp_dev.get('time'))}</td>
-            <td>{safe(comp_dev.get('teachingActivities'))}</td>
-            <td>{safe(comp_dev.get('learningActivities'))}</td>
-            <td>{safe(comp_dev.get('assessment'))}</td>
-          </tr>
-          <tr>
-            <td><strong>3. DESIGN</strong><br><small>UBUNIFU</small></td>
-            <td>{safe(design.get('time'))}</td>
-            <td>{safe(design.get('teachingActivities'))}</td>
-            <td>{safe(design.get('learningActivities'))}</td>
-            <td>{safe(design.get('assessment'))}</td>
-          </tr>
-          <tr>
-            <td><strong>4. REALISATION</strong><br><small>UTEKELEZAJI</small></td>
-            <td>{safe(realisation.get('time'))}</td>
-            <td>{safe(realisation.get('teachingActivities'))}</td>
-            <td>{safe(realisation.get('learningActivities'))}</td>
-            <td>{safe(realisation.get('assessment'))}</td>
-          </tr>
-        </table>
-        
-        <table class="info-table">
-          <tr><th colspan="2">TEACHER'S EVALUATION: TATHMINI YA MWALIMU</th></tr>
-          <tr><td colspan="2">{safe(content.get('teacherEvaluation'))}</td></tr>
-          <tr><th colspan="2">PUPIL'S WORK: KAZI YA MWANAFUNZI</th></tr>
-          <tr><td colspan="2">{safe(content.get('pupilWork'))}</td></tr>
-          <tr><th colspan="2">REMARKS: MAELEZO</th></tr>
-          <tr><td colspan="2">{safe(content.get('remarks'))}</td></tr>
-        </table>
-        """
-    
-    html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><title>Lesson Plan - {topic}</title>
-    <style>
-      * {{ margin:0; padding:0; box-sizing:border-box; }}
-      body {{ font-family:'Times New Roman',serif; padding:20px 30px; background:#fff; font-size:11pt; line-height:1.4; color:#000; }}
-      h1 {{ text-align:center; font-size:16pt; margin-bottom:15px; text-transform:uppercase; letter-spacing:1px; }}
-      h2 {{ font-size:13pt; margin:18px 0 10px; padding-bottom:4px; border-bottom:1px solid #333; }}
-      table {{ width:100%; border-collapse:collapse; margin:10px 0 18px; }}
-      th, td {{ border:1px solid #333; padding:6px 10px; text-align:left; vertical-align:top; font-size:10pt; }}
-      th {{ background:#e8e8e8; font-weight:bold; text-align:center; }}
-      .info-table th {{ background:#f0f0f0; text-align:left; width:25%; }}
-      .info-table td {{ background:#fafafa; }}
-      small {{ color:#555; }}
-    </style></head><body>
-    {body}
-    <p style="text-align:center;margin-top:20px;font-size:9pt;color:#888;">Generated by Mi-LessonPlan</p>
-    </body></html>"""
-    
+
+    html = _build_lesson_html(lesson, for_word=False)
     return HTMLResponse(content=html)
 
 # ==================== PROFILE ROUTES ====================
