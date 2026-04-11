@@ -1832,13 +1832,13 @@ async def get_dictations(user: User = Depends(get_current_user)):
     """Get all dictations for the current user"""
     dictations = await db.dictations.find(
         {"user_id": user.user_id},
-        {"_id": 0}
+        {"_id": 0, "audio_data": 0}
     ).sort("created_at", -1).to_list(100)
     return {"dictations": dictations}
 
 @api_router.post("/dictations")
 async def save_dictation(request: Request, user: User = Depends(get_current_user)):
-    """Save a dictation record"""
+    """Save a dictation record with optional audio data"""
     data = await request.json()
     dictation = {
         "dictation_id": f"dict_{uuid.uuid4().hex[:12]}",
@@ -1846,10 +1846,12 @@ async def save_dictation(request: Request, user: User = Depends(get_current_user
         "title": data.get("title", "Untitled Dictation"),
         "text": data.get("text", ""),
         "language": data.get("language", "en-GB"),
+        "audio_data": data.get("audio_data"),
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.dictations.insert_one(dictation)
     dictation.pop("_id", None)
+    dictation.pop("audio_data", None)
     return dictation
 
 @api_router.post("/dictation/generate")
@@ -1884,22 +1886,20 @@ async def generate_dictation_audio(request: Request, user: User = Depends(get_cu
         raise HTTPException(status_code=500, detail="TTS service not configured")
     
     try:
-        # If non-English language selected, translate text first
-        tts_text = text
-        if language != "en-GB":
-            from emergentintegrations.llm.chat import LlmChat, UserMessage
-            lang_names = {"sw": "Swahili", "ar": "Arabic", "tr": "Turkish", "fr": "French"}
-            target_lang = lang_names.get(language, "English")
-            
-            chat = LlmChat(
-                api_key=api_key,
-                session_id=f"translate_{uuid.uuid4().hex[:8]}",
-                system_message=f"You are a translator. Translate the following text to {target_lang}. Return ONLY the translated text, nothing else."
-            ).with_model("openai", "gpt-5.2")
-            
-            translation = await chat.send_message(UserMessage(text=text))
-            tts_text = translation.strip()
-            logger.info(f"Translated to {target_lang}: {tts_text[:50]}...")
+        # Always translate text to the selected target language
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        lang_names = {"en-GB": "British English", "sw": "Swahili", "ar": "Arabic", "tr": "Turkish", "fr": "French"}
+        target_lang = lang_names.get(language, "English")
+        
+        chat = LlmChat(
+            api_key=api_key,
+            session_id=f"translate_{uuid.uuid4().hex[:8]}",
+            system_message=f"You are a translator. Translate the following text to {target_lang}. If the text is already in {target_lang}, return it unchanged. Return ONLY the translated text, nothing else. No explanations, no quotes."
+        ).with_model("openai", "gpt-5.2")
+        
+        translation = await chat.send_message(UserMessage(text=text))
+        tts_text = translation.strip()
+        logger.info(f"Translated to {target_lang}: {tts_text[:80]}...")
         
         tts = OpenAITextToSpeech(api_key=api_key)
         audio_bytes = await tts.generate_speech(
@@ -1927,20 +1927,54 @@ async def delete_dictation(dictation_id: str, user: User = Depends(get_current_u
         raise HTTPException(status_code=404, detail="Dictation not found")
     return {"message": "Dictation deleted"}
 
+
+@api_router.get("/dictations/{dictation_id}/audio")
+async def get_dictation_audio(dictation_id: str, user: User = Depends(get_current_user)):
+    """Serve stored audio for a dictation (no re-generation)"""
+    from fastapi.responses import Response as FastAPIResponse
+    dictation = await db.dictations.find_one({"dictation_id": dictation_id, "user_id": user.user_id}, {"_id": 0})
+    if not dictation:
+        raise HTTPException(status_code=404, detail="Dictation not found")
+    
+    audio_data = dictation.get("audio_data")
+    if not audio_data:
+        raise HTTPException(status_code=404, detail="No stored audio. Use play to regenerate.")
+    
+    audio_bytes = base64.b64decode(audio_data)
+    title = dictation.get("title", "dictation")
+    safe_title = "".join(c for c in title if c.isalnum() or c in " _-").strip().replace(" ", "_")
+    return FastAPIResponse(
+        content=audio_bytes,
+        media_type="audio/mpeg",
+        headers={"Content-Disposition": f'inline; filename="{safe_title}.mp3"'}
+    )
+
 @api_router.get("/dictations/{dictation_id}/download")
 async def download_dictation_audio(dictation_id: str, user: User = Depends(get_current_user)):
-    """Generate and download dictation audio as MP3 file"""
+    """Download dictation audio - serves stored audio or regenerates"""
     from fastapi.responses import Response as FastAPIResponse
-    from emergentintegrations.llm.openai import OpenAITextToSpeech
 
     dictation = await db.dictations.find_one({"dictation_id": dictation_id, "user_id": user.user_id}, {"_id": 0})
     if not dictation:
         raise HTTPException(status_code=404, detail="Dictation not found")
 
-    text = dictation.get("text", "")
-    language = dictation.get("language", "en-GB")
     title = dictation.get("title", "dictation")
+    safe_title = "".join(c for c in title if c.isalnum() or c in " _-").strip().replace(" ", "_")
+    language = dictation.get("language", "en-GB")
 
+    # Serve stored audio if available (no re-generation cost)
+    audio_data = dictation.get("audio_data")
+    if audio_data:
+        audio_bytes = base64.b64decode(audio_data)
+        return FastAPIResponse(
+            content=audio_bytes,
+            media_type="audio/mpeg",
+            headers={"Content-Disposition": f'attachment; filename="{safe_title}_{language}.mp3"'}
+        )
+
+    # Fallback: regenerate audio
+    from emergentintegrations.llm.openai import OpenAITextToSpeech
+    text = dictation.get("text", "")
     if not text.strip():
         raise HTTPException(status_code=400, detail="Dictation has no text")
 
@@ -1952,25 +1986,22 @@ async def download_dictation_audio(dictation_id: str, user: User = Depends(get_c
         raise HTTPException(status_code=500, detail="TTS service not configured")
 
     try:
-        tts_text = text
-        if language != "en-GB":
-            from emergentintegrations.llm.chat import LlmChat, UserMessage
-            lang_names = {"sw": "Swahili", "ar": "Arabic", "tr": "Turkish", "fr": "French"}
-            target_lang = lang_names.get(language, "English")
-            chat = LlmChat(
-                api_key=api_key,
-                session_id=f"translate_{uuid.uuid4().hex[:8]}",
-                system_message=f"You are a translator. Translate the following text to {target_lang}. Return ONLY the translated text, nothing else."
-            ).with_model("openai", "gpt-5.2")
-            translation = await chat.send_message(UserMessage(text=text))
-            tts_text = translation.strip()
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        lang_names = {"en-GB": "British English", "sw": "Swahili", "ar": "Arabic", "tr": "Turkish", "fr": "French"}
+        target_lang = lang_names.get(language, "English")
+        chat = LlmChat(
+            api_key=api_key,
+            session_id=f"translate_{uuid.uuid4().hex[:8]}",
+            system_message=f"You are a translator. Translate the following text to {target_lang}. If the text is already in {target_lang}, return it unchanged. Return ONLY the translated text, nothing else. No explanations, no quotes."
+        ).with_model("openai", "gpt-5.2")
+        translation = await chat.send_message(UserMessage(text=text))
+        tts_text = translation.strip()
 
         tts = OpenAITextToSpeech(api_key=api_key)
         audio_bytes = await tts.generate_speech(
             text=tts_text, model="tts-1", voice=voice, response_format="mp3", speed=1.0
         )
 
-        safe_title = "".join(c for c in title if c.isalnum() or c in " _-").strip().replace(" ", "_")
         return FastAPIResponse(
             content=audio_bytes,
             media_type="audio/mpeg",

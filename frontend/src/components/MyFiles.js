@@ -171,11 +171,21 @@ const MyFiles = () => {
 
     setGeneratingAudio(dictation.dictation_id);
     try {
-      const response = await axios.post(
-        `${API_URL}/api/dictation/generate`,
-        { text: dictation.text, language: dictation.language },
-        { withCredentials: true, responseType: 'blob' }
-      );
+      // Try stored audio first (instant, no credits used)
+      let response;
+      try {
+        response = await axios.get(
+          `${API_URL}/api/dictations/${dictation.dictation_id}/audio`,
+          { withCredentials: true, responseType: 'blob' }
+        );
+      } catch {
+        // Fallback: regenerate via TTS if no stored audio
+        response = await axios.post(
+          `${API_URL}/api/dictation/generate`,
+          { text: dictation.text, language: dictation.language },
+          { withCredentials: true, responseType: 'blob' }
+        );
+      }
       const url = URL.createObjectURL(response.data);
       const audio = new Audio(url);
       audioRef.current = audio;
@@ -186,7 +196,7 @@ const MyFiles = () => {
         URL.revokeObjectURL(url);
       };
     } catch (error) {
-      console.error('Error generating audio:', error);
+      console.error('Error playing audio:', error);
       toast.error('Failed to play dictation audio.');
     } finally {
       setGeneratingAudio(null);

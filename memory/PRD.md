@@ -25,25 +25,36 @@ A comprehensive education platform for Tanzanian teachers supporting both Tanzan
 - Admin dashboard with analytics
 - ClickPesa payment integration (live, not sandbox)
 - PWA support
+- Dictation: translate-then-speak with stored audio playback
+
+## Dictation Feature Details
+- User types text in ANY language, selects output language
+- Backend always translates to target language via GPT-5.2
+- TTS generates audio in target language voice
+- Audio saved as base64 in MongoDB with dictation record
+- MyFiles playback uses stored audio (no re-generation cost)
+- Download serves stored audio or regenerates as fallback
+
+## Subscription Tiers & Limits
+- Free: 10 lessons/month, basic features (my-files, profile, payment, activities)
+- Basic/Standard (TZS 5,999): 50 lessons/month + notes, shared-links
+- Premium/Professional (TZS 14,999): Unlimited + uploads, schemes, templates, dictation
+- Master (TZS 29,999): Unlimited + Refer & Earn
+
+## Link creation: Free and unlimited (all paid plans)
+## Audio/AI generation: Uses Emergent LLM Key credits (not unlimited)
 
 ## Code Quality Fixes Applied (Apr 2026)
-- Fixed CSP: Added cdn.fontshare.com to font-src/style-src, added mi-lessonplan.site to connect-src
-- Fixed XSS: Installed DOMPurify, sanitized all dangerouslySetInnerHTML and innerHTML usage
-- Fixed 7+ missing React hook dependencies (useCallback wrapping)
-- Fixed base64 scoping bug in build_download_content
-- Fixed clickpesa_endpoints.py syntax error (leading space)
-- Fixed period_start potentially undefined variable in server.py
-- Fixed array index keys in ReferralRegistry and PesaPalTransactionManager
-- Improved MongoDB connection resilience (60s timeout, retry options)
-
-## Subscription Tiers
-- Free: 10 lessons/month, basic features
-- Standard (TZS 5,999): 30 lessons/month + sharing
-- Professional (TZS 14,999): Unlimited lessons
-- Master (TZS 29,999): Unlimited + Refer & Earn
+- Fixed CSP: Added cdn.fontshare.com, mi-lessonplan.site
+- Fixed XSS: DOMPurify for all innerHTML/dangerouslySetInnerHTML
+- Fixed 7+ missing React hook dependencies
+- Fixed base64 scoping bug, period_start undefined, clickpesa syntax
+- Fixed array index keys in dynamic lists
+- Improved MongoDB connection resilience
 
 ## Known Infrastructure Issue
 - MongoDB Atlas connectivity from preview pods is intermittent (IP whitelist)
+- Production frontend .env must use REACT_APP_BACKEND_URL=https://mi-lessonplan.site
 
 ## Upcoming Tasks
 - P1: Refactor server.py (3500+ lines) into modular route files
