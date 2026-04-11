@@ -153,7 +153,7 @@ const ReferralRegistry = () => {
         ) : (
           <div className="divide-y">
             {referrers.map((referrer, idx) => (
-              <div key={idx}>
+              <div key={referrer.referrer?.user_id || referrer.referrer?.admin_id || idx}>
                 {/* Referrer Row */}
                 <button
                   className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 text-left"

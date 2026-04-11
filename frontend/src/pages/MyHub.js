@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import Header from '../components/Header';
 import { useAuth } from '../contexts/AuthContext';
@@ -38,11 +38,7 @@ const MyHub = () => {
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [blockedFeature, setBlockedFeature] = useState('');
 
-  useEffect(() => {
-    fetchAccess();
-  }, []);
-
-  const fetchAccess = async () => {
+  const fetchAccess = useCallback(async () => {
     try {
       const res = await axios.get(`${API_URL}/api/user/feature-access`, { withCredentials: true });
       setAccessData(res.data);
@@ -50,7 +46,11 @@ const MyHub = () => {
       // default to free
       setAccessData({ plan: 'free', features: ['my-files', 'profile-settings', 'payment-settings', 'my-activities'], lesson_usage: { used: 0, limit: 10, days_remaining: 30 } });
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchAccess();
+  }, [fetchAccess]);
 
   const allowedFeatures = new Set(accessData?.features || []);
   const userPlan = accessData?.plan || 'free';

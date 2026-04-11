@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
+import DOMPurify from 'dompurify';
 import {
   FileText, FlaskConical, Globe, Calculator, Atom, TestTubes,
   Download, Save, Check, X, ChevronLeft, Loader2, Lock
@@ -57,7 +58,7 @@ const TemplateEditor = ({ template, onBack, onSaved }) => {
 
   useEffect(() => {
     if (editorRef.current && content.body) {
-      editorRef.current.innerHTML = content.body;
+      editorRef.current.innerHTML = DOMPurify.sanitize(content.body);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -202,7 +203,7 @@ const Templates = () => {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
 
-  const fetchTemplates = async () => {
+  const fetchTemplates = useCallback(async () => {
     try {
       const res = await axios.get(`${API_URL}/api/templates`, { withCredentials: true });
       setTemplates(res.data.templates || []);
@@ -211,9 +212,9 @@ const Templates = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  useEffect(() => { fetchTemplates(); }, []);
+  useEffect(() => { fetchTemplates(); }, [fetchTemplates]);
 
   if (editing) {
     const specialEditors = { mathematics: MathTemplate, physics: PhysicsTemplate, chemistry: ChemistryTemplate, geography: GeographyTemplate, scientific: ScientificTemplate };

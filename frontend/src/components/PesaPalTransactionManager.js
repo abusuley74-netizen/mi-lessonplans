@@ -329,7 +329,7 @@ const PesaPalTransactionManager = () => {
                   <div className="max-h-40 overflow-y-auto bg-gray-50 p-2 rounded">
                     {selectedTransaction.transaction.ipn_traces?.length > 0 ? (
                       selectedTransaction.transaction.ipn_traces.map((trace, index) => (
-                        <div key={index} className="text-xs text-gray-600 mb-1 p-1 bg-white rounded">
+                        <div key={`${trace.timestamp}-${trace.status}-${index}`} className="text-xs text-gray-600 mb-1 p-1 bg-white rounded">
                           <span className="font-medium">{formatDate(trace.timestamp)}</span> - {trace.status} ({trace.ip_address})
                         </div>
                       ))

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useCallback } from 'react';
 import axios from 'axios';
+import DOMPurify from 'dompurify';
 import { 
   Save, Bold, Italic, Underline, List, ListOrdered, 
   AlignLeft, AlignCenter, AlignRight, Heading1, Heading2, 
@@ -49,7 +50,7 @@ const CreateNotes = () => {
         fonts.forEach(font => {
           const span = document.createElement('span');
           span.style.fontSize = size;
-          span.innerHTML = font.innerHTML;
+          span.innerHTML = DOMPurify.sanitize(font.innerHTML);
           font.parentNode.replaceChild(span, font);
         });
       }

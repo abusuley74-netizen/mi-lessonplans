@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import Header from '../components/Header';
 import ZanzibarLessonForm from '../components/ZanzibarLessonForm';
@@ -18,16 +18,16 @@ const Dashboard = () => {
   const [generatedLesson, setGeneratedLesson] = useState(null);
   const [accessData, setAccessData] = useState(null);
 
-  useEffect(() => {
-    fetchAccess();
-  }, []);
-
-  const fetchAccess = async () => {
+  const fetchAccess = useCallback(async () => {
     try {
       const res = await axios.get(`${API_URL}/api/user/feature-access`, { withCredentials: true });
       setAccessData(res.data);
     } catch { /* fallback */ }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchAccess();
+  }, [fetchAccess]);
 
   const handleLessonGenerated = (lesson) => {
     setGeneratedLesson(lesson);

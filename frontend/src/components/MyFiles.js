@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 import { 
   BookOpen, Trash2, Eye, Download, Search,
   X, FileText, Mic, Upload, FolderOpen, Play, Volume2, Calendar, Link2
 } from 'lucide-react';
 import { toast } from 'sonner';
+import DOMPurify from 'dompurify';
 import ShareModal from './ShareModal';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
@@ -65,9 +66,9 @@ const MyFiles = () => {
 
   useEffect(() => {
     fetchAllFiles();
-  }, []);
+  }, [fetchAllFiles]);
 
-  const fetchAllFiles = async () => {
+  const fetchAllFiles = useCallback(async () => {
     try {
       const [lessonsRes, notesRes, dictationsRes, uploadsRes, schemesRes, templatesRes] = await Promise.all([
         axios.get(`${API_URL}/api/lessons`, { withCredentials: true }),
@@ -89,7 +90,7 @@ const MyFiles = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const handleDeleteLesson = async (lessonId) => {
     try {
@@ -195,8 +196,7 @@ const MyFiles = () => {
   const handlePrint = () => {
     const printContent = printRef.current;
     if (!printContent) return;
-    const printWindow = window.open('', '_blank', 'width=900,height=700');
-    printWindow.document.write(`
+    const htmlContent = `
       <html><head><title>Lesson Plan - ${selectedLesson?.topic}</title>
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -210,10 +210,15 @@ const MyFiles = () => {
         .section-title { font-weight: bold; background: #f0f0f0; padding: 5px 8px; border: 1px solid #ccc; }
         .section-content { padding: 8px; border: 1px solid #ccc; border-top: none; min-height: 30px; }
         @media print { body { padding: 0; } }
-      </style></head><body>${printContent.innerHTML}</body></html>
-    `);
-    printWindow.document.close();
-    printWindow.onload = () => { printWindow.print(); printWindow.close(); };
+      </style></head><body>${DOMPurify.sanitize(printContent.innerHTML)}</body></html>
+    `;
+    const printWindow = window.open('', '_blank', 'width=900,height=700');
+    if (printWindow) {
+      printWindow.document.open();
+      printWindow.document.write(htmlContent);
+      printWindow.document.close();
+      printWindow.onload = () => { printWindow.print(); printWindow.close(); };
+    }
   };
 
   const handleDownload = () => {
@@ -371,7 +376,7 @@ const MyFiles = () => {
             <button onClick={() => setConfirmDelete({ type: 'note', id: file.note_id, name: file.title })} className="text-[#7A8A76] hover:text-[#D95D39] flex-shrink-0"><Trash2 className="w-4 h-4" /></button>
           </div>
           <h3 className="font-heading font-semibold text-[#1A2E16] mb-2 line-clamp-2">{file.title}</h3>
-          <div className="text-sm text-[#7A8A76] mb-4 line-clamp-2" dangerouslySetInnerHTML={{ __html: file.content?.substring(0, 100) }} />
+          <div className="text-sm text-[#7A8A76] mb-4 line-clamp-2" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(file.content?.substring(0, 100) || '') }} />
           <div className="pt-3 border-t border-[#E4DFD5]">
             <div className="flex items-center justify-between">
               <span className="text-xs text-[#7A8A76] flex-shrink-0">{new Date(file.created_at).toLocaleDateString()}</span>
@@ -645,7 +650,7 @@ const MyFiles = () => {
               <h2 className="font-heading text-xl font-semibold text-[#1A2E16]">{selectedNote.title}</h2>
               <button onClick={() => setSelectedNote(null)} className="p-2 text-[#7A8A76] hover:text-[#1A2E16] hover:bg-[#F2EFE8] rounded-lg"><X className="w-5 h-5" /></button>
             </div>
-            <div className="p-6 prose max-w-none" dangerouslySetInnerHTML={{ __html: selectedNote.content }} />
+            <div className="p-6 prose max-w-none" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(selectedNote.content) }} />
           </div>
         </div>
       )}

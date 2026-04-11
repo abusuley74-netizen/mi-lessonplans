@@ -218,7 +218,7 @@ const SchemeOfWorkForm = () => {
         .then(r => r.text())
         .then(html => {
           const printW = window.open('', '_blank');
-          if (printW) { printW.document.write(html); printW.document.close(); printW.onload = () => printW.print(); }
+          if (printW) { printW.document.open(); printW.document.write(html); printW.document.close(); printW.onload = () => printW.print(); }
         });
     } else {
       saveAndThen('print');
@@ -229,7 +229,7 @@ const SchemeOfWorkForm = () => {
     if (savedSchemeId) {
       fetchAndDownload(
         `${API_URL}/api/schemes/${savedSchemeId}/export`,
-        `Scheme_of_Work_${formData.subject || 'untitled'}_${syllabus}.doc`
+        `Scheme_of_Work_${formData.subject || 'untitled'}_${syllabus}.pdf`
       );
     } else {
       saveAndThen('export');
@@ -254,12 +254,12 @@ const SchemeOfWorkForm = () => {
           .then(r => r.text())
           .then(html => {
             const printW = window.open('', '_blank');
-            if (printW) { printW.document.write(html); printW.document.close(); printW.onload = () => printW.print(); }
+            if (printW) { printW.document.open(); printW.document.write(html); printW.document.close(); printW.onload = () => printW.print(); }
           });
       } else if (action === 'export') {
         fetchAndDownload(
           `${API_URL}/api/schemes/${newId}/export`,
-          `Scheme_of_Work_${formData.subject || 'untitled'}_${syllabus}.doc`
+          `Scheme_of_Work_${formData.subject || 'untitled'}_${syllabus}.pdf`
         );
       }
     } catch (err) {

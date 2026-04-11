@@ -1008,6 +1008,7 @@ async def _get_lesson_usage(user_id: str, plan: str) -> dict:
 
     # Check if period needs reset (30 days elapsed or no period set)
     needs_reset = True
+    period_start = now
     if period_start_str:
         try:
             period_start = datetime.fromisoformat(period_start_str.replace("Z", "+00:00")) if isinstance(period_start_str, str) else period_start_str
