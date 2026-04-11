@@ -64,10 +64,6 @@ const MyFiles = () => {
   const audioRef = useRef(null);
   const printRef = useRef(null);
 
-  useEffect(() => {
-    fetchAllFiles();
-  }, [fetchAllFiles]);
-
   const fetchAllFiles = useCallback(async () => {
     try {
       const [lessonsRes, notesRes, dictationsRes, uploadsRes, schemesRes, templatesRes] = await Promise.all([
@@ -91,6 +87,10 @@ const MyFiles = () => {
       setLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    fetchAllFiles();
+  }, [fetchAllFiles]);
 
   const handleDeleteLesson = async (lessonId) => {
     try {
