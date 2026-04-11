@@ -63,12 +63,12 @@ const SubscriptionModal = ({ isOpen, onClose }) => {
     setLoading(true);
     try {
       const checkoutRes = await axios.post(
-        `${API_URL}/api/subscription/checkout`,
+        `${API_URL}/api/subscription/checkout-clickpesa`,
         { plan_id: selectedPlan },
         { withCredentials: true }
       );
       if (checkoutRes.data.checkout_url) {
-        toast.success('Redirecting to PesaPal checkout...');
+        toast.success('Redirecting to ClickPesa checkout...');
         window.location.href = checkoutRes.data.checkout_url;
         return;
       }
@@ -186,7 +186,7 @@ const SubscriptionModal = ({ isOpen, onClose }) => {
           </button>
 
           <p className="text-center text-white/50 text-xs mt-4">
-            Secure payment via PesaPal
+            Secure payment via ClickPesa
           </p>
         </div>
       </div>

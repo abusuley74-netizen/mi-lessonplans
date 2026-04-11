@@ -107,10 +107,10 @@ const LoginPage = () => {
           <Link
             to="/admin/login"
             data-testid="admin-login-link"
-            className="mt-4 flex items-center justify-center gap-2 text-sm text-[#7A8A76] hover:text-[#2D5A27] transition-colors"
+            className="mt-4 flex items-center justify-center text-sm text-[#7A8A76] hover:text-[#2D5A27] transition-colors"
+            title="Admin Login"
           >
-            <Shield className="w-4 h-4" />
-            Admin Login
+            <Shield className="w-5 h-5" />
           </Link>
         </div>
       </div>

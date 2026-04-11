@@ -41,6 +41,10 @@ const SharedView = () => {
   const [ratingComment, setRatingComment] = useState('');
   const [ratingSubmitted, setRatingSubmitted] = useState(false);
   const [hoverStar, setHoverStar] = useState(0);
+  const [userEmail, setUserEmail] = useState('');
+  const [userName, setUserName] = useState('');
+  const [userPhone, setUserPhone] = useState('');
+  const [showPaymentForm, setShowPaymentForm] = useState(false);
 
   useEffect(() => {
     fetchLink();
@@ -60,20 +64,55 @@ const SharedView = () => {
     }
   };
 
-  const handleMockPayment = () => {
+  const handleMockPayment = async () => {
+    if (!userEmail) {
+      toast.error('Please enter your email address');
+      return;
+    }
+    
+    if (!userPhone) {
+      toast.error('Please enter your phone number');
+      return;
+    }
+    
     setPaymentPending(true);
-    setTimeout(() => {
-      setPaid(true);
+    try {
+      // Format phone number: 255 + 9 digits
+      const fullPhoneNumber = `255${userPhone}`;
+      
+      // Call ClickPesa hosted checkout endpoint
+      const response = await axios.post(
+        `${API_URL}/api/shared-link/checkout-clickpesa`,
+        {
+          link_code: code, // The link code from URL params
+          email: userEmail,
+          name: userName || 'Customer',
+          customer_phone: fullPhoneNumber  // Required for hosted checkout
+        },
+        { withCredentials: true }
+      );
+
+      const { success, checkout_url, message } = response.data;
+      if (success && checkout_url) {
+        toast.success('Redirecting to ClickPesa checkout...');
+        // Redirect to ClickPesa hosted checkout page
+        window.location.href = checkout_url;
+      } else {
+        toast.error(message || 'Could not create checkout. Please try again.');
+        setPaymentPending(false);
+      }
+    } catch (error) {
+      console.error('Payment error:', error);
+      toast.error(error.response?.data?.detail || 'Payment service unavailable. Please try again later.');
       setPaymentPending(false);
-      toast.success('Payment successful (DEMO MODE)');
-    }, 1500);
+    }
   };
 
   const handleDownload = async () => {
     setDownloading(true);
     try {
       const isDictation = linkData?.resource_type === 'dictation';
-      const ext = isDictation ? '.mp3' : '.doc';
+      const ext = isDictation ? '.mp3' : '.pdf';
       const filename = `${linkData.title || 'download'}${ext}`;
       await fetchAndDownloadBlob(`${API_URL}/api/links/${code}/download`, filename);
       setDownloaded(true);
@@ -139,10 +178,10 @@ const SharedView = () => {
       {/* Header bar */}
       <header className="bg-white border-b border-[#E4DFD5] px-4 py-3">
         <div className="max-w-3xl mx-auto flex items-center justify-between">
-          <Link to="/login" className="flex items-center gap-2 text-[#2D5A27] font-bold text-lg" data-testid="shared-logo">
+          <div className="flex items-center gap-2 text-[#2D5A27] font-bold text-lg" data-testid="shared-logo">
             <img src="/logo.jpg" alt="Mi-LessonPlan" className="w-8 h-8 rounded-md object-contain" />
             Mi-LessonPlan
-          </Link>
+          </div>
           <span className="text-xs text-[#7A8A76]">Shared Resource</span>
         </div>
       </header>
@@ -228,16 +267,82 @@ const SharedView = () => {
                 <Lock className="w-10 h-10 text-amber-400 mx-auto mb-3" />
                 <h3 className="text-lg font-semibold text-[#1A2E16] mb-1">Paid Resource</h3>
                 <p className="text-sm text-[#7A8A76] mb-4">Pay TZS {linkData.price?.toLocaleString()} to unlock this resource</p>
-                <button
-                  onClick={handleMockPayment}
-                  disabled={paymentPending}
-                  className="inline-flex items-center gap-2 px-6 py-2.5 bg-[#E5A93D] text-white rounded-lg font-medium hover:bg-[#D49A2E] transition-colors disabled:opacity-50"
-                  data-testid="shared-pay-btn"
-                >
-                  {paymentPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
-                  {paymentPending ? 'Processing...' : `Pay TZS ${linkData.price?.toLocaleString()}`}
-                </button>
-                <p className="text-xs text-[#7A8A76] mt-3">Payment is in DEMO MODE (PesaPal integration pending)</p>
+                
+                {!showPaymentForm ? (
+                  <button
+                    onClick={() => setShowPaymentForm(true)}
+                    className="inline-flex items-center gap-2 px-6 py-2.5 bg-[#E5A93D] text-white rounded-lg font-medium hover:bg-[#D49A2E] transition-colors"
+                    data-testid="shared-pay-btn"
+                  >
+                    <Lock className="w-4 h-4" />
+                    Pay TZS {linkData.price?.toLocaleString()}
+                  </button>
+                ) : (
+                  <div className="max-w-md mx-auto space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-[#4A5B46] mb-1 text-left">
+                        Your Email Address *
+                      </label>
+                      <input
+                        type="email"
+                        value={userEmail}
+                        onChange={(e) => setUserEmail(e.target.value)}
+                        placeholder="you@example.com"
+                        className="w-full bg-white border border-[#E4DFD5] rounded-lg px-3 py-2 text-sm text-[#1A2E16] focus:border-[#2D5A27] focus:outline-none"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[#4A5B46] mb-1 text-left">
+                        Your Phone Number *
+                      </label>
+                      <div className="flex">
+                        <div className="bg-gray-100 border border-r-0 border-[#E4DFD5] rounded-l-lg px-3 py-2 text-sm text-[#7A8A76]">
+                          +255
+                        </div>
+                        <input
+                          type="tel"
+                          value={userPhone}
+                          onChange={(e) => setUserPhone(e.target.value.replace(/\D/g, '').slice(0, 9))}
+                          placeholder="712345678"
+                          className="flex-1 bg-white border border-[#E4DFD5] rounded-r-lg px-3 py-2 text-sm text-[#1A2E16] focus:border-[#2D5A27] focus:outline-none"
+                          required
+                        />
+                      </div>
+                      <p className="text-xs text-[#7A8A76] mt-1">Format: 255712345678 (without +)</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[#4A5B46] mb-1 text-left">
+                        Your Name (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={userName}
+                        onChange={(e) => setUserName(e.target.value)}
+                        placeholder="Your Name"
+                        className="w-full bg-white border border-[#E4DFD5] rounded-lg px-3 py-2 text-sm text-[#1A2E16] focus:border-[#2D5A27] focus:outline-none"
+                      />
+                    </div>
+                    <div className="flex gap-2 pt-2">
+                      <button
+                        onClick={() => setShowPaymentForm(false)}
+                        className="px-4 py-2 border border-[#E4DFD5] text-[#4A5B46] rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleMockPayment}
+                        disabled={paymentPending || !userEmail || !userPhone}
+                        className="flex-1 inline-flex items-center justify-center gap-2 px-6 py-2.5 bg-[#E5A93D] text-white rounded-lg font-medium hover:bg-[#D49A2E] transition-colors disabled:opacity-50"
+                        data-testid="shared-pay-confirm-btn"
+                      >
+                        {paymentPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
+                        {paymentPending ? 'Processing...' : 'Proceed to Payment'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+                <p className="text-xs text-[#7A8A76] mt-3">Secure payment via ClickPesa</p>
               </div>
             ) : (
               <div className="text-center py-4">

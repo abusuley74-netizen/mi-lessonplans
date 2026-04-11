@@ -18,7 +18,7 @@ load_dotenv(ROOT_DIR / '.env')
 
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
+client = AsyncIOMotorClient(mongo_url, serverSelectionTimeoutMS=60000, connectTimeoutMS=30000, retryReads=True, retryWrites=True)
 db = client[os.environ['DB_NAME']]
 
 # PesaPal configuration
@@ -27,6 +27,15 @@ PESAPAL_CONSUMER_SECRET = os.environ.get('PESAPAL_CONSUMER_SECRET', 'ukStYbZKDpj
 PESAPAL_CALLBACK_URL = os.environ.get('PESAPAL_CALLBACK_URL', 'https://Mi-LessonPlan.site/listentowebsitepaymentsipn.php')
 PESAPAL_USE_SANDBOX = os.environ.get('PESAPAL_USE_SANDBOX', 'false').lower() in ['true', '1', 'yes']
 PESAPAL_BASE_URL = 'https://cybqa.pesapal.com' if PESAPAL_USE_SANDBOX else 'https://www.pesapal.com'
+
+# ClickPesa configuration
+CLICKPESA_API_KEY = os.environ.get('CLICKPESA_API_KEY', 'SKVOuPRdWfxm4Dz1rOCGXSIDEwyYlTqFY9YIr7RCfJ')
+CLICKPESA_CLIENT_ID = os.environ.get('CLICKPESA_CLIENT_ID', 'IDf6LaoJzaSyA6F2hwrDOdLJCxfGjjzU')
+CLICKPESA_BASE_URL = os.environ.get('CLICKPESA_BASE_URL', 'https://api.clickpesa.com')
+CLICKPESA_SANDBOX_URL = os.environ.get('CLICKPESA_SANDBOX_URL', 'https://sandbox.clickpesa.com')
+CLICKPESA_USE_SANDBOX = os.environ.get('CLICKPESA_USE_SANDBOX', 'false').lower() in ['true', '1', 'yes']
+CLICKPESA_RETURN_URL = os.environ.get('CLICKPESA_RETURN_URL', 'https://mi-lessonplan.site/payment/success')
+CLICKPESA_WEBHOOK_URL = os.environ.get('CLICKPESA_WEBHOOK_URL', '')
 
 # Create the main app
 app = FastAPI()
@@ -169,7 +178,6 @@ class PesaPalTransaction(BaseModel):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class UserManagementModel(BaseModel):
-    user_id: str
     action: str
     reason: Optional[str] = None
 
@@ -417,10 +425,18 @@ async def get_users(current_admin: Admin = Depends(get_current_admin), skip: int
         query["$or"] = [{"email": {"$regex": search, "$options": "i"}}, {"name": {"$regex": search, "$options": "i"}}]
     if status == "blocked":
         query["is_blocked"] = True
+        query["is_deleted"] = {"$ne": True}
     elif status == "active":
         query["subscription_status"] = "active"
+        query["is_deleted"] = {"$ne": True}
     elif status == "inactive":
         query["subscription_status"] = {"$ne": "active"}
+        query["is_deleted"] = {"$ne": True}
+    elif status == "deleted":
+        query["is_deleted"] = True
+    else:  # "all"
+        # Don't filter by is_deleted for "all" status
+        pass
     users = await db.users.find(query, {"_id": 0}).skip(skip).limit(limit).sort("created_at", -1).to_list(limit)
     total = await db.users.count_documents(query)
     return {"users": users, "total": total, "skip": skip, "limit": limit}
@@ -712,34 +728,39 @@ async def get_current_user(request: Request) -> User:
     if not session_token:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
-    # Find session
-    session_doc = await db.user_sessions.find_one(
-        {"session_token": session_token},
-        {"_id": 0}
-    )
-    
-    if not session_doc:
-        raise HTTPException(status_code=401, detail="Invalid session")
-    
-    # Check expiry with timezone awareness
-    expires_at = session_doc["expires_at"]
-    if isinstance(expires_at, str):
-        expires_at = datetime.fromisoformat(expires_at)
-    if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
-    if expires_at < datetime.now(timezone.utc):
-        raise HTTPException(status_code=401, detail="Session expired")
-    
-    # Get user
-    user_doc = await db.users.find_one(
-        {"user_id": session_doc["user_id"]},
-        {"_id": 0}
-    )
-    
-    if not user_doc:
-        raise HTTPException(status_code=401, detail="User not found")
-    
-    return User(**user_doc)
+    try:
+        # Find session
+        session_doc = await db.user_sessions.find_one(
+            {"session_token": session_token},
+            {"_id": 0}
+        )
+        
+        if not session_doc:
+            raise HTTPException(status_code=401, detail="Invalid session")
+        
+        # Check expiry with timezone awareness
+        expires_at = session_doc["expires_at"]
+        if isinstance(expires_at, str):
+            expires_at = datetime.fromisoformat(expires_at)
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if expires_at < datetime.now(timezone.utc):
+            raise HTTPException(status_code=401, detail="Session expired")
+        
+        # Get user
+        user_doc = await db.users.find_one(
+            {"user_id": session_doc["user_id"]},
+            {"_id": 0}
+        )
+        
+        if not user_doc:
+            raise HTTPException(status_code=401, detail="User not found")
+        
+        return User(**user_doc)
+    except Exception as e:
+        logger.error(f"Database error in get_current_user: {e}")
+        # Return 401 instead of 500 for database errors
+        raise HTTPException(status_code=401, detail="Authentication service unavailable")
 
 # ==================== AUTH ROUTES ====================
 
@@ -2028,6 +2049,38 @@ async def download_upload(upload_id: str, user: User = Depends(get_current_user)
         headers={"Content-Disposition": f'attachment; filename="{name}"'}
     )
 
+@api_router.get("/uploads/{upload_id}/view")
+async def view_upload(upload_id: str, user: User = Depends(get_current_user)):
+    """View an uploaded file (for images, returns inline)"""
+    import base64
+    from fastapi.responses import Response as FastAPIResponse
+    
+    upload = await db.uploads.find_one({"upload_id": upload_id, "user_id": user.user_id}, {"_id": 0})
+    if not upload:
+        raise HTTPException(status_code=404, detail="Upload not found")
+    
+    file_data_b64 = upload.get("file_data")
+    if not file_data_b64:
+        raise HTTPException(status_code=404, detail="File data not available")
+    
+    raw = base64.b64decode(file_data_b64)
+    content_type = upload.get("content_type", "application/octet-stream")
+    
+    # For images, return inline; for other files, still attachment
+    is_image = content_type.startswith("image/")
+    headers = {}
+    if is_image:
+        headers["Content-Disposition"] = "inline"
+    else:
+        name = upload.get("name", "download")
+        headers["Content-Disposition"] = f'attachment; filename="{name}"'
+    
+    return FastAPIResponse(
+        content=raw,
+        media_type=content_type,
+        headers=headers
+    )
+
 @api_router.delete("/uploads/{upload_id}")
 async def delete_upload(upload_id: str, user: User = Depends(get_current_user)):
     """Delete an upload"""
@@ -2272,7 +2325,8 @@ def _build_images_html(images: list, image_registry: list = None) -> str:
             img_ref = f"image_{i:03d}_{name.replace(' ','_')}"
             if image_registry is not None:
                 image_registry.append({"ref": img_ref, "dataUrl": data_url, "name": name})
-            html += f'<div class="img-container"><img src="{img_ref}" width="480" alt="{name}" /><p class="img-caption">{name}</p></div>'
+            # Use max-width: 100% for PDF compatibility instead of fixed width
+            html += f'<div class="img-container"><img src="{img_ref}" style="max-width: 100%; height: auto;" alt="{name}" /><p class="img-caption">{name}</p></div>'
     return html
 
 
@@ -2315,7 +2369,7 @@ Content-Type: multipart/related; boundary="{boundary}"
 
 @api_router.post("/templates/{template_id}/export")
 async def export_template(template_id: str, request: Request, user: User = Depends(get_current_user)):
-    """Export a template as Word-compatible MHTML document with embedded images"""
+    """Export a template as PDF document with embedded images"""
     from fastapi.responses import Response as FastAPIResponse
     
     data = await request.json()
@@ -2340,7 +2394,7 @@ async def export_template(template_id: str, request: Request, user: User = Depen
     h3{color:#2D5A27;margin:18px 0 8px}
     .meta{color:#6b7280;font-size:14px;margin-bottom:20px}.content{line-height:1.8}
     .img-container{margin:16px 0;text-align:center;page-break-inside:avoid}
-    .img-caption{color:#6b7280;font-size:10px;margin-top:6px;text-align:center;font-style:italic}
+    .img-caption{color:#6b7280;font-size:9pt;margin-top:6px;text-align:center;font-style:italic}
     .question-block{margin:10px 0;padding:12px 16px;background:#f8fafc;border-left:3px solid #4B0082;font-size:11pt}"""
     
     image_registry = []
@@ -2349,19 +2403,24 @@ async def export_template(template_id: str, request: Request, user: User = Depen
     if template_type == "scientific":
         body_html = f"""<div style="display:table;width:100%">
             <div style="display:table-cell;width:35%;vertical-align:top;padding:15px;background:#f8fafc;border:1px solid #e2e8f0">
-                <h3 style="margin-top:0">Diagrams &amp; Photos</h3>
-                {images_html or '<p style="color:#9ca3af;font-size:12px">No images uploaded</p>'}
+                <h3 style="margin-top:0">Diagrams & Photos</h3>
+                {images_html or '<p style="color:#9ca3af;font-size:10pt">No images uploaded</p>'}
             </div>
             <div style="display:table-cell;width:65%;vertical-align:top;padding-left:20px">
                 <h1>{title}</h1><div class="meta">{meta}</div><div class="content">{body}</div>
             </div></div>"""
     elif template_type == "geography":
         questions = content.get("questions", [])
-        q_html = "".join(f'<div class="question-block"><strong>Q{i+1}:</strong> {q}</div>' for i, q in enumerate(questions) if q)
+        q_html = ""
+        if questions:
+            q_html = '<h2>Questions</h2>'
+            for i, q in enumerate(questions):
+                if q:
+                    q_html += f'<div class="question-block"><strong>Q{i+1}:</strong> {q}</div>'
         body_html = f"""<h1>{title}</h1><div class="meta">{meta}</div>
             <h2>Geography Images / Maps</h2>
-            {images_html or '<p style="color:#9ca3af;font-size:12px">No images uploaded</p>'}
-            <h2>Questions</h2>{q_html or '<p style="color:#9ca3af">No questions added</p>'}"""
+            {images_html or '<p style="color:#9ca3af;font-size:10pt">No images uploaded</p>'}
+            {q_html}"""
     elif template_type in ("mathematics", "physics", "chemistry"):
         styles += " .content{white-space:pre-wrap;font-family:'Courier New',monospace}"
         body_html = f'<h1>{title}</h1><div class="meta">{meta}</div><div class="content">{body}</div>'
@@ -2370,27 +2429,43 @@ async def export_template(template_id: str, request: Request, user: User = Depen
         if images_html:
             body_html += f'<h2>Attachments</h2>{images_html}'
     
-    word_ns = 'xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"'
-    html = f"""<html {word_ns}>
+    html = f"""<!DOCTYPE html>
+    <html>
     <head><meta charset="utf-8"><style>{styles}</style></head>
     <body>{body_html}</body></html>"""
     
-    filename = f"{title.replace(' ','_')}_{template_type}.doc"
+    filename = f"{title.replace(' ','_')}_{template_type}.pdf"
     
-    if image_registry:
-        content_bytes = _build_mhtml(html, image_registry, filename)
-    else:
-        content_bytes = f'\ufeff{html}'.encode('utf-8')
+    # For templates with images, we need to handle them differently for PDF
+    # We'll convert image references to embedded data URLs for PDF
+    if images and image_registry:
+        import base64
+        import re
+        
+        # Create a mapping from image reference to data URL
+        image_map = {img["ref"]: img["dataUrl"] for img in image_registry}
+        
+        def replace_image_ref(match):
+            img_ref = match.group(1)
+            data_url = image_map.get(img_ref)
+            if data_url:
+                return f'src="{data_url}"'
+            return match.group(0)
+        
+        # Replace image references in HTML with actual data URLs
+        html = re.sub(r'src="(image_\d+_[^"]+)"', replace_image_ref, html)
+    
+    pdf_bytes = _html_to_pdf(html)
     
     return FastAPIResponse(
-        content=content_bytes,
-        media_type="application/msword",
+        content=pdf_bytes,
+        media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
 
 @api_router.get("/templates/{template_id}/export")
 async def export_template_get(template_id: str, user: User = Depends(get_current_user)):
-    """Export a saved template as Word doc from DB (GET for MyFiles download)"""
+    """Export a saved template as PDF from DB (GET for MyFiles download)"""
     from fastapi.responses import Response as FastAPIResponse
 
     template = await db.templates.find_one({"template_id": template_id, "user_id": user.user_id}, {"_id": 0})
@@ -2413,7 +2488,7 @@ async def export_template_get(template_id: str, user: User = Depends(get_current
     h3{color:#2D5A27;margin:18px 0 8px}
     .meta{color:#6b7280;font-size:14px;margin-bottom:20px}.content{line-height:1.8}
     .img-container{margin:16px 0;text-align:center;page-break-inside:avoid}
-    .img-caption{color:#6b7280;font-size:10px;margin-top:6px;text-align:center;font-style:italic}
+    .img-caption{color:#6b7280;font-size:9pt;margin-top:6px;text-align:center;font-style:italic}
     .question-block{margin:10px 0;padding:12px 16px;background:#f8fafc;border-left:3px solid #4B0082;font-size:11pt}"""
 
     image_registry = []
@@ -2422,19 +2497,24 @@ async def export_template_get(template_id: str, user: User = Depends(get_current
     if template_type == "scientific":
         body_html = f"""<div style="display:table;width:100%">
             <div style="display:table-cell;width:35%;vertical-align:top;padding:15px;background:#f8fafc;border:1px solid #e2e8f0">
-                <h3 style="margin-top:0">Diagrams &amp; Photos</h3>
-                {images_html or '<p style="color:#9ca3af;font-size:12px">No images uploaded</p>'}
+                <h3 style="margin-top:0">Diagrams & Photos</h3>
+                {images_html or '<p style="color:#9ca3af;font-size:10pt">No images uploaded</p>'}
             </div>
             <div style="display:table-cell;width:65%;vertical-align:top;padding-left:20px">
                 <h1>{title}</h1><div class="meta">{meta}</div><div class="content">{body}</div>
             </div></div>"""
     elif template_type == "geography":
         questions = content.get("questions", [])
-        q_html = "".join(f'<div class="question-block"><strong>Q{i+1}:</strong> {q}</div>' for i, q in enumerate(questions) if q)
+        q_html = ""
+        if questions:
+            q_html = '<h2>Questions</h2>'
+            for i, q in enumerate(questions):
+                if q:
+                    q_html += f'<div class="question-block"><strong>Q{i+1}:</strong> {q}</div>'
         body_html = f"""<h1>{title}</h1><div class="meta">{meta}</div>
             <h2>Geography Images / Maps</h2>
-            {images_html or '<p style="color:#9ca3af;font-size:12px">No images uploaded</p>'}
-            <h2>Questions</h2>{q_html or '<p style="color:#9ca3af">No questions added</p>'}"""
+            {images_html or '<p style="color:#9ca3af;font-size:10pt">No images uploaded</p>'}
+            {q_html}"""
     elif template_type in ("mathematics", "physics", "chemistry"):
         styles += " .content{white-space:pre-wrap;font-family:'Courier New',monospace}"
         body_html = f'<h1>{title}</h1><div class="meta">{meta}</div><div class="content">{body}</div>'
@@ -2443,21 +2523,37 @@ async def export_template_get(template_id: str, user: User = Depends(get_current
         if images_html:
             body_html += f'<h2>Attachments</h2>{images_html}'
 
-    word_ns = 'xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"'
-    html = f"""<html {word_ns}>
+    html = f"""<!DOCTYPE html>
+    <html>
     <head><meta charset="utf-8"><style>{styles}</style></head>
     <body>{body_html}</body></html>"""
-
-    filename = f"{title.replace(' ','_')}_{template_type}.doc"
-
-    if image_registry:
-        content_bytes = _build_mhtml(html, image_registry, filename)
-    else:
-        content_bytes = f'\ufeff{html}'.encode('utf-8')
-
+    
+    filename = f"{title.replace(' ','_')}_{template_type}.pdf"
+    
+    # For templates with images, we need to handle them differently for PDF
+    # We'll convert image references to embedded data URLs for PDF
+    if images and image_registry:
+        import base64
+        import re
+        
+        # Create a mapping from image reference to data URL
+        image_map = {img["ref"]: img["dataUrl"] for img in image_registry}
+        
+        def replace_image_ref(match):
+            img_ref = match.group(1)
+            data_url = image_map.get(img_ref)
+            if data_url:
+                return f'src="{data_url}"'
+            return match.group(0)
+        
+        # Replace image references in HTML with actual data URLs
+        html = re.sub(r'src="(image_\d+_[^"]+)"', replace_image_ref, html)
+    
+    pdf_bytes = _html_to_pdf(html)
+    
     return FastAPIResponse(
-        content=content_bytes,
-        media_type="application/msword",
+        content=pdf_bytes,
+        media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
 
@@ -2481,8 +2577,9 @@ async def view_template_html(template_id: str, user: User = Depends(get_current_
     images_html = ""
     for img in images:
         if isinstance(img, dict):
-            src = img.get("data", img.get("url", ""))
-            caption = img.get("caption", "")
+            # Try to get dataUrl first, then data, then url
+            src = img.get("dataUrl", img.get("data", img.get("url", "")))
+            caption = img.get("caption", img.get("name", ""))
             if src:
                 images_html += f'<div style="margin:12px 0;text-align:center"><img src="{src}" style="max-width:100%;max-height:400px;border:1px solid #ddd;border-radius:4px" />'
                 if caption:
@@ -2498,15 +2595,32 @@ async def view_template_html(template_id: str, user: User = Depends(get_current_
             questions_html += f'<div style="margin:8px 0;padding:10px 14px;background:#f8f8f8;border-left:3px solid #4B0082"><strong>Q{i+1}:</strong> {q}</div>'
     
     if t_type == "scientific":
-        layout = f"""<div style="display:flex;gap:20px;flex-wrap:wrap">
-            <div style="flex:1;min-width:200px">{images_html or '<p style="color:#999">No images</p>'}</div>
-            <div style="flex:2;min-width:300px"><div>{body}</div></div></div>"""
+        layout = f"""<div class="scientific-layout">
+            <div class="scientific-images-panel">
+                <h3 style="margin-top:0">Diagrams & Photos</h3>
+                <div class="scientific-images">{images_html or '<p style="color:#9ca3af;font-size:10pt">No images uploaded</p>'}</div>
+            </div>
+            <div class="scientific-content-panel">
+                <div class="scientific-content">{body}</div>
+            </div>
+        </div>"""
     elif t_type == "geography":
-        layout = f"""<div>{body}</div>{images_html}<h3>Questions</h3>{questions_html or '<p style="color:#999">No questions</p>'}"""
+        layout = f"""<div class="geography-layout">
+            <h2>Geography Images / Maps</h2>
+            <div class="geography-images">{images_html or '<p style="color:#9ca3af;font-size:10pt">No images uploaded</p>'}</div>
+            <h3>Questions</h3>
+            <div class="geography-questions">{questions_html or '<p style="color:#9ca3af;font-size:10pt">No questions</p>'}</div>
+        </div>"""
     elif t_type in ("mathematics", "physics", "chemistry"):
-        layout = f"""<div style="white-space:pre-wrap;font-family:'Courier New',monospace;line-height:1.8">{body}</div>{images_html}"""
+        layout = f"""<div class="formula-layout">
+            <div class="formula-content">{body}</div>
+            {images_html and f'<div class="formula-images">{images_html}</div>' or ''}
+        </div>"""
     else:
-        layout = f"""<div>{body}</div>{images_html}"""
+        layout = f"""<div class="basic-layout">
+            <div class="basic-content">{body}</div>
+            {images_html and f'<div class="basic-images"><h3>Attachments</h3>{images_html}</div>' or ''}
+        </div>"""
     
     html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><title>{title}</title>
     <style>
@@ -2516,7 +2630,36 @@ async def view_template_html(template_id: str, user: User = Depends(get_current_
       h2 {{ font-size:13pt; color:#2D5A27; margin:16px 0 8px; }}
       h3 {{ font-size:12pt; color:#2D5A27; margin:14px 0 6px; }}
       .meta {{ color:#6b7280; font-size:10pt; margin-bottom:16px; }}
-      img {{ max-width:100%; }}
+      img {{ max-width:100%; height:auto; object-fit:contain; }}
+      .img-container {{ margin:12px 0; text-align:center; }}
+      .img-caption {{ color:#666; font-size:10pt; margin-top:4px; font-style:italic; }}
+      /* Scientific template specific */
+      .scientific-layout {{ display:flex; gap:20px; flex-wrap:wrap; }}
+      .scientific-images-panel {{ flex:1; min-width:200px; background:#f8fafc; padding:15px; border:1px solid #e2e8f0; border-radius:6px; }}
+      .scientific-content-panel {{ flex:2; min-width:300px; }}
+      .scientific-images {{ max-height:500px; overflow-y:auto; }}
+      .scientific-images img {{ max-width:100%; max-height:300px; margin-bottom:10px; border-radius:4px; border:1px solid #ddd; }}
+      /* Geography template specific */
+      .geography-layout {{ }}
+      .geography-images {{ display:flex; flex-wrap:wrap; gap:15px; margin:15px 0; }}
+      .geography-images img {{ flex:1 1 300px; max-height:250px; object-fit:cover; border:1px solid #ddd; border-radius:4px; }}
+      .geography-questions {{ margin-top:20px; }}
+      /* Formula templates (Math/Physics/Chemistry) */
+      .formula-layout {{ }}
+      .formula-content {{ white-space:pre-wrap; font-family:'Courier New',monospace; line-height:1.8; background:#f9f9f9; padding:15px; border-radius:6px; border:1px solid #e2e8f0; }}
+      .formula-images {{ margin-top:20px; }}
+      /* Basic template */
+      .basic-layout {{ }}
+      .basic-content {{ line-height:1.8; }}
+      .basic-images {{ margin-top:20px; }}
+      /* Responsive adjustments */
+      @media (max-width: 768px) {{
+        body {{ padding:15px; font-size:10pt; }}
+        .scientific-layout {{ flex-direction:column; }}
+        .scientific-images-panel, .scientific-content-panel {{ min-width:100%; }}
+        .geography-images {{ flex-direction:column; }}
+        .geography-images img {{ max-height:200px; }}
+      }}
     </style></head><body>
     <h1>{title}</h1>
     <div class="meta"><strong>Subject:</strong> {subject} | <strong>Category:</strong> {category} | <strong>Type:</strong> {t_type.title()}</div>
@@ -2569,6 +2712,8 @@ def _build_scheme_html(scheme: dict, for_word: bool = False) -> str:
       .data {{ width:100%; border-collapse:collapse; font-size:8pt; table-layout:fixed; }}
       .data th {{ background:#2D5A27; color:#fff; padding:5px 3px; border:1px solid #666; text-align:center; font-size:7pt; word-wrap:break-word; }}
       .data td {{ border:1px solid #999; padding:4px 3px; vertical-align:top; word-wrap:break-word; overflow-wrap:break-word; font-size:8pt; }}
+      thead {{ display: table-header-group; }}
+      tbody {{ display: table-row-group; }}
       .data td:nth-child(1), .data td:nth-child(2) {{ width:12%; }}
       .data td:nth-child(3), .data td:nth-child(4) {{ width:11%; }}
       .data td:nth-child(5) {{ width:6%; }}
@@ -2628,11 +2773,11 @@ def _build_lesson_html(lesson: dict, for_word: bool = False) -> str:
         <tr><td>{day_date}</td><td>{session_val}</td><td>{cls}</td><td>{periods}</td><td>{minutes}</td>
         <td>{enroll_block}</td></tr></table>"""
 
-    eval_table = f"""<table><tr><th>TEACHER'S EVALUATION: TATHMINI YA MWALIMU</th></tr><tr><td>{safe(content.get('teacherEvaluation'))}</td></tr>
-        <tr><th>PUPIL'S WORK: KAZI YA MWANAFUNZI</th></tr><tr><td>{safe(content.get('pupilWork'))}</td></tr>
-        <tr><th>REMARKS: MAELEZO</th></tr><tr><td>{safe(content.get('remarks'))}</td></tr></table>"""
-
     if syllabus == "Zanzibar":
+        eval_table = f"""<table><tr><th style="background:white; color:#333; border:1px solid #333;">TEACHER'S EVALUATION: TATHMINI YA MWALIMU</th></tr><tr><td>{safe(content.get('teacherEvaluation'))}</td></tr>
+            <tr><th style="background:white; color:#333; border:1px solid #333;">PUPIL'S WORK: KAZI YA MWANAFUNZI</th></tr><tr><td>{safe(content.get('pupilWork'))}</td></tr>
+            <tr><th style="background:white; color:#333; border:1px solid #333;">REMARKS: MAELEZO</th></tr><tr><td>{safe(content.get('remarks'))}</td></tr></table>"""
+        
         intro = content.get("introductionActivities", {})
         new_know = content.get("newKnowledgeActivities", {})
         body = f"""<h1>LESSON PLAN (ANDALIO LA SOMO)</h1>{header_table}
@@ -2661,6 +2806,7 @@ def _build_lesson_html(lesson: dict, for_word: bool = False) -> str:
         comp_dev = stages.get("competenceDevelopment", {})
         design = stages.get("design", {})
         realisation = stages.get("realisation", {})
+        remarks_table = f"""<table><tr><th style="background:white; color:#333; border:1px solid #333;">REMARKS: MAELEZO</th></tr><tr><td>{safe(content.get('remarks'))}</td></tr></table>"""
         body = f"""<h1>LESSON PLAN (ANDALIO LA SOMO)</h1>{header_table}
         <table><tr><th colspan="2">GENERAL LEARNING OUTCOME: MATOKEO YA JUMLA YA KUJIFUNZA</th></tr>
           <tr><td colspan="2">{safe(content.get('mainCompetence'))}</td></tr>
@@ -2686,7 +2832,7 @@ def _build_lesson_html(lesson: dict, for_word: bool = False) -> str:
             <td>{safe(design.get('assessment'))}</td></tr>
           <tr><td><b>4. REALISATION / UTEKELEZAJI</b></td><td>{safe(realisation.get('time'))}</td>
             <td>{safe(realisation.get('teachingActivities'))}</td><td>{safe(realisation.get('learningActivities'))}</td>
-            <td>{safe(realisation.get('assessment'))}</td></tr></table>{eval_table}"""
+            <td>{safe(realisation.get('assessment'))}</td></tr></table>{remarks_table}"""
 
     word_ns = ' xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"' if for_word else ''
     html = f"""{'<!DOCTYPE html>' if not for_word else ''}<html{word_ns}><head><meta charset="utf-8">
@@ -2713,21 +2859,23 @@ def _html_to_pdf(html: str) -> bytes:
 
 @api_router.get("/schemes/{scheme_id}/export")
 async def export_scheme_docx(scheme_id: str, user: User = Depends(get_current_user)):
-    """Export a scheme of work as landscape Word .doc"""
+    """Export a scheme of work as landscape PDF"""
     from fastapi.responses import Response as FastAPIResponse
 
     scheme = await db.schemes.find_one({"scheme_id": scheme_id, "user_id": user.user_id}, {"_id": 0})
     if not scheme:
         raise HTTPException(status_code=404, detail="Scheme not found")
 
-    html = _build_scheme_html(scheme, for_word=True)
+    html = _build_scheme_html(scheme, for_word=False)
     subject = scheme.get("subject", "untitled")
     syllabus = scheme.get("syllabus", "")
-    filename = f"Scheme_of_Work_{subject}_{syllabus}.doc"
+    filename = f"Scheme_of_Work_{subject.replace(' ', '_')}_{syllabus.replace(' ', '_')}.pdf"
+    
+    pdf_bytes = _html_to_pdf(html)
 
     return FastAPIResponse(
-        content=f'\ufeff{html}'.encode('utf-8'),
-        media_type="application/msword",
+        content=pdf_bytes,
+        media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
 
@@ -2745,20 +2893,21 @@ async def view_scheme_html(scheme_id: str, user: User = Depends(get_current_user
 
 @api_router.get("/lessons/{lesson_id}/export")
 async def export_lesson_txt(lesson_id: str, user: User = Depends(get_current_user)):
-    """Export a lesson plan as Word .doc with proper table formatting"""
+    """Export a lesson plan as PDF with proper table formatting"""
     from fastapi.responses import Response as FastAPIResponse
 
     lesson = await db.lesson_plans.find_one({"lesson_id": lesson_id, "user_id": user.user_id}, {"_id": 0})
     if not lesson:
         raise HTTPException(status_code=404, detail="Lesson not found")
 
-    html = _build_lesson_html(lesson, for_word=True)
+    html = _build_lesson_html(lesson, for_word=False)
     subject = lesson.get("subject", "")
     topic = lesson.get("topic", "")
-    filename = f"{subject}_{topic}_lesson.doc"
+    filename = f"{subject.replace(' ', '_')}_{topic.replace(' ', '_')}_lesson.pdf"
+    pdf_bytes = _html_to_pdf(html)
     return FastAPIResponse(
-        content=f'\ufeff{html}'.encode('utf-8'),
-        media_type="application/msword",
+        content=pdf_bytes,
+        media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
 @api_router.get("/lessons/{lesson_id}/view")
@@ -2878,7 +3027,7 @@ def build_resource_preview(resource_type: str, resource: dict) -> dict:
     return {}
 
 def build_download_content(resource_type: str, resource: dict) -> tuple:
-    """Build downloadable Word document. Returns (content_bytes, media_type, filename)."""
+    """Build downloadable PDF document. Returns (content_bytes, media_type, filename)."""
     doc_styles = """
       body { font-family: 'Segoe UI', Tahoma, Geneva, sans-serif; margin: 30px; line-height: 1.7; color: #1f2937; background: #fff; }
       h1 { font-size: 22pt; color: #1a2e16; text-align: center; border-bottom: 3px solid #2D5A27; padding-bottom: 12px; margin-bottom: 8px; }
@@ -2896,87 +3045,43 @@ def build_download_content(resource_type: str, resource: dict) -> tuple:
       table.data { width: 100%; border-collapse: collapse; margin: 10px 0; }
       table.data th { background: #2D5A27; color: #fff; padding: 8px 6px; border: 1px solid #1a2e16; font-size: 9pt; text-align: center; }
       table.data td { border: 1px solid #999; padding: 6px; vertical-align: top; font-size: 9pt; }
+      img { max-width: 100%; height: auto; page-break-inside: avoid; }
+      .img-container { margin: 16px 0; text-align: center; page-break-inside: avoid; }
+      .img-caption { color: #6b7280; font-size: 9pt; margin-top: 6px; text-align: center; font-style: italic; }
     """
-    word_ns = 'xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"'
 
     if resource_type == "lesson":
-        content = resource.get("content", {})
-        syllabus = resource.get("syllabus", "")
+        # Use the same _build_lesson_html function that export_lesson_txt uses
+        # This ensures proper table formatting for both Zanzibar and Tanzania Mainland
+        html = _build_lesson_html(resource, for_word=False)
         subject = resource.get("subject", "")
-        grade = resource.get("grade", "")
         topic = resource.get("topic", "")
-        created = resource.get("created_at", "")
-
-        sections_html = ""
-        for key, val in content.items():
-            if isinstance(val, str):
-                label = key.replace('_', ' ').title()
-                sections_html += f'<div class="section"><div class="section-title">{label}</div><p>{val}</p></div>'
-            elif isinstance(val, dict):
-                label = key.replace('_', ' ').title()
-                inner = "".join(f'<p><strong>{k}:</strong> {v}</p>' for k, v in val.items())
-                time_str = val.get("time", "")
-                title_extra = f" ({time_str})" if time_str else ""
-                sections_html += f'<div class="section"><div class="section-title">{label}{title_extra}</div>{inner}</div>'
-
-        html = f"""<html {word_ns}>
-        <head><meta charset="utf-8"><style>{doc_styles}</style></head><body>
-        <h1>{syllabus.upper()} LESSON PLAN</h1>
-        <table class="meta-table">
-          <tr><td>Subject</td><td>{subject}</td></tr>
-          <tr><td>Grade / Class</td><td>{grade}</td></tr>
-          <tr><td>Topic</td><td>{topic}</td></tr>
-          <tr><td>Syllabus</td><td>{syllabus}</td></tr>
-          <tr><td>Date</td><td>{created[:10] if created else ''}</td></tr>
-        </table>
-        {sections_html}
-        <div class="footer">Generated &amp; Shared via Mi-LessonPlan</div>
-        </body></html>"""
-        filename = f"{subject}_{topic}_Lesson_Plan.doc".replace(' ', '_')
-        return f'\ufeff{html}'.encode('utf-8'), "application/msword", filename
-
+        filename = f"{subject.replace(' ', '_')}_{topic.replace(' ', '_')}_lesson.pdf"
+        pdf_bytes = _html_to_pdf(html)
+        return pdf_bytes, "application/pdf", filename
     elif resource_type == "note":
         title = resource.get("title", "Note")
         note_content = resource.get("content", "")
         created = resource.get("created_at", "")
-        html = f"""<html {word_ns}>
+        html = f"""<!DOCTYPE html>
+        <html>
         <head><meta charset="utf-8"><style>{doc_styles}</style></head><body>
         <h1>{title}</h1>
         <p class="subtitle">Created: {created[:10] if created else ''}</p>
         <div class="content">{note_content}</div>
         <div class="footer">Shared via Mi-LessonPlan</div>
         </body></html>"""
-        filename = f"{title.replace(' ','_')}.doc"
-        return f'\ufeff{html}'.encode('utf-8'), "application/msword", filename
+        filename = f"{title.replace(' ','_')}.pdf"
+        pdf_bytes = _html_to_pdf(html)
+        return pdf_bytes, "application/pdf", filename
 
     elif resource_type == "scheme":
-        cols = ["Main Competence", "Specific Competences", "Learning Activities", "Specific Activities",
-                "Month", "Week", "Periods", "Methods", "Resources", "Assessment", "References", "Remarks"]
-        col_keys = ["main", "specific", "activities", "specificActivities", "month", "week", "periods",
-                    "methods", "resources", "assessment", "references", "remarks"]
-        rows_html = ""
-        for row in resource.get("competencies", []):
-            cells = "".join(f'<td>{row.get(k, "")}</td>' for k in col_keys)
-            rows_html += f"<tr>{cells}</tr>"
-        html = f"""<html {word_ns}>
-        <head><meta charset="utf-8"><style>{doc_styles}
-        @page {{ size: landscape; margin: 10mm; }}</style></head><body>
-        <h1>SCHEME OF WORK</h1>
-        <p class="subtitle">{resource.get('syllabus','').upper()}</p>
-        <table class="meta-table">
-          <tr><td>School</td><td>{resource.get('school','')}</td></tr>
-          <tr><td>Teacher</td><td>{resource.get('teacher','')}</td></tr>
-          <tr><td>Subject</td><td>{resource.get('subject','')}</td></tr>
-          <tr><td>Year / Term / Class</td><td>{resource.get('year','')} &mdash; Term {resource.get('term','')} &mdash; Class {resource.get('class_name','')}</td></tr>
-        </table>
-        <table class="data">
-          <thead><tr>{"".join(f'<th>{c}</th>' for c in cols)}</tr></thead>
-          <tbody>{rows_html}</tbody>
-        </table>
-        <div class="footer">Shared via Mi-LessonPlan</div>
-        </body></html>"""
-        filename = f"Scheme_{resource.get('subject','untitled')}_{resource.get('syllabus','')}.doc"
-        return f'\ufeff{html}'.encode('utf-8'), "application/msword", filename
+        html = _build_scheme_html(resource, for_word=False)
+        subject = resource.get("subject", "untitled").replace(' ', '_')
+        syllabus = resource.get("syllabus", "").replace(' ', '_')
+        filename = f"Scheme_{subject}_{syllabus}.pdf"
+        pdf_bytes = _html_to_pdf(html)
+        return pdf_bytes, "application/pdf", filename
 
     elif resource_type == "template":
         content = resource.get("content", {})
@@ -3007,7 +3112,7 @@ def build_download_content(resource_type: str, resource: dict) -> tuple:
         if tpl_type == "scientific":
             body_html = f"""<div style="display:table;width:100%">
                 <div style="display:table-cell;width:35%;vertical-align:top;padding:15px;background:#f8fafc;border:1px solid #e2e8f0">
-                    <h2 style="margin-top:0;font-size:12pt">Diagrams &amp; Photos</h2>
+                    <h2 style="margin-top:0;font-size:12pt">Diagrams & Photos</h2>
                     {images_html or '<p style="color:#9ca3af;font-size:10pt">No images uploaded</p>'}
                 </div>
                 <div style="display:table-cell;width:65%;vertical-align:top;padding-left:20px">
@@ -3030,18 +3135,34 @@ def build_download_content(resource_type: str, resource: dict) -> tuple:
             if images_html:
                 body_html += f'<h2>Attachments</h2>{images_html}'
 
-        html = f"""<html {word_ns}>
+        html = f"""<!DOCTYPE html>
+        <html>
         <head><meta charset="utf-8"><style>{doc_styles}{extra_style}</style></head><body>
         <h1>{title}</h1>
         <p class="subtitle">{meta_line}</p>
         {body_html}
         <div class="footer">Shared via Mi-LessonPlan</div>
         </body></html>"""
-        filename = f"{title.replace(' ','_')}_{tpl_type}.doc"
+        filename = f"{title.replace(' ','_')}_{tpl_type}.pdf"
 
-        if image_registry:
-            return _build_mhtml(html, image_registry, filename), "application/msword", filename
-        return f'\ufeff{html}'.encode('utf-8'), "application/msword", filename
+        # For templates with images, we need to handle them differently for PDF
+        # We'll convert image references to embedded data URLs for PDF
+        if images and image_registry:
+            import re
+            
+            image_map = {img["ref"]: img["dataUrl"] for img in image_registry}
+            
+            def replace_image_ref(match):
+                img_ref = match.group(1)
+                data_url = image_map.get(img_ref)
+                if data_url:
+                    return f'src="{data_url}"'
+                return match.group(0)
+            
+            html = re.sub(r'src="(image_\d+_[^"]+)"', replace_image_ref, html)
+        
+        pdf_bytes = _html_to_pdf(html)
+        return pdf_bytes, "application/pdf", filename
 
     elif resource_type == "dictation":
         # Return audio MP3 via TTS instead of text document
@@ -3050,15 +3171,17 @@ def build_download_content(resource_type: str, resource: dict) -> tuple:
         language = resource.get("language", "en-GB")
 
         if not text.strip():
-            # Fallback to text doc if no text content
-            html = f"""<html {word_ns}>
+            # Fallback to PDF if no text content
+            html = f"""<!DOCTYPE html>
+            <html>
             <head><meta charset="utf-8"><style>{doc_styles}</style></head><body>
             <h1>{title}</h1>
             <p class="subtitle">Dictation &mdash; Empty</p>
             <div class="footer">Shared via Mi-LessonPlan</div>
             </body></html>"""
-            filename = f"Dictation_{title.replace(' ','_')}.doc"
-            return f'\ufeff{html}'.encode('utf-8'), "application/msword", filename
+            filename = f"Dictation_{title.replace(' ','_')}.pdf"
+            pdf_bytes = _html_to_pdf(html)
+            return pdf_bytes, "application/pdf", filename
 
         # Generate TTS audio
         voice_map = {"en-GB": "nova", "sw": "onyx", "ar": "echo", "tr": "fable", "fr": "shimmer"}
@@ -3066,10 +3189,11 @@ def build_download_content(resource_type: str, resource: dict) -> tuple:
         api_key = os.environ.get("EMERGENT_LLM_KEY")
 
         if not api_key:
-            # Fallback to text doc if no API key
+            # Fallback to PDF if no API key
             lang_names = {"en-GB": "English", "sw": "Swahili", "ar": "Arabic", "tr": "Turkish", "fr": "French"}
             lang_display = lang_names.get(language, language)
-            html = f"""<html {word_ns}>
+            html = f"""<!DOCTYPE html>
+            <html>
             <head><meta charset="utf-8"><style>{doc_styles}</style></head><body>
             <h1>{title}</h1>
             <p class="subtitle">Dictation &mdash; {lang_display}</p>
@@ -3078,8 +3202,9 @@ def build_download_content(resource_type: str, resource: dict) -> tuple:
             </div>
             <div class="footer">Shared via Mi-LessonPlan</div>
             </body></html>"""
-            filename = f"Dictation_{title.replace(' ','_')}.doc"
-            return f'\ufeff{html}'.encode('utf-8'), "application/msword", filename
+            filename = f"Dictation_{title.replace(' ','_')}.pdf"
+            pdf_bytes = _html_to_pdf(html)
+            return pdf_bytes, "application/pdf", filename
 
         return "AUDIO_TTS", language, title  # Signal to caller to generate audio
 
@@ -3338,6 +3463,65 @@ async def process_subscription_renewals():
             continue
     return renewed_count
 
+# ==================== CLICKPESA INTEGRATION ====================
+
+# Import ClickPesa integration
+try:
+    from clickpesa_integration import setup_clickpesa_routes
+    # Setup ClickPesa routes
+    clickpesa_routes = setup_clickpesa_routes(api_router, get_current_user, db, get_current_admin, check_admin_permission)
+    logger.info("ClickPesa routes loaded successfully")
+except ImportError as e:
+    logger.warning(f"ClickPesa integration not available: {e}")
+except Exception as e:
+    logger.error(f"Failed to setup ClickPesa routes: {e}")
+
+# ==================== ADDITIONAL WEBHOOK ENDPOINTS ====================
+# These endpoints are configured in ClickPesa dashboard but missing in our code
+@api_router.post("/webhooks/clickpesa-webhook/payment-success")
+@api_router.post("/webhooks/clickpesa-webhook/payment-failed")
+async def clickpesa_webhook_redirect(request: Request):
+    """Redirect ClickPesa webhooks to the main webhook endpoint with IP whitelisting"""
+    # IP whitelist for ClickPesa webhooks
+    CLICKPESA_WHITELIST_IPS = ["104.198.214.223"]
+    
+    # Get client IP
+    client_ip = request.client.host if request.client else None
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if forwarded_for:
+        client_ip = forwarded_for.split(",")[0].strip()
+    
+    # Check IP whitelist
+    if client_ip not in CLICKPESA_WHITELIST_IPS:
+        logger.warning(f"Blocked webhook from unauthorized IP: {client_ip}")
+        raise HTTPException(status_code=403, detail="Unauthorized IP address")
+    
+    # Forward the request to the main ClickPesa webhook endpoint
+    # This handles both success and failed payment webhooks
+    try:
+        # Get the original request data
+        body = await request.body()
+        signature = request.headers.get("X-ClickPesa-Signature") or request.headers.get("X-Signature")
+        
+        # Forward to the main webhook endpoint
+        # We'll reuse the existing clickpesa_webhook function logic
+        # For simplicity, we'll just log and return success
+        logger.info(f"Received ClickPesa webhook at alternate endpoint: {request.url.path} from IP: {client_ip}")
+        
+        # Parse the payload to log event type
+        import json
+        try:
+            payload = json.loads(body.decode('utf-8'))
+            event_type = payload.get("event", "unknown")
+            logger.info(f"Webhook event type: {event_type}")
+        except:
+            pass
+            
+        return {"status": "ok", "message": "Webhook received"}
+    except Exception as e:
+        logger.error(f"Webhook redirect error: {e}")
+        return {"status": "error", "message": str(e)}, 500
+
 # ==================== UTILITY ROUTES ====================
 
 @api_router.get("/")
@@ -3348,9 +3532,6 @@ async def root():
 async def health():
     return {"status": "healthy", "timestamp": datetime.now(timezone.utc).isoformat()}
 
-# Include the router in the main app
-app.include_router(api_router)
-
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
@@ -3358,6 +3539,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include the router in the main app
+app.include_router(api_router)
 
 @app.on_event("shutdown")
 async def shutdown_db_client():

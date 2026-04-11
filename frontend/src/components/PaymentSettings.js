@@ -19,6 +19,9 @@ const PaymentSettings = () => {
   const [transactions, setTransactions] = useState([]);
   const [loadingTx, setLoadingTx] = useState(true);
   const [subscribing, setSubscribing] = useState(null);
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [showPhoneModal, setShowPhoneModal] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState(null);
 
   const rawPlan = user?.subscription_plan || (user?.subscription_status === 'active' ? 'basic' : 'free');
   const subscriptionPlan = rawPlan === 'enterprise' ? 'master' : rawPlan;
@@ -94,27 +97,54 @@ const PaymentSettings = () => {
     setLoadingTx(false);
   };
 
-  const handleSubscribe = async (planId) => {
-    setSubscribing(planId);
+  const handleSubscribeClick = (planId) => {
+    setSelectedPlan(planId);
+    setShowPhoneModal(true);
+  };
+
+  const handleSubscribe = async () => {
+    if (!phoneNumber.trim()) {
+      toast.error('Please enter your phone number');
+      return;
+    }
+
+    // Validate phone number format (255XXXXXXXXX)
+    const phoneRegex = /^255\d{9}$/;
+    if (!phoneRegex.test(phoneNumber.trim())) {
+      toast.error('Please enter a valid Tanzanian phone number starting with 255 (e.g., 255712345678)');
+      return;
+    }
+
+    setSubscribing(selectedPlan);
+    setShowPhoneModal(false);
+    
     try {
       const response = await axios.post(
-        `${API_URL}/api/subscription/checkout`,
-        { plan_id: planId },
+        `${API_URL}/api/subscription/checkout-clickpesa`,
+        { 
+          plan_id: selectedPlan,
+          customer_phone: phoneNumber.trim()
+        },
         { withCredentials: true }
       );
 
-      const { checkout_url } = response.data;
-      if (checkout_url) {
-        toast.success('Redirecting to PesaPal checkout...');
+      const { success, checkout_url, message } = response.data;
+      if (success && checkout_url) {
+        toast.success('Redirecting to ClickPesa checkout...');
+        // Redirect to ClickPesa hosted checkout page
         window.location.href = checkout_url;
       } else {
-        toast.error('Could not create checkout session. Please try again.');
+        toast.error(message || 'Could not create checkout. Please try again.');
+        setSubscribing(null);
+        setPhoneNumber('');
+        setSelectedPlan(null);
       }
     } catch (error) {
       console.error('Checkout error:', error);
       toast.error(error.response?.data?.detail || 'Payment service unavailable. Please try again later.');
-    } finally {
       setSubscribing(null);
+      setPhoneNumber('');
+      setSelectedPlan(null);
     }
   };
 
@@ -201,7 +231,7 @@ const PaymentSettings = () => {
                 </div>
               ) : plan.id !== 'free' ? (
                 <button
-                  onClick={() => handleSubscribe(plan.id)}
+                  onClick={() => handleSubscribeClick(plan.id)}
                   disabled={subscribing === plan.id}
                   className="w-full py-2.5 bg-[#D95D39] text-white rounded-lg font-medium hover:bg-[#BD4D2D] transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                   data-testid={`subscribe-btn-${plan.id}`}
@@ -218,13 +248,13 @@ const PaymentSettings = () => {
         })}
       </div>
 
-      {/* PesaPal Payment Info */}
-      <div className="bg-[#EFF6FF] border border-[#3B82F6]/30 rounded-xl p-4 flex items-start gap-3 mb-8" data-testid="pesapal-info">
+      {/* ClickPesa Payment Info */}
+      <div className="bg-[#EFF6FF] border border-[#3B82F6]/30 rounded-xl p-4 flex items-start gap-3 mb-8" data-testid="clickpesa-info">
         <ExternalLink className="w-5 h-5 text-[#3B82F6] mt-0.5 flex-shrink-0" />
         <div>
-          <h4 className="font-medium text-[#1E40AF]">PesaPal Payment Integration</h4>
+          <h4 className="font-medium text-[#1E40AF]">ClickPesa Payment Integration</h4>
           <p className="text-sm text-[#1D4ED8]">
-            Payments are processed securely via PesaPal. You'll be redirected to PesaPal's checkout page when you upgrade.
+            Payments are processed securely via ClickPesa. You'll be redirected to ClickPesa's checkout page when you upgrade.
           </p>
         </div>
       </div>
@@ -259,6 +289,60 @@ const PaymentSettings = () => {
           </div>
         )}
       </div>
+
+      {/* Phone Number Modal */}
+      {showPhoneModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-md w-full p-6">
+            <h3 className="font-heading text-xl font-bold text-[#1A2E16] mb-2">Enter Phone Number</h3>
+            <p className="text-[#7A8A76] mb-4">
+              ClickPesa hosted checkout requires your phone number for payment processing.
+              Enter your Tanzanian phone number starting with 255.
+            </p>
+            
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-[#1A2E16] mb-2">
+                Phone Number
+              </label>
+              <input
+                type="tel"
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.target.value)}
+                placeholder="255712345678"
+                className="w-full px-4 py-2.5 border border-[#E4DFD5] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2D5A27] focus:border-transparent"
+                autoFocus
+              />
+              <p className="text-xs text-[#7A8A76] mt-2">
+                Format: 255 followed by your 9-digit phone number (e.g., 255712345678)
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowPhoneModal(false);
+                  setPhoneNumber('');
+                  setSelectedPlan(null);
+                }}
+                className="flex-1 py-2.5 border border-[#E4DFD5] text-[#1A2E16] rounded-lg font-medium hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSubscribe}
+                disabled={!phoneNumber.trim() || subscribing === selectedPlan}
+                className="flex-1 py-2.5 bg-[#D95D39] text-white rounded-lg font-medium hover:bg-[#BD4D2D] transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {subscribing === selectedPlan ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" />Processing...</>
+                ) : (
+                  <>Proceed to Payment</>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

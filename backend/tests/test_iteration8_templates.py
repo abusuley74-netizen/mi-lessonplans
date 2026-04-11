@@ -163,10 +163,10 @@ class TestTemplatesPostEndpoint:
 
 
 class TestTemplatesExportEndpoint:
-    """Tests for POST /api/templates/{id}/export - export as Word document"""
+    """Tests for POST /api/templates/{id}/export - export as PDF document"""
     
-    def test_export_basic_template_returns_msword(self, api_client):
-        """POST /api/templates/{id}/export should return application/msword"""
+    def test_export_basic_template_returns_pdf(self, api_client):
+        """POST /api/templates/{id}/export should return application/pdf"""
         payload = {
             "type": "basic",
             "content": {
@@ -178,8 +178,8 @@ class TestTemplatesExportEndpoint:
         }
         response = api_client.post(f"{BASE_URL}/api/templates/template_basic/export", json=payload)
         assert response.status_code == 200, f"Expected 200, got {response.status_code}"
-        assert "application/msword" in response.headers.get("Content-Type", "")
-        print("✓ POST /api/templates/{id}/export returns application/msword")
+        assert "application/pdf" in response.headers.get("Content-Type", "")
+        print("✓ POST /api/templates/{id}/export returns application/pdf")
     
     def test_export_returns_content_disposition(self, api_client):
         """Export should have Content-Disposition header with filename"""
@@ -195,7 +195,7 @@ class TestTemplatesExportEndpoint:
         response = api_client.post(f"{BASE_URL}/api/templates/template_basic/export", json=payload)
         content_disp = response.headers.get("Content-Disposition", "")
         assert "attachment" in content_disp
-        assert ".doc" in content_disp
+        assert ".pdf" in content_disp
         print(f"✓ Export has Content-Disposition: {content_disp}")
     
     def test_export_scientific_template(self, api_client):

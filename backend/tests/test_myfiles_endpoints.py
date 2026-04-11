@@ -83,8 +83,8 @@ class TestLessonsEndpoints:
         
         print("✓ Mainland lesson view has 4 stages in bilingual format and no buttons")
     
-    def test_lesson_export_doc(self, auth_session):
-        """GET /api/lessons/{id}/export returns .doc file"""
+    def test_lesson_export_pdf(self, auth_session):
+        """GET /api/lessons/{id}/export returns .pdf file"""
         response = auth_session.get(f"{BASE_URL}/api/lessons/{TEST_ZANZIBAR_LESSON}/export")
         
         if response.status_code == 404:
@@ -94,14 +94,13 @@ class TestLessonsEndpoints:
         
         # Check content type
         content_type = response.headers.get("Content-Type", "")
-        assert "msword" in content_type or "application/octet-stream" in content_type, \
-            f"Expected msword content type, got {content_type}"
+        assert "application/pdf" in content_type, f"Expected application/pdf, got {content_type}"
         
-        # Check content disposition for .doc extension
+        # Check content disposition for .pdf extension
         content_disp = response.headers.get("Content-Disposition", "")
-        assert ".doc" in content_disp, f"Expected .doc in Content-Disposition, got {content_disp}"
+        assert ".pdf" in content_disp, f"Expected .pdf in Content-Disposition, got {content_disp}"
         
-        print("✓ Lesson export returns .doc file with correct headers")
+        print("✓ Lesson export returns .pdf file with correct headers")
 
 
 class TestTemplatesEndpoints:
@@ -144,8 +143,8 @@ class TestTemplatesEndpoints:
         
         print(f"✓ Template {template_id} view returns HTML without buttons")
     
-    def test_template_export_doc(self, auth_session):
-        """GET /api/templates/{id}/export returns .doc file"""
+    def test_template_export_pdf(self, auth_session):
+        """GET /api/templates/{id}/export returns .pdf file"""
         # First get templates list
         templates_resp = auth_session.get(f"{BASE_URL}/api/templates")
         templates = templates_resp.json().get("templates", [])
@@ -161,13 +160,13 @@ class TestTemplatesEndpoints:
         
         # Check content type
         content_type = response.headers.get("Content-Type", "")
-        assert "msword" in content_type, f"Expected msword content type, got {content_type}"
+        assert "application/pdf" in content_type, f"Expected application/pdf, got {content_type}"
         
-        # Check content disposition for .doc extension
+        # Check content disposition for .pdf extension
         content_disp = response.headers.get("Content-Disposition", "")
-        assert ".doc" in content_disp, f"Expected .doc in Content-Disposition, got {content_disp}"
+        assert ".pdf" in content_disp, f"Expected .pdf in Content-Disposition, got {content_disp}"
         
-        print(f"✓ Template {template_id} export returns .doc file")
+        print(f"✓ Template {template_id} export returns .pdf file")
 
 
 class TestUploadsEndpoints:

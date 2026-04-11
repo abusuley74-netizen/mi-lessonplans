@@ -350,7 +350,7 @@ const MyFiles = () => {
                 <button onClick={() => fetchAndView(`${API_URL}/api/lessons/${file.lesson_id}/view`, setViewHtml)} className="flex items-center gap-1 text-xs text-[#2D5A27] font-medium hover:text-[#21441C]" data-testid={`view-lesson-${file.lesson_id}`}>
                   <Eye className="w-3.5 h-3.5" />View
                 </button>
-                <button onClick={() => fetchAndDownload(`${API_URL}/api/lessons/${file.lesson_id}/export`, `${file.subject}_${file.topic}_lesson.doc`)} className="flex items-center gap-1 text-xs text-[#8E44AD] font-medium hover:text-[#6C3483]" data-testid={`download-lesson-${file.lesson_id}`}>
+                <button onClick={() => fetchAndDownload(`${API_URL}/api/lessons/${file.lesson_id}/export`, `${file.subject}_${file.topic}_lesson.pdf`)} className="flex items-center gap-1 text-xs text-[#8E44AD] font-medium hover:text-[#6C3483]" data-testid={`download-lesson-${file.lesson_id}`}>
                   <Download className="w-3.5 h-3.5" />Download
                 </button>
               </div>
@@ -459,7 +459,7 @@ const MyFiles = () => {
                 <Link2 className="w-3.5 h-3.5" />Share
               </button>
               {file.content_type?.startsWith('image/') || file.type?.includes('image') ? (
-                <button onClick={() => { setViewHtml(`<html><body style="margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#f5f5f5"><img src="${API_URL}/api/uploads/${file.upload_id}/download" style="max-width:100%;max-height:90vh;" /></body></html>`); }}
+                <button onClick={() => { setViewHtml(`<html><body style="margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#f5f5f5"><img src="${API_URL}/api/uploads/${file.upload_id}/view" style="max-width:100%;max-height:90vh;" /></body></html>`); }}
                   className="flex items-center gap-1 text-xs text-[#2D5A27] font-medium hover:text-[#21441C]" data-testid={`view-upload-${file.upload_id}`}>
                   <Eye className="w-3.5 h-3.5" />View
                 </button>
@@ -499,7 +499,7 @@ const MyFiles = () => {
                 <button onClick={() => fetchAndView(`${API_URL}/api/templates/${file.template_id}/view`, setViewHtml)} className="flex items-center gap-1 text-xs text-[#2D5A27] font-medium hover:text-[#21441C]" data-testid={`view-template-${file.template_id}`}>
                   <Eye className="w-3.5 h-3.5" />View
                 </button>
-                <button onClick={() => fetchAndDownload(`${API_URL}/api/templates/${file.template_id}/export`, `${file.name || 'template'}.doc`)} className="flex items-center gap-1 text-xs text-[#8E44AD] font-medium hover:text-[#6C3483]" data-testid={`download-template-${file.template_id}`}>
+                <button onClick={() => fetchAndDownload(`${API_URL}/api/templates/${file.template_id}/export`, `${file.name || 'template'}.pdf`)} className="flex items-center gap-1 text-xs text-[#8E44AD] font-medium hover:text-[#6C3483]" data-testid={`download-template-${file.template_id}`}>
                   <Download className="w-3.5 h-3.5" />Download
                 </button>
               </div>
@@ -538,9 +538,9 @@ const MyFiles = () => {
                 className="flex items-center gap-1 text-xs text-[#2D5A27] font-medium hover:text-[#21441C]" data-testid={`view-scheme-${file.scheme_id}`}>
                 <Eye className="w-3.5 h-3.5" />View
               </button>
-              <button onClick={() => fetchAndDownload(`${API_URL}/api/schemes/${file.scheme_id}/export`, `Scheme_${file.subject || 'untitled'}_${file.syllabus}.doc`)}
+              <button onClick={() => fetchAndDownload(`${API_URL}/api/schemes/${file.scheme_id}/export`, `Scheme_${file.subject || 'untitled'}_${file.syllabus}.pdf`)}
                 className="flex items-center gap-1 text-xs text-[#8E44AD] font-medium hover:text-[#6C3483]" data-testid={`download-scheme-${file.scheme_id}`}>
-                <Download className="w-3.5 h-3.5" />DOCX
+                <Download className="w-3.5 h-3.5" />PDF
               </button>
             </div>
           </div>

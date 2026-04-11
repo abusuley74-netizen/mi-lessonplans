@@ -1,7 +1,7 @@
 """
 Test MyFiles View/Share/Download functionality
 - Lesson view returns Zanzibar table format
-- Lesson export returns .doc with application/msword
+- Lesson export returns PDF with application/pdf
 - No Print/Download buttons in view HTML
 - Upload endpoints work correctly
 """
@@ -137,30 +137,29 @@ class TestLessonViewEndpoint:
 
 
 class TestLessonExportEndpoint:
-    """Test GET /api/lessons/{id}/export returns Word .doc format"""
+    """Test GET /api/lessons/{id}/export returns PDF format"""
     
-    def test_lesson_export_returns_msword_content_type(self):
-        """Lesson export must return Content-Type: application/msword"""
+    def test_lesson_export_returns_pdf_content_type(self):
+        """Lesson export must return Content-Type: application/pdf"""
         response = requests.get(
             f"{BASE_URL}/api/lessons/{ZANZIBAR_LESSON_ID}/export",
             headers=AUTH_HEADER
         )
         assert response.status_code == 200
         content_type = response.headers.get("Content-Type", "")
-        assert "application/msword" in content_type, f"Expected application/msword, got {content_type}"
-        print("PASS: Lesson export returns application/msword Content-Type")
+        assert "application/pdf" in content_type, f"Expected application/pdf, got {content_type}"
+        print("PASS: Lesson export returns application/pdf Content-Type")
     
-    def test_lesson_export_has_doc_extension(self):
-        """Lesson export must have .doc extension in Content-Disposition"""
+    def test_lesson_export_has_pdf_extension(self):
+        """Lesson export must have .pdf extension in Content-Disposition"""
         response = requests.get(
             f"{BASE_URL}/api/lessons/{ZANZIBAR_LESSON_ID}/export",
             headers=AUTH_HEADER
         )
         assert response.status_code == 200
         content_disposition = response.headers.get("Content-Disposition", "")
-        assert ".doc" in content_disposition, f"Expected .doc extension, got {content_disposition}"
-        assert ".txt" not in content_disposition, "Should not be .txt extension"
-        print("PASS: Lesson export has .doc extension")
+        assert ".pdf" in content_disposition, f"Expected .pdf extension, got {content_disposition}"
+        print("PASS: Lesson export has .pdf extension")
     
     def test_lesson_export_contains_html_tables(self):
         """Lesson export content should contain HTML tables for Word rendering"""

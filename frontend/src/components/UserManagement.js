@@ -107,6 +107,7 @@ const UserManagement = () => {
             <option value="active">Active</option>
             <option value="inactive">Inactive</option>
             <option value="blocked">Blocked</option>
+            <option value="deleted">Deleted</option>
           </select>
         </div>
       </div>
@@ -168,13 +169,15 @@ const UserManagement = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        user.is_blocked
+                        user.is_deleted
+                          ? 'bg-gray-800 text-gray-100'
+                          : user.is_blocked
                           ? 'bg-red-100 text-red-800'
                           : user.subscription_status === 'active'
                           ? 'bg-green-100 text-green-800'
                           : 'bg-yellow-100 text-yellow-800'
                       }`}>
-                        {user.is_blocked ? 'Blocked' : user.subscription_status || 'Free'}
+                        {user.is_deleted ? 'Deleted' : user.is_blocked ? 'Blocked' : user.subscription_status || 'Free'}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -208,6 +211,12 @@ const UserManagement = () => {
                           className="text-yellow-600 hover:text-yellow-900"
                         >
                           Suspend
+                        </button>
+                        <button
+                          onClick={() => setActionModal({ user, action: 'delete' })}
+                          className="text-red-600 hover:text-red-900 font-semibold"
+                        >
+                          Delete
                         </button>
                       </div>
                     </td>
@@ -289,11 +298,17 @@ const UserManagement = () => {
             <div className="mt-3">
               <h3 className="text-lg font-medium text-gray-900 mb-4">
                 {actionModal.action === 'block' ? 'Block User' :
-                 actionModal.action === 'suspend' ? 'Suspend User' : 'User Action'}
+                 actionModal.action === 'suspend' ? 'Suspend User' :
+                 actionModal.action === 'delete' ? 'Delete User' : 'User Action'}
               </h3>
 
               <p className="mb-4">
                 Are you sure you want to {actionModal.action} <strong>{actionModal.user.name}</strong>?
+                {actionModal.action === 'delete' && (
+                  <span className="block mt-2 text-red-600 font-semibold">
+                    Warning: This action cannot be undone. The user will be permanently deleted from the system.
+                  </span>
+                )}
               </p>
 
               <textarea
@@ -312,9 +327,15 @@ const UserManagement = () => {
                 </button>
                 <button
                   onClick={() => handleUserAction(actionModal.user.user_id, actionModal.action, actionModal.reason)}
-                  className="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md hover:bg-red-700"
+                  className={`px-4 py-2 text-sm font-medium text-white border border-transparent rounded-md ${
+                    actionModal.action === 'delete' 
+                      ? 'bg-red-700 hover:bg-red-800' 
+                      : 'bg-red-600 hover:bg-red-700'
+                  }`}
                 >
-                  {actionModal.action === 'block' ? 'Block' : 'Suspend'}
+                  {actionModal.action === 'block' ? 'Block' : 
+                   actionModal.action === 'suspend' ? 'Suspend' :
+                   actionModal.action === 'delete' ? 'Delete' : 'Confirm'}
                 </button>
               </div>
             </div>
