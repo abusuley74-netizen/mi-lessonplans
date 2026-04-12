@@ -16,8 +16,8 @@ from fastapi import HTTPException
 logger = logging.getLogger(__name__)
 
 # ClickPesa Configuration
-CLICKPESA_API_KEY = os.environ.get("CLICKPESA_API_KEY", "SKVOuPRdWfxm4Dz1rOCGXSIDEwyYlTqFY9YIr7RCfJ")
-CLICKPESA_CLIENT_ID = os.environ.get("CLICKPESA_CLIENT_ID", "IDf6LaoJzaSyA6F2hwrDOdLJCxfGjjzU")
+CLICKPESA_API_KEY = os.environ.get("CLICKPESA_API_KEY", "")
+CLICKPESA_CLIENT_ID = os.environ.get("CLICKPESA_CLIENT_ID", "")
 CLICKPESA_BASE_URL = os.environ.get("CLICKPESA_BASE_URL", "https://api.clickpesa.com")
 CLICKPESA_SANDBOX_URL = os.environ.get("CLICKPESA_SANDBOX_URL", "https://sandbox.clickpesa.com")
 CLICKPESA_USE_SANDBOX = os.environ.get("CLICKPESA_USE_SANDBOX", "false").lower() in ["true", "1", "yes"]

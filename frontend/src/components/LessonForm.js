@@ -9,7 +9,8 @@ const SUBJECTS = [
 
 const ZANZIBAR_GRADES = [
   'Standard 1', 'Standard 2', 'Standard 3', 'Standard 4', 'Standard 5',
-  'Standard 6', 'Standard 7', 'Form 1', 'Form 2'
+  'Standard 6', 'Standard 7', 'Form 1', 'Form 2', 'Form 3', 'Form 4',
+  'Form 5', 'Form 6'
 ];
 
 const TANZANIA_GRADES = [
@@ -128,15 +129,26 @@ const LessonForm = ({ onSubmit, isLoading }) => {
           </div>
         </div>
 
-        {/* Subject */}
-        <SelectDropdown
-          label="Subject"
-          value={formData.subject}
-          onChange={(val) => handleChange('subject', val)}
-          options={SUBJECTS}
-          icon={BookOpen}
-          testId="select-subject"
-        />
+        {/* Subject - Now editable text input */}
+        <div>
+          <label className="text-sm font-medium text-[#4A5B46] mb-1.5 block">
+            Subject (Type any subject)
+          </label>
+          <div className="relative">
+            <BookOpen className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#7A8A76]" />
+            <input
+              type="text"
+              value={formData.subject}
+              onChange={(e) => handleChange('subject', e.target.value)}
+              placeholder="e.g., Kiswahili, Mathematics, اللغة العربية, Français"
+              className="w-full bg-white border border-[#E4DFD5] text-[#1A2E16] rounded-md p-3 pl-10 focus:border-[#2D5A27] focus:ring-1 focus:ring-[#2D5A27] transition-colors"
+              data-testid="input-subject"
+            />
+          </div>
+          <small className="text-xs text-[#7A8A76] mt-1 block">
+            💡 Language detection works automatically: Kiswahili → Swahili, العربية → Arabic, Français → French
+          </small>
+        </div>
 
         {/* Grade */}
         <SelectDropdown

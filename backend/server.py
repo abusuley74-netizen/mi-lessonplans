@@ -1058,21 +1058,23 @@ async def logout(request: Request, response: Response):
 # ==================== AI LESSON GENERATION ====================
 
 async def generate_lesson_with_ai(syllabus: str, subject: str, grade: str, topic: str) -> Dict[str, Any]:
-    """Generate lesson plan content using GPT-5.2 via Emergent LLM key"""
+    """Generate lesson plan content using DeepSeek API"""
     import asyncio
-    from emergentintegrations.llm.chat import LlmChat, UserMessage
+    import json
+    import re
+    import httpx
     
-    api_key = os.environ.get("EMERGENT_LLM_KEY")
+    api_key = os.environ.get("DEEPSEEK_API_KEY")
     if not api_key:
-        logger.warning("No EMERGENT_LLM_KEY found, using fallback content")
+        logger.warning("No DEEPSEEK_API_KEY found, using fallback content")
         return get_fallback_lesson_content(syllabus, subject, grade, topic)
     
     try:
-        chat = LlmChat(
-            api_key=api_key,
-            session_id=f"lesson_{uuid.uuid4().hex[:8]}",
-            system_message="You are an expert Tanzanian education curriculum designer. Create practical lesson plans. Be concise but comprehensive."
-        ).with_model("openai", "gpt-5.2")
+        # DeepSeek API is OpenAI-compatible
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {api_key}'
+        }
         
         if syllabus == "Zanzibar":
             prompt = f"""Create a detailed lesson plan for the Zanzibar syllabus with the following details:
@@ -1150,25 +1152,50 @@ Generate the lesson plan in JSON format with these exact keys:
 }}
 
 Provide practical, actionable content appropriate for {grade} students in Tanzania."""
-
-        user_message = UserMessage(text=prompt)
-        response = await chat.send_message(user_message)
         
-        # Parse JSON from response
-        import json
-        import re
+        payload = {
+            "model": "deepseek-chat",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "You are an expert Tanzanian education curriculum designer. Create practical lesson plans. Be concise but comprehensive. Always respond with valid JSON only."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            "temperature": 0.7,
+            "max_tokens": 4096
+        }
         
-        # Try to extract JSON from the response
-        json_match = re.search(r'\{[\s\S]*\}', response)
-        if json_match:
-            content = json.loads(json_match.group())
-            # Force teacherEvaluation and remarks to be empty for teacher input
-            content["teacherEvaluation"] = ""
-            content["remarks"] = ""
-            return content
-        else:
-            logger.warning("Could not parse AI response, using fallback")
-            return get_fallback_lesson_content(syllabus, subject, grade, topic)
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                "https://api.deepseek.com/v1/chat/completions",
+                headers=headers,
+                json=payload
+            )
+            
+            if response.status_code != 200:
+                logger.error(f"DeepSeek API error: {response.status_code} - {response.text}")
+                return get_fallback_lesson_content(syllabus, subject, grade, topic)
+            
+            data = response.json()
+            response_text = data["choices"][0]["message"]["content"]
+            
+            # Try to extract JSON from the response
+            json_match = re.search(r'\{[\s\S]*\}', response_text)
+            if json_match:
+                content = json.loads(json_match.group())
+                # Force teacherEvaluation and remarks to be empty for teacher input
+                if "teacherEvaluation" in content:
+                    content["teacherEvaluation"] = ""
+                if "remarks" in content:
+                    content["remarks"] = ""
+                return content
+            else:
+                logger.warning("Could not parse AI response, using fallback")
+                return get_fallback_lesson_content(syllabus, subject, grade, topic)
             
     except Exception as e:
         logger.error(f"AI generation error: {e}")
@@ -1856,9 +1883,10 @@ async def save_dictation(request: Request, user: User = Depends(get_current_user
 
 @api_router.post("/dictation/generate")
 async def generate_dictation_audio(request: Request, user: User = Depends(get_current_user)):
-    """Generate audio from text using OpenAI TTS via Emergent LLM Key"""
+    """Generate audio from text using Azure Microsoft Cognitive Services Speech API"""
     from fastapi.responses import Response as FastAPIResponse
-    from emergentintegrations.llm.openai import OpenAITextToSpeech
+    import aiohttp
+    import io
     
     data = await request.json()
     text = data.get("text", "")
@@ -1871,44 +1899,48 @@ async def generate_dictation_audio(request: Request, user: User = Depends(get_cu
     if len(words) > 200:
         raise HTTPException(status_code=400, detail="Text exceeds 200 word limit")
     
-    # Map language codes to appropriate TTS voices
+    # Map language codes to Azure Speech voices
     voice_map = {
-        "en-GB": "nova",
-        "sw": "onyx",
-        "ar": "echo",
-        "tr": "fable",
-        "fr": "shimmer",
+        "en-GB": "en-GB-RyanNeural",      # British English - Male
+        "sw": "sw-TZ-DaudiNeural",        # Swahili (Tanzania) - Male
+        "ar": "ar-SA-HamedNeural",        # Arabic (Saudi Arabia) - Male
+        "tr": "tr-TR-AhmetNeural",        # Turkish (Turkey) - Male
+        "fr": "fr-FR-HenriNeural",        # French (France) - Male
     }
-    voice = voice_map.get(language, "alloy")
+    voice = voice_map.get(language, "en-US-GuyNeural")
     
-    api_key = os.environ.get("EMERGENT_LLM_KEY")
-    if not api_key:
-        raise HTTPException(status_code=500, detail="TTS service not configured")
+    # Get Azure Speech key and endpoint
+    azure_speech_key = os.environ.get("AZURE_SPEECH_KEY_1")
+    azure_endpoint = os.environ.get("AZURE_SPEECH_ENDPOINT", "https://eastus.api.cognitive.microsoft.com/")
+    
+    if not azure_speech_key:
+        raise HTTPException(status_code=500, detail="Azure Speech service not configured")
     
     try:
-        # Always translate text to the selected target language
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-        lang_names = {"en-GB": "British English", "sw": "Swahili", "ar": "Arabic", "tr": "Turkish", "fr": "French"}
-        target_lang = lang_names.get(language, "English")
+        # Azure Speech API endpoint for text-to-speech
+        tts_url = f"{azure_endpoint.rstrip('/')}/cognitiveservices/v1"
         
-        chat = LlmChat(
-            api_key=api_key,
-            session_id=f"translate_{uuid.uuid4().hex[:8]}",
-            system_message=f"You are a translator. Translate the following text to {target_lang}. If the text is already in {target_lang}, return it unchanged. Return ONLY the translated text, nothing else. No explanations, no quotes."
-        ).with_model("openai", "gpt-5.2")
+        # SSML for Azure Speech
+        ssml = f"""<speak version='1.0' xml:lang='{language}'>
+    <voice name='{voice}'>
+        {text}
+    </voice>
+</speak>"""
         
-        translation = await chat.send_message(UserMessage(text=text))
-        tts_text = translation.strip()
-        logger.info(f"Translated to {target_lang}: {tts_text[:80]}...")
+        headers = {
+            "Ocp-Apim-Subscription-Key": azure_speech_key,
+            "Content-Type": "application/ssml+xml",
+            "X-Microsoft-OutputFormat": "audio-16khz-128kbitrate-mono-mp3"
+        }
         
-        tts = OpenAITextToSpeech(api_key=api_key)
-        audio_bytes = await tts.generate_speech(
-            text=tts_text,
-            model="tts-1",
-            voice=voice,
-            response_format="mp3",
-            speed=1.0
-        )
+        async with aiohttp.ClientSession() as session:
+            async with session.post(tts_url, headers=headers, data=ssml) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    logger.error(f"Azure TTS API error: {response.status} - {error_text}")
+                    raise HTTPException(status_code=500, detail=f"Azure Speech API error: {response.status}")
+                
+                audio_bytes = await response.read()
         
         return FastAPIResponse(
             content=audio_bytes,
@@ -1916,7 +1948,7 @@ async def generate_dictation_audio(request: Request, user: User = Depends(get_cu
             headers={"Content-Disposition": f"inline; filename=dictation_{language}.mp3"}
         )
     except Exception as e:
-        logger.error(f"TTS generation error: {e}")
+        logger.error(f"Azure TTS generation error: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to generate audio: {str(e)}")
 
 @api_router.delete("/dictations/{dictation_id}")
@@ -1973,34 +2005,101 @@ async def download_dictation_audio(dictation_id: str, user: User = Depends(get_c
         )
 
     # Fallback: regenerate audio
-    from emergentintegrations.llm.openai import OpenAITextToSpeech
     text = dictation.get("text", "")
     if not text.strip():
         raise HTTPException(status_code=400, detail="Dictation has no text")
 
-    voice_map = {"en-GB": "nova", "sw": "onyx", "ar": "echo", "tr": "fable", "fr": "shimmer"}
-    voice = voice_map.get(language, "alloy")
-
-    api_key = os.environ.get("EMERGENT_LLM_KEY")
-    if not api_key:
+    # Use Azure Speech for TTS (DeepSeek doesn't have TTS service)
+    azure_speech_key = os.environ.get("AZURE_SPEECH_KEY_1")
+    azure_endpoint = os.environ.get("AZURE_SPEECH_ENDPOINT", "https://eastus.api.cognitive.microsoft.com/")
+    
+    if not azure_speech_key:
         raise HTTPException(status_code=500, detail="TTS service not configured")
 
     try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-        lang_names = {"en-GB": "British English", "sw": "Swahili", "ar": "Arabic", "tr": "Turkish", "fr": "French"}
-        target_lang = lang_names.get(language, "English")
-        chat = LlmChat(
-            api_key=api_key,
-            session_id=f"translate_{uuid.uuid4().hex[:8]}",
-            system_message=f"You are a translator. Translate the following text to {target_lang}. If the text is already in {target_lang}, return it unchanged. Return ONLY the translated text, nothing else. No explanations, no quotes."
-        ).with_model("openai", "gpt-5.2")
-        translation = await chat.send_message(UserMessage(text=text))
-        tts_text = translation.strip()
-
-        tts = OpenAITextToSpeech(api_key=api_key)
-        audio_bytes = await tts.generate_speech(
-            text=tts_text, model="tts-1", voice=voice, response_format="mp3", speed=1.0
-        )
+        # First, translate if needed using DeepSeek API
+        api_key = os.environ.get("DEEPSEEK_API_KEY")
+        tts_text = text
+        
+        # Only translate if language is not English
+        if language != "en-GB":
+            if api_key:
+                import httpx
+                import json
+                
+                lang_names = {"sw": "Swahili", "ar": "Arabic", "tr": "Turkish", "fr": "French"}
+                target_lang = lang_names.get(language, "English")
+                
+                headers = {
+                    'Content-Type': 'application/json',
+                    'Authorization': f'Bearer {api_key}'
+                }
+                
+                payload = {
+                    "model": "deepseek-chat",
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": f"You are a translator. Translate the following text to {target_lang}. If the text is already in {target_lang}, return it unchanged. Return ONLY the translated text, nothing else. No explanations, no quotes."
+                        },
+                        {
+                            "role": "user",
+                            "content": text
+                        }
+                    ],
+                    "temperature": 0.3,
+                    "max_tokens": 1000
+                }
+                
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    response = await client.post(
+                        "https://api.deepseek.com/v1/chat/completions",
+                        headers=headers,
+                        json=payload
+                    )
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        translation = data["choices"][0]["message"]["content"].strip()
+                        tts_text = translation
+        
+        # Use Azure Speech for TTS
+        import aiohttp
+        
+        # Map language codes to Azure Speech voices
+        voice_map = {
+            "en-GB": "en-GB-RyanNeural",      # British English - Male
+            "sw": "sw-TZ-DaudiNeural",        # Swahili (Tanzania) - Male
+            "ar": "ar-SA-HamedNeural",        # Arabic (Saudi Arabia) - Male
+            "tr": "tr-TR-AhmetNeural",        # Turkish (Turkey) - Male
+            "fr": "fr-FR-HenriNeural",        # French (France) - Male
+        }
+        voice = voice_map.get(language, "en-US-GuyNeural")
+        
+        # Azure Speech API endpoint for text-to-speech
+        tts_url = f"{azure_endpoint.rstrip('/')}/cognitiveservices/v1"
+        
+        # SSML for Azure Speech
+        ssml = f"""<speak version='1.0' xml:lang='{language}'>
+    <voice name='{voice}'>
+        {tts_text}
+    </voice>
+</speak>"""
+        
+        headers = {
+            "Ocp-Apim-Subscription-Key": azure_speech_key,
+            "Content-Type": "application/ssml+xml",
+            "X-Microsoft-OutputFormat": "audio-16khz-128kbitrate-mono-mp3"
+        }
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.post(tts_url, headers=headers, data=ssml) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    logger.error(f"Azure TTS API error: {response.status} - {error_text}")
+                    raise HTTPException(status_code=500, detail=f"Azure Speech API error: {response.status}")
+                
+                audio_bytes = await response.read()
 
         return FastAPIResponse(
             content=audio_bytes,
@@ -2166,7 +2265,9 @@ async def delete_scheme(scheme_id: str, user: User = Depends(get_current_user)):
 @api_router.post("/schemes/generate")
 async def generate_scheme_ai(request: Request, user: User = Depends(get_current_user)):
     """Generate scheme of work competency rows with AI"""
-    from emergentintegrations.llm.chat import LlmChat, UserMessage
+    import json
+    import re
+    import httpx
 
     data = await request.json()
     syllabus = data.get("syllabus", "Zanzibar")
@@ -2178,16 +2279,15 @@ async def generate_scheme_ai(request: Request, user: User = Depends(get_current_
     if not subject or not grade:
         raise HTTPException(status_code=400, detail="Subject and class are required")
 
-    api_key = os.environ.get("EMERGENT_LLM_KEY")
+    api_key = os.environ.get("DEEPSEEK_API_KEY")
     if not api_key:
         raise HTTPException(status_code=500, detail="AI service not configured")
 
     try:
-        chat = LlmChat(
-            api_key=api_key,
-            session_id=f"scheme_{uuid.uuid4().hex[:8]}",
-            system_message="You are an expert Tanzanian education curriculum designer specializing in Scheme of Work planning. You know both Zanzibar and Tanzania Mainland syllabus formats deeply. Always respond with valid JSON only."
-        ).with_model("openai", "gpt-5.2")
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {api_key}'
+        }
 
         if syllabus == "Zanzibar":
             prompt = f"""Generate a Scheme of Work for the ZANZIBAR syllabus:
@@ -2257,15 +2357,49 @@ IMPORTANT:
 - Make activities practical and age-appropriate
 - Return ONLY the JSON array, no other text"""
 
-        response_text = await chat.send_message(UserMessage(text=prompt))
-        clean = response_text.strip()
-        if clean.startswith("```"):
-            clean = clean.split("\n", 1)[1] if "\n" in clean else clean[3:]
-            clean = clean.rsplit("```", 1)[0]
-        clean = clean.strip()
+        payload = {
+            "model": "deepseek-chat",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "You are an expert Tanzanian education curriculum designer specializing in Scheme of Work planning. You know both Zanzibar and Tanzania Mainland syllabus formats deeply. Always respond with valid JSON only."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            "temperature": 0.7,
+            "max_tokens": 4096
+        }
 
-        import json
-        rows = json.loads(clean)
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                "https://api.deepseek.com/v1/chat/completions",
+                headers=headers,
+                json=payload
+            )
+            
+            if response.status_code != 200:
+                logger.error(f"DeepSeek API error: {response.status_code} - {response.text}")
+                raise HTTPException(status_code=500, detail="AI service failed to generate scheme")
+            
+            data = response.json()
+            response_text = data["choices"][0]["message"]["content"]
+            
+            # Clean the response
+            clean = response_text.strip()
+            if clean.startswith("```"):
+                clean = clean.split("\n", 1)[1] if "\n" in clean else clean[3:]
+                clean = clean.rsplit("```", 1)[0]
+            clean = clean.strip()
+
+            # Try to extract JSON from the response
+            json_match = re.search(r'\[[\s\S]*\]', clean)
+            if json_match:
+                rows = json.loads(json_match.group())
+            else:
+                rows = json.loads(clean)
         if not isinstance(rows, list):
             raise ValueError("Expected JSON array")
 
@@ -3564,10 +3698,16 @@ async def root():
 async def health():
     return {"status": "healthy", "timestamp": datetime.now(timezone.utc).isoformat()}
 
+cors_origins_str = os.environ.get("CORS_ORIGINS", "*")
+if cors_origins_str == "*":
+    cors_origins = ["*"]
+else:
+    cors_origins = [o.strip() for o in cors_origins_str.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=["*"],
+    allow_origins=cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )

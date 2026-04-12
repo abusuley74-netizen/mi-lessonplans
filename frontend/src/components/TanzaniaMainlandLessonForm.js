@@ -6,23 +6,13 @@ import './LessonForm.css';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
-const SUBJECTS = [
-  { value: 'english', label: 'English' },
-  { value: 'kiswahili', label: 'Kiswahili' },
-  { value: 'mathematics', label: 'Mathematics' },
-  { value: 'science', label: 'Science' },
-  { value: 'social studies', label: 'Social Studies' },
-  { value: 'history', label: 'History' },
-  { value: 'geography', label: 'Geography' },
-  { value: 'civics', label: 'Civics' },
-  { value: 'physics', label: 'Physics' },
-  { value: 'chemistry', label: 'Chemistry' },
-  { value: 'biology', label: 'Biology' },
-];
+// Subject is now editable text field - user can type any subject
+// Language detection will work based on subject name
 
 const TANZANIA_GRADES = [
   'Standard 1', 'Standard 2', 'Standard 3', 'Standard 4', 'Standard 5',
-  'Standard 6', 'Standard 7', 'Form 1', 'Form 2', 'Form 3', 'Form 4'
+  'Standard 6', 'Standard 7', 'Form 1', 'Form 2', 'Form 3', 'Form 4',
+  'Form 5', 'Form 6'
 ];
 
 const TanzaniaMainlandLessonForm = ({ onLessonGenerated }) => {
@@ -257,12 +247,18 @@ const TanzaniaMainlandLessonForm = ({ onLessonGenerated }) => {
           {/* Basic Info */}
           <div className="form-row">
             <div className="form-group">
-              <label>Subject</label>
-              <select name="subject" value={formData.subject} onChange={handleChange} data-testid="select-subject">
-                {SUBJECTS.map(s => (
-                  <option key={s.value} value={s.value}>{s.label}</option>
-                ))}
-              </select>
+              <label>Subject (Type any subject)</label>
+              <input 
+                type="text" 
+                name="subject" 
+                value={formData.subject} 
+                onChange={handleChange} 
+                placeholder="e.g., Kiswahili, Mathematics, اللغة العربية, Français" 
+                data-testid="input-subject"
+              />
+              <small className="hint-text">
+                💡 Language detection works automatically: Kiswahili → Swahili, العربية → Arabic, Français → French
+              </small>
             </div>
             
             <div className="form-group">

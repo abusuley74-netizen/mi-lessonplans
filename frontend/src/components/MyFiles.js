@@ -358,17 +358,14 @@ const MyFiles = () => {
           <div className="pt-3 border-t border-[#E4DFD5]">
             <div className="flex items-center justify-between">
               <span className="text-xs text-[#7A8A76] flex-shrink-0">{new Date(file.created_at).toLocaleDateString()}</span>
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <button onClick={() => setShareTarget({ type: 'lesson', id: file.lesson_id, name: file.topic })} className="flex items-center gap-1 text-xs text-[#3498db] font-medium hover:text-[#2176ad]" data-testid={`share-lesson-${file.lesson_id}`}>
-                  <Link2 className="w-3.5 h-3.5" />Share
-                </button>
-                <button onClick={() => fetchAndView(`${API_URL}/api/lessons/${file.lesson_id}/view`, setViewHtml)} className="flex items-center gap-1 text-xs text-[#2D5A27] font-medium hover:text-[#21441C]" data-testid={`view-lesson-${file.lesson_id}`}>
-                  <Eye className="w-3.5 h-3.5" />View
-                </button>
-                <button onClick={() => fetchAndDownload(`${API_URL}/api/lessons/${file.lesson_id}/export`, `${file.subject}_${file.topic}_lesson.pdf`)} className="flex items-center gap-1 text-xs text-[#8E44AD] font-medium hover:text-[#6C3483]" data-testid={`download-lesson-${file.lesson_id}`}>
-                  <Download className="w-3.5 h-3.5" />Download
-                </button>
-              </div>
+               <div className="flex items-center gap-2 flex-shrink-0">
+                 <button onClick={() => fetchAndView(`${API_URL}/api/lessons/${file.lesson_id}/view`, setViewHtml)} className="flex items-center gap-1 text-xs text-[#2D5A27] font-medium hover:text-[#21441C]" data-testid={`view-lesson-${file.lesson_id}`}>
+                   <Eye className="w-3.5 h-3.5" />View
+                 </button>
+                 <button onClick={() => fetchAndDownload(`${API_URL}/api/lessons/${file.lesson_id}/export`, `${file.subject}_${file.topic}_lesson.pdf`)} className="flex items-center gap-1 text-xs text-[#8E44AD] font-medium hover:text-[#6C3483]" data-testid={`download-lesson-${file.lesson_id}`}>
+                   <Download className="w-3.5 h-3.5" />Download
+                 </button>
+               </div>
             </div>
           </div>
         </div>
@@ -391,9 +388,6 @@ const MyFiles = () => {
             <div className="flex items-center justify-between">
               <span className="text-xs text-[#7A8A76] flex-shrink-0">{new Date(file.created_at).toLocaleDateString()}</span>
               <div className="flex items-center gap-2 flex-shrink-0">
-                <button onClick={() => setShareTarget({ type: 'note', id: file.note_id, name: file.title })} className="flex items-center gap-1 text-xs text-[#3498db] font-medium hover:text-[#2176ad]" data-testid={`share-note-${file.note_id}`}>
-                  <Link2 className="w-3.5 h-3.5" />Share
-                </button>
                 <button onClick={() => setSelectedNote(file)} className="flex items-center gap-1 text-xs text-[#2D5A27] font-medium hover:text-[#21441C]" data-testid={`view-note-${file.note_id}`}>
                   <Eye className="w-3.5 h-3.5" />View
                 </button>
@@ -423,9 +417,6 @@ const MyFiles = () => {
             <div className="flex items-center justify-between">
               <span className="text-xs text-[#7A8A76] flex-shrink-0">{new Date(file.created_at).toLocaleDateString()}</span>
               <div className="flex items-center gap-2 flex-wrap justify-end">
-                <button onClick={() => setShareTarget({ type: 'dictation', id: file.dictation_id, name: file.title })} className="flex items-center gap-1 text-xs text-[#3498db] font-medium hover:text-[#2176ad]" data-testid={`share-dictation-${file.dictation_id}`}>
-                  <Link2 className="w-3.5 h-3.5" />Share
-                </button>
                 <button
                   onClick={() => handlePlayDictation(file)}
                   disabled={isGenerating}
@@ -470,9 +461,6 @@ const MyFiles = () => {
           <div className="flex items-center justify-between pt-3 border-t border-[#E4DFD5]">
             <span className="text-xs text-[#7A8A76] flex-shrink-0">{new Date(file.created_at).toLocaleDateString()}</span>
             <div className="flex items-center gap-2 flex-shrink-0">
-              <button onClick={() => setShareTarget({ type: 'upload', id: file.upload_id, name: file.name })} className="flex items-center gap-1 text-xs text-[#3498db] font-medium hover:text-[#2176ad]" data-testid={`share-upload-${file.upload_id}`}>
-                <Link2 className="w-3.5 h-3.5" />Share
-              </button>
               {file.content_type?.startsWith('image/') || file.type?.includes('image') ? (
                 <button onClick={() => { setViewHtml(`<html><body style="margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#f5f5f5"><img src="${API_URL}/api/uploads/${file.upload_id}/view" style="max-width:100%;max-height:90vh;" /></body></html>`); }}
                   className="flex items-center gap-1 text-xs text-[#2D5A27] font-medium hover:text-[#21441C]" data-testid={`view-upload-${file.upload_id}`}>
@@ -508,9 +496,6 @@ const MyFiles = () => {
             <div className="flex items-center justify-between">
               <span className="text-xs text-[#7A8A76] flex-shrink-0">{new Date(file.updated_at || file.created_at).toLocaleDateString()}</span>
               <div className="flex items-center gap-2 flex-shrink-0">
-                <button onClick={() => setShareTarget({ type: 'template', id: file.template_id, name: file.name || 'Template' })} className="flex items-center gap-1 text-xs text-[#3498db] font-medium hover:text-[#2176ad]" data-testid={`share-template-${file.template_id}`}>
-                  <Link2 className="w-3.5 h-3.5" />Share
-                </button>
                 <button onClick={() => fetchAndView(`${API_URL}/api/templates/${file.template_id}/view`, setViewHtml)} className="flex items-center gap-1 text-xs text-[#2D5A27] font-medium hover:text-[#21441C]" data-testid={`view-template-${file.template_id}`}>
                   <Eye className="w-3.5 h-3.5" />View
                 </button>
@@ -546,9 +531,6 @@ const MyFiles = () => {
           <div className="flex items-center justify-between">
             <span className="text-xs text-[#7A8A76] flex-shrink-0">{new Date(file.created_at).toLocaleDateString()}</span>
             <div className="flex items-center gap-2 flex-shrink-0">
-              <button onClick={() => setShareTarget({ type: 'scheme', id: file.scheme_id, name: file.subject || 'Scheme' })} className="flex items-center gap-1 text-xs text-[#3498db] font-medium hover:text-[#2176ad]" data-testid={`share-scheme-${file.scheme_id}`}>
-                <Link2 className="w-3.5 h-3.5" />Share
-              </button>
               <button onClick={() => fetchAndView(`${API_URL}/api/schemes/${file.scheme_id}/view`, setViewHtml)}
                 className="flex items-center gap-1 text-xs text-[#2D5A27] font-medium hover:text-[#21441C]" data-testid={`view-scheme-${file.scheme_id}`}>
                 <Eye className="w-3.5 h-3.5" />View
