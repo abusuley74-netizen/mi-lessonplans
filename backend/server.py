@@ -3698,11 +3698,25 @@ async def root():
 async def health():
     return {"status": "healthy", "timestamp": datetime.now(timezone.utc).isoformat()}
 
-cors_origins_str = os.environ.get("CORS_ORIGINS", "*")
-if cors_origins_str == "*":
-    cors_origins = ["*"]
+# Default CORS origins as fallback if environment variable is not set
+DEFAULT_CORS_ORIGINS = [
+    "https://mi-lessonplan.site",
+    "https://mi-learning-hub.emergent.host", 
+    "https://mi-learning-hub.preview.emergentagent.com",
+    "https://mi-learning-hub.preview.static.emergentagent.com",
+    "http://localhost:3000",
+    "http://localhost:5000"
+]
+
+cors_origins_str = os.environ.get("CORS_ORIGINS", "")
+if cors_origins_str:
+    if cors_origins_str == "*":
+        cors_origins = ["*"]
+    else:
+        cors_origins = [o.strip() for o in cors_origins_str.split(",") if o.strip()]
 else:
-    cors_origins = [o.strip() for o in cors_origins_str.split(",") if o.strip()]
+    # Use default origins if CORS_ORIGINS is not set
+    cors_origins = DEFAULT_CORS_ORIGINS
 
 app.add_middleware(
     CORSMiddleware,
