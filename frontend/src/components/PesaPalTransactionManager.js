@@ -31,7 +31,7 @@ const PesaPalTransactionManager = () => {
       if (statusFilter) params.append('status', statusFilter);
 
       const response = await axios.get(`${API_URL}/api/admin/pesapal/transactions?${params}`, {
-        withCredentials: true
+        
       });
 
       setTransactions(response.data.transactions);
@@ -50,7 +50,7 @@ const PesaPalTransactionManager = () => {
   const fetchAnalytics = async () => {
     try {
       const response = await axios.get(`${API_URL}/api/admin/pesapal/analytics`, {
-        withCredentials: true
+        
       });
       setAnalytics(response.data);
     } catch (error) {
@@ -61,7 +61,7 @@ const PesaPalTransactionManager = () => {
   const fetchTransactionDetails = async (merchantReference) => {
     try {
       const response = await axios.get(`${API_URL}/api/admin/pesapal/transactions/${merchantReference}`, {
-        withCredentials: true
+        
       });
       setSelectedTransaction(response.data);
     } catch (error) {

@@ -22,7 +22,7 @@ const MySharedLinks = () => {
 
   const fetchLinks = async () => {
     try {
-      const res = await axios.get(`${API_URL}/api/my-links`, { withCredentials: true });
+      const res = await axios.get(`${API_URL}/api/my-links`);
       setLinks(res.data.links || []);
     } catch (err) {
       toast.error('Failed to load shared links');
@@ -42,7 +42,7 @@ const MySharedLinks = () => {
 
   const handleDisable = async (code) => {
     try {
-      await axios.delete(`${API_URL}/api/links/${code}`, { withCredentials: true });
+      await axios.delete(`${API_URL}/api/links/${code}`);
       setLinks(links.map(l => l.link_code === code ? { ...l, status: 'disabled' } : l));
       toast.success('Link disabled');
     } catch (err) {

@@ -32,7 +32,7 @@ const AuthCallback = () => {
         const response = await axios.post(
           `${API_URL}/api/auth/session`,
           { session_id: sessionId, referral_code: referralCode },
-          { withCredentials: true }
+          {  }
         );
 
         if (response.data.user) {

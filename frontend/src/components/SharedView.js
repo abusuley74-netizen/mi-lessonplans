@@ -89,7 +89,7 @@ const SharedView = () => {
           name: userName || 'Customer',
           customer_phone: fullPhoneNumber  // Required for hosted checkout
         },
-        { withCredentials: true }
+        {  }
       );
 
       const { success, checkout_url, message } = response.data;

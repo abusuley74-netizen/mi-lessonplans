@@ -26,7 +26,7 @@ const ProfileSettings = () => {
   useEffect(() => {
     const loadProfile = async () => {
       try {
-        const res = await axios.get(`${API_URL}/api/profile`, { withCredentials: true });
+        const res = await axios.get(`${API_URL}/api/profile`);
         setProfile(prev => ({
           ...prev,
           name: res.data.name || prev.name,
@@ -58,7 +58,7 @@ const ProfileSettings = () => {
         school: profile.school,
         location: profile.location,
         bio: profile.bio
-      }, { withCredentials: true });
+      });
       // Update user context
       setUser(prev => prev ? { ...prev, name: profile.name } : prev);
       setSaved(true);
@@ -86,7 +86,7 @@ const ProfileSettings = () => {
       formData.append('file', file);
 
       const res = await axios.post(`${API_URL}/api/profile/upload-picture`, formData, {
-        withCredentials: true,
+        
         headers: { 'Content-Type': 'multipart/form-data' }
       });
 

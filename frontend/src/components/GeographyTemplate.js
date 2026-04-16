@@ -8,7 +8,7 @@ const API_URL = process.env.REACT_APP_BACKEND_URL;
 
 const fetchAndDownload = async (url, filename, body) => {
   try {
-    const res = await fetch(url, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...( localStorage.getItem('session_token') ? { 'Authorization': `Bearer ${localStorage.getItem('session_token')}` } : {} ) }, body: JSON.stringify(body) });
     if (!res.ok) throw new Error('Export failed');
     const blob = await res.blob();
     const reader = new FileReader();
@@ -70,7 +70,7 @@ const GeographyTemplate = ({ template, onBack, onSaved }) => {
         description: template.description,
         content: { title, subject, category, body: buildExportBody(), images: uploadedImages.filter(Boolean), questions },
         is_active: template.is_active,
-      }, { withCredentials: true });
+      });
       setSaved(true); toast.success('Template saved!');
       setTimeout(() => setSaved(false), 2000);
       if (onSaved) onSaved();

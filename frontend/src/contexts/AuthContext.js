@@ -3,8 +3,6 @@ import api from '../services/api';
 
 const AuthContext = createContext(null);
 
-const API_URL = process.env.REACT_APP_BACKEND_URL;
-
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -15,6 +13,10 @@ export const AuthProvider = ({ children }) => {
       setUser(response.data);
     } catch (error) {
       setUser(null);
+      // If token is invalid/expired, clear it
+      if (error.response?.status === 401) {
+        localStorage.removeItem('session_token');
+      }
     } finally {
       setLoading(false);
     }
@@ -33,6 +35,10 @@ export const AuthProvider = ({ children }) => {
         referral_code: referralCode 
       });
       if (response.data.user) {
+        // Store session token for cross-origin auth
+        if (response.data.session_token) {
+          localStorage.setItem('session_token', response.data.session_token);
+        }
         setUser(response.data.user);
         sessionStorage.removeItem('referral_code');
         return { success: true, user: response.data.user };
@@ -50,6 +56,7 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       console.error('Logout error:', error);
     }
+    localStorage.removeItem('session_token');
     setUser(null);
   };
 

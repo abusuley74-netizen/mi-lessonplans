@@ -37,13 +37,13 @@ export const AdminProvider = ({ children }) => {
     try {
       const response = await axios.get(`${API_URL}/api/admin/auth/me`, {
         headers: getAdminHeaders(),
-        withCredentials: true
+        
       });
       setAdmin(response.data);
 
       const navResponse = await axios.get(`${API_URL}/api/admin/dashboard/navigation`, {
         headers: getAdminHeaders(),
-        withCredentials: true
+        
       });
       setNavigation(navResponse.data.navigation);
     } catch (error) {
@@ -65,7 +65,7 @@ export const AdminProvider = ({ children }) => {
         email,
         password
       }, {
-        withCredentials: true
+        
       });
 
       const { admin: adminData, session_token } = response.data;
@@ -78,7 +78,7 @@ export const AdminProvider = ({ children }) => {
       try {
         const navResponse = await axios.get(`${API_URL}/api/admin/dashboard/navigation`, {
           headers: { Authorization: `Bearer ${session_token}` },
-          withCredentials: true
+          
         });
         setNavigation(navResponse.data.navigation);
       } catch (navErr) {
@@ -98,7 +98,7 @@ export const AdminProvider = ({ children }) => {
     try {
       await axios.post(`${API_URL}/api/admin/auth/logout`, {}, {
         headers: getAdminHeaders(),
-        withCredentials: true
+        
       });
     } catch (error) {
       console.error('Admin logout error:', error);

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import axios from 'axios';
+import { authFetch } from '../services/api';
 import { Sparkles, Save, Printer, FileDown, Plus, ChevronLeft, ChevronRight, Loader2, Brain, Lightbulb, Shield, History, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import './SchemeOfWork.css';
@@ -8,7 +9,7 @@ const API_URL = process.env.REACT_APP_BACKEND_URL;
 
 const fetchAndDownload = async (url, filename) => {
   try {
-    const response = await fetch(url, { credentials: 'include' });
+    const response = await authFetch(url);
     if (!response.ok) throw new Error('Download failed');
     const blob = await response.blob();
     const reader = new FileReader();
@@ -169,7 +170,7 @@ const SchemeOfWorkForm = () => {
         term: formData.term || 'Term 1',
         num_rows: numRows,
         topics: topics
-      }, { withCredentials: true });
+      });
 
       const aiRows = res.data.competencies || [];
 
@@ -213,7 +214,7 @@ const SchemeOfWorkForm = () => {
         subject: formData.subject, year: formData.year,
         term: formData.term, class: formData.class,
         competencies: getNonEmptyRows()
-      }, { withCredentials: true });
+      });
       setSavedSchemeId(res.data.scheme_id);
       setSavedMsg('Saved to My Files!');
       toast.success('Scheme saved to My Files');
@@ -227,7 +228,7 @@ const SchemeOfWorkForm = () => {
 
   const handlePrint = () => {
     if (savedSchemeId) {
-      fetch(`${API_URL}/api/schemes/${savedSchemeId}/view`, { credentials: 'include' })
+      authFetch(`${API_URL}/api/schemes/${savedSchemeId}/view`)
         .then(r => r.text())
         .then(html => {
           const printW = window.open('', '_blank');
@@ -257,13 +258,13 @@ const SchemeOfWorkForm = () => {
         subject: formData.subject, year: formData.year,
         term: formData.term, class: formData.class,
         competencies: getNonEmptyRows()
-      }, { withCredentials: true });
+      });
       const newId = res.data.scheme_id;
       setSavedSchemeId(newId);
       toast.success('Saved!');
 
       if (action === 'print') {
-        fetch(`${API_URL}/api/schemes/${newId}/view`, { credentials: 'include' })
+        authFetch(`${API_URL}/api/schemes/${newId}/view`)
           .then(r => r.text())
           .then(html => {
             const printW = window.open('', '_blank');
@@ -308,7 +309,7 @@ const SchemeOfWorkForm = () => {
         user_guidance: userGuidance,
         negative_constraints: negativeConstraints,
         check_memory: checkMemory
-      }, { withCredentials: true });
+      });
 
       const result = res.data;
       
@@ -360,7 +361,7 @@ const SchemeOfWorkForm = () => {
         syllabus,
         subject: formData.subject,
         class: formData.class
-      }, { withCredentials: true });
+      });
 
       setMemorySuggestions(res.data.suggestions || []);
       if (res.data.suggestions?.length > 0) {

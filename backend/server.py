@@ -53,6 +53,37 @@ CLICKPESA_WEBHOOK_URL = os.environ.get('CLICKPESA_WEBHOOK_URL', '')
 # Create the main app
 app = FastAPI()
 
+# CORS configuration - MUST be added immediately after app creation
+CORS_ALLOWED_ORIGINS = [
+    "https://mi-lessonplan.site",
+    "https://mi-learning-hub.emergent.host",
+    "https://mi-learning-hub.preview.emergentagent.com",
+    "https://mi-learning-hub.preview.static.emergentagent.com",
+    "http://localhost:3000",
+    "http://localhost:5000",
+]
+cors_origins_str = os.environ.get("CORS_ORIGINS", "")
+if cors_origins_str:
+    if cors_origins_str == "*":
+        cors_origins = ["*"]
+    else:
+        cors_origins = [o.strip().strip('"').strip("'") for o in cors_origins_str.split(",") if o.strip()]
+        # Merge with defaults to ensure all origins are included
+        for origin in CORS_ALLOWED_ORIGINS:
+            if origin not in cors_origins:
+                cors_origins.append(origin)
+else:
+    cors_origins = CORS_ALLOWED_ORIGINS
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_credentials=False,
+    allow_origins=cors_origins,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["Content-Disposition"],
+)
+
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 
@@ -874,7 +905,7 @@ async def google_auth(request: Request, response: Response):
     )
 
     user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0})
-    return {"user": user_doc, "message": "Session created"}
+    return {"user": user_doc, "session_token": session_token, "message": "Session created"}
 
 @api_router.post("/auth/session")
 async def create_session(request: Request, response: Response):
@@ -4711,35 +4742,6 @@ async def health():
 
 # Include the router in the main app
 app.include_router(api_router)
-
-# Default CORS origins as fallback if environment variable is not set
-DEFAULT_CORS_ORIGINS = [
-    "https://mi-lessonplan.site",
-    "https://mi-learning-hub.emergent.host", 
-    "https://mi-learning-hub.preview.emergentagent.com",
-    "https://mi-learning-hub.preview.static.emergentagent.com",
-    "http://localhost:3000",
-    "http://localhost:5000",
-    "https://mi-lessonplan.site.site"  # Add the .site.site domain that appears in some requests
-]
-
-cors_origins_str = os.environ.get("CORS_ORIGINS", "")
-if cors_origins_str:
-    if cors_origins_str == "*":
-        cors_origins = ["*"]
-    else:
-        cors_origins = [o.strip() for o in cors_origins_str.split(",") if o.strip()]
-else:
-    # Use default origins if CORS_ORIGINS is not set
-    cors_origins = DEFAULT_CORS_ORIGINS
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=cors_origins,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 @app.on_event("shutdown")
 async def shutdown_db_client():

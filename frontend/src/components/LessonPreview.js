@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { Printer, Download, Share2, Check, Image as ImageIcon } from 'lucide-react';
 import { toast } from 'sonner';
+import { authFetch } from '../services/api';
 
 const LessonPreview = ({ lessonData }) => {
   const printRef = useRef();
@@ -32,9 +33,7 @@ const LessonPreview = ({ lessonData }) => {
     setDownloadingImage(true);
     try {
       const API_URL = process.env.REACT_APP_BACKEND_URL;
-      const response = await fetch(`${API_URL}/api/lessons/${lessonData.lesson_id}/export/image`, {
-        credentials: 'include'
-      });
+      const response = await authFetch(`${API_URL}/api/lessons/${lessonData.lesson_id}/export/image`);
       
       if (!response.ok) {
         throw new Error('Image download failed');

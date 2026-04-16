@@ -24,7 +24,7 @@ const ShareModal = ({ isOpen, onClose, resourceType, resourceId, resourceName })
         description,
         is_paid: isPaid,
         price: isPaid ? price : 0,
-      }, { withCredentials: true });
+      });
 
       const code = res.data.link_code;
       const fullUrl = `${window.location.origin}/shared/${code}`;

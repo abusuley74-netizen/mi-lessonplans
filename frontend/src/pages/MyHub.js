@@ -40,7 +40,7 @@ const MyHub = () => {
 
   const fetchAccess = useCallback(async () => {
     try {
-      const res = await axios.get(`${API_URL}/api/user/feature-access`, { withCredentials: true });
+      const res = await axios.get(`${API_URL}/api/user/feature-access`);
       setAccessData(res.data);
     } catch {
       // default to free

@@ -41,7 +41,7 @@ const AdminProfileManager = () => {
   const fetchAdmins = async () => {
     try {
       const response = await axios.get(`${API_URL}/api/admin/admins`, {
-        withCredentials: true
+        
       });
       setAdmins(response.data.admins);
     } catch (error) {
@@ -55,7 +55,7 @@ const AdminProfileManager = () => {
     e.preventDefault();
     try {
       await axios.post(`${API_URL}/api/admin/admins`, formData, {
-        withCredentials: true
+        
       });
       setShowCreateForm(false);
       setFormData({ email: '', name: '', role: 'admin', tasks: [] });
@@ -69,7 +69,7 @@ const AdminProfileManager = () => {
     e.preventDefault();
     try {
       await axios.put(`${API_URL}/api/admin/admins/${editingAdmin.admin_id}`, formData, {
-        withCredentials: true
+        
       });
       setEditingAdmin(null);
       setFormData({ email: '', name: '', role: 'admin', tasks: [] });
@@ -84,7 +84,7 @@ const AdminProfileManager = () => {
 
     try {
       await axios.delete(`${API_URL}/api/admin/admins/${adminId}`, {
-        withCredentials: true
+        
       });
       fetchAdmins();
     } catch (error) {

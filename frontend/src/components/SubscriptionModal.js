@@ -65,7 +65,7 @@ const SubscriptionModal = ({ isOpen, onClose }) => {
       const checkoutRes = await axios.post(
         `${API_URL}/api/subscription/checkout-clickpesa`,
         { plan_id: selectedPlan },
-        { withCredentials: true }
+        {  }
       );
       if (checkoutRes.data.checkout_url) {
         toast.success('Redirecting to ClickPesa checkout...');

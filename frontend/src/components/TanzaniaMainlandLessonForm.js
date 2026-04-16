@@ -134,7 +134,7 @@ const TanzaniaMainlandLessonForm = ({ onLessonGenerated }) => {
             topic: formData.topic,
             form_data: formData
           },
-          { withCredentials: true }
+          {  }
         );
 
         const aiContent = response.data.content;

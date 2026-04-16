@@ -56,7 +56,7 @@ const BintiChat = () => {
         conversation_history: messages.slice(-10)
       };
 
-      const response = await axios.post(`${API_URL}${endpoint}`, payload, { withCredentials: true });
+      const response = await axios.post(`${API_URL}${endpoint}`, payload);
       const reply = response.data.message || response.data?.data?.message || 'Samahani, I could not process that.';
       setMessages(prev => [...prev, { role: 'binti', text: reply }]);
     } catch (error) {

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
+import { authFetch } from '../services/api';
 import DOMPurify from 'dompurify';
 import {
   FileText, FlaskConical, Globe, Calculator, Atom, TestTubes,
@@ -24,10 +25,12 @@ const TYPE_META = {
 
 const fetchAndDownload = async (url, filename, body) => {
   try {
+    const token = localStorage.getItem('session_token');
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
     const response = await fetch(url, {
       method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(body),
     });
     if (!response.ok) throw new Error('Export failed');
@@ -75,7 +78,7 @@ const TemplateEditor = ({ template, onBack, onSaved }) => {
         description: template.description,
         content: updatedContent,
         is_active: template.is_active,
-      }, { withCredentials: true });
+      });
       setContent(updatedContent);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -205,7 +208,7 @@ const Templates = () => {
 
   const fetchTemplates = useCallback(async () => {
     try {
-      const res = await axios.get(`${API_URL}/api/templates`, { withCredentials: true });
+      const res = await axios.get(`${API_URL}/api/templates`);
       setTemplates(res.data.templates || []);
     } catch (err) {
       console.error('Error loading templates:', err);

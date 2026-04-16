@@ -33,7 +33,7 @@ const UserManagement = () => {
       });
 
       const response = await axios.get(`${API_URL}/api/admin/users?${params}`, {
-        withCredentials: true
+        
       });
 
       setUsers(response.data.users);
@@ -51,7 +51,7 @@ const UserManagement = () => {
         action,
         reason
       }, {
-        withCredentials: true
+        
       });
 
       fetchUsers();
@@ -64,7 +64,7 @@ const UserManagement = () => {
   const getUserDetails = async (userId) => {
     try {
       const response = await axios.get(`${API_URL}/api/admin/users/${userId}/details`, {
-        withCredentials: true
+        
       });
       setSelectedUser(response.data);
     } catch (error) {

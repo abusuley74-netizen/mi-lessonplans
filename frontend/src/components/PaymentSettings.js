@@ -87,7 +87,7 @@ const PaymentSettings = () => {
 
   const fetchTransactions = async () => {
     try {
-      await axios.get(`${API_URL}/api/subscription/plans`, { withCredentials: true });
+      await axios.get(`${API_URL}/api/subscription/plans`);
     } catch {
       // Silent fail
     }
@@ -109,7 +109,7 @@ const PaymentSettings = () => {
           plan_id: planId
           // No phone number needed for PesaPal
         },
-        { withCredentials: true }
+        {  }
       );
 
       const { checkout_url, message } = response.data;

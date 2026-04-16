@@ -63,7 +63,7 @@ const Dictation = () => {
       const response = await axios.post(
         `${API_URL}/api/dictation/generate`,
         { text, language },
-        { withCredentials: true, responseType: 'blob' }
+        { responseType: 'blob' }
       );
 
       // Verify we got audio data, not an error response
@@ -137,7 +137,7 @@ const Dictation = () => {
           audio_data: audioBase64,
           created_at: new Date().toISOString()
         },
-        { withCredentials: true }
+        {  }
       );
       
       setSaved(true);

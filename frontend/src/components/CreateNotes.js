@@ -85,7 +85,7 @@ const CreateNotes = () => {
         title,
         content,
         created_at: new Date().toISOString()
-      }, { withCredentials: true });
+      });
       
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);

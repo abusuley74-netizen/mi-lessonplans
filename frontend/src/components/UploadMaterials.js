@@ -68,7 +68,7 @@ const UploadMaterials = () => {
         ));
 
         await axios.post(`${API_URL}/api/uploads`, formData, {
-          withCredentials: true,
+          
           headers: { 'Content-Type': 'multipart/form-data' },
           onUploadProgress: (progressEvent) => {
             const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);

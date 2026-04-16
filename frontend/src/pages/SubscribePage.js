@@ -75,7 +75,7 @@ const SubscribePage = () => {
       const response = await axios.post(
         `${API_URL}/api/subscription/checkout`,
         { plan_id: selectedPlan },
-        { withCredentials: true }
+        {  }
       );
 
       const { checkout_url } = response.data;

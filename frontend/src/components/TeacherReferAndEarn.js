@@ -25,8 +25,8 @@ const TeacherReferAndEarn = ({ currentUser }) => {
     try {
       setLoading(true);
       const [codeRes, refRes] = await Promise.all([
-        axios.get(`${API_URL}/api/teacher/referral/my-code`, { withCredentials: true }),
-        axios.get(`${API_URL}/api/teacher/referral/my-referrals`, { withCredentials: true }),
+        axios.get(`${API_URL}/api/teacher/referral/my-code`),
+        axios.get(`${API_URL}/api/teacher/referral/my-referrals`),
       ]);
       setCodeData(codeRes.data);
       setReferrals(refRes.data);

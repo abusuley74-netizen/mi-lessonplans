@@ -24,9 +24,9 @@ const MyActivities = () => {
   const fetchActivities = async () => {
     try {
       const [lessonsRes, notesRes, dictationsRes] = await Promise.all([
-        axios.get(`${API_URL}/api/lessons`, { withCredentials: true }),
-        axios.get(`${API_URL}/api/notes`, { withCredentials: true }),
-        axios.get(`${API_URL}/api/dictations`, { withCredentials: true })
+        axios.get(`${API_URL}/api/lessons`),
+        axios.get(`${API_URL}/api/notes`),
+        axios.get(`${API_URL}/api/dictations`)
       ]);
 
       const lessons = lessonsRes.data.lessons || [];

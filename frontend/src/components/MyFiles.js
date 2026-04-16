@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
+import { authFetch } from '../services/api';
 import { 
   BookOpen, Trash2, Eye, Download, Search,
   X, FileText, Mic, Upload, FolderOpen, Play, Volume2, Calendar, Link2
@@ -18,7 +19,7 @@ const fetchAndDownload = async (url, filename, fileId, setDownloadingFiles) => {
       setDownloadingFiles(prev => ({ ...prev, [fileId]: true }));
     }
     
-    const response = await fetch(url, { credentials: 'include' });
+    const response = await authFetch(url);
     if (!response.ok) throw new Error('Download failed');
     const blob = await response.blob();
     // Use FileReader to convert to data URL — works in sandboxed iframes
@@ -45,7 +46,7 @@ const fetchAndDownload = async (url, filename, fileId, setDownloadingFiles) => {
 
 const fetchAndView = async (url, setViewContent) => {
   try {
-    const response = await fetch(url, { credentials: 'include' });
+    const response = await authFetch(url);
     if (!response.ok) throw new Error('View failed');
     const html = await response.text();
     setViewContent(html);
@@ -78,12 +79,12 @@ const MyFiles = () => {
   const fetchAllFiles = useCallback(async () => {
     try {
       const [lessonsRes, notesRes, dictationsRes, uploadsRes, schemesRes, templatesRes] = await Promise.all([
-        axios.get(`${API_URL}/api/lessons`, { withCredentials: true }),
-        axios.get(`${API_URL}/api/notes`, { withCredentials: true }),
-        axios.get(`${API_URL}/api/dictations`, { withCredentials: true }),
-        axios.get(`${API_URL}/api/uploads`, { withCredentials: true }),
-        axios.get(`${API_URL}/api/schemes`, { withCredentials: true }),
-        axios.get(`${API_URL}/api/templates`, { withCredentials: true }),
+        axios.get(`${API_URL}/api/lessons`),
+        axios.get(`${API_URL}/api/notes`),
+        axios.get(`${API_URL}/api/dictations`),
+        axios.get(`${API_URL}/api/uploads`),
+        axios.get(`${API_URL}/api/schemes`),
+        axios.get(`${API_URL}/api/templates`),
       ]);
       setLessons(lessonsRes.data.lessons || []);
       setNotes(notesRes.data.notes || []);
@@ -105,7 +106,7 @@ const MyFiles = () => {
 
   const handleDeleteLesson = async (lessonId) => {
     try {
-      await axios.delete(`${API_URL}/api/lessons/${lessonId}`, { withCredentials: true });
+      await axios.delete(`${API_URL}/api/lessons/${lessonId}`);
       setLessons(lessons.filter(l => l.lesson_id !== lessonId));
       if (selectedLesson?.lesson_id === lessonId) setSelectedLesson(null);
     } catch (error) { console.error('Error deleting lesson:', error); }
@@ -114,7 +115,7 @@ const MyFiles = () => {
 
   const handleDeleteNote = async (noteId) => {
     try {
-      await axios.delete(`${API_URL}/api/notes/${noteId}`, { withCredentials: true });
+      await axios.delete(`${API_URL}/api/notes/${noteId}`);
       setNotes(notes.filter(n => n.note_id !== noteId));
     } catch (error) { console.error('Error deleting note:', error); }
     setConfirmDelete(null);
@@ -122,7 +123,7 @@ const MyFiles = () => {
 
   const handleDeleteDictation = async (dictationId) => {
     try {
-      await axios.delete(`${API_URL}/api/dictations/${dictationId}`, { withCredentials: true });
+      await axios.delete(`${API_URL}/api/dictations/${dictationId}`);
       setDictations(dictations.filter(d => d.dictation_id !== dictationId));
       if (playingDictation === dictationId) {
         setPlayingDictation(null);
@@ -134,7 +135,7 @@ const MyFiles = () => {
 
   const handleDeleteUpload = async (uploadId) => {
     try {
-      await axios.delete(`${API_URL}/api/uploads/${uploadId}`, { withCredentials: true });
+      await axios.delete(`${API_URL}/api/uploads/${uploadId}`);
       setUploads(uploads.filter(u => u.upload_id !== uploadId));
     } catch (error) { console.error('Error deleting upload:', error); }
     setConfirmDelete(null);
@@ -142,7 +143,7 @@ const MyFiles = () => {
 
   const handleDeleteScheme = async (schemeId) => {
     try {
-      await axios.delete(`${API_URL}/api/schemes/${schemeId}`, { withCredentials: true });
+      await axios.delete(`${API_URL}/api/schemes/${schemeId}`);
       setSchemes(schemes.filter(s => s.scheme_id !== schemeId));
     } catch (error) { console.error('Error deleting scheme:', error); }
     setConfirmDelete(null);
@@ -150,7 +151,7 @@ const MyFiles = () => {
 
   const handleDeleteTemplate = async (templateId) => {
     try {
-      await axios.delete(`${API_URL}/api/templates/${templateId}`, { withCredentials: true });
+      await axios.delete(`${API_URL}/api/templates/${templateId}`);
       setTemplates(templates.filter(t => t.template_id !== templateId));
     } catch (error) { console.error('Error deleting template:', error); }
     setConfirmDelete(null);
@@ -187,14 +188,14 @@ const MyFiles = () => {
       try {
         response = await axios.get(
           `${API_URL}/api/dictations/${dictation.dictation_id}/audio`,
-          { withCredentials: true, responseType: 'blob' }
+          { responseType: 'blob' }
         );
       } catch {
         // Fallback: regenerate via TTS if no stored audio
         response = await axios.post(
           `${API_URL}/api/dictation/generate`,
           { text: dictation.text, language: dictation.language },
-          { withCredentials: true, responseType: 'blob' }
+          { responseType: 'blob' }
         );
       }
       const url = URL.createObjectURL(response.data);

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mi-lessonplan-v1';
+const CACHE_NAME = 'mi-lessonplan-v2';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -36,17 +36,18 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // Skip Google CSP checks and API calls
-  if (url.hostname.includes('csp.withgoogle.com') || 
-      url.pathname.startsWith('/api')) {
+  // Skip cross-origin requests entirely (Google, APIs, CDNs, external images)
+  if (url.origin !== self.location.origin) {
+    return;
+  }
+
+  // Skip API calls
+  if (url.pathname.startsWith('/api')) {
     return;
   }
 
   event.respondWith(
-    fetch(event.request, { 
-      mode: 'cors',
-      redirect: 'follow'
-    })
+    fetch(event.request)
       .then((response) => {
         // Cache successful GET responses
         if (event.request.method === 'GET' && response.status === 200) {

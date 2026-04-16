@@ -1,5 +1,12 @@
 import { API_BASE_URL } from './utils';
 
+const getAuthHeaders = (extraHeaders = {}) => {
+  const token = localStorage.getItem('session_token') || localStorage.getItem('admin_session_token');
+  const headers = { ...extraHeaders };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  return headers;
+};
+
 class ReferralService {
   constructor() {
     this.baseURL = API_BASE_URL;
@@ -9,10 +16,7 @@ class ReferralService {
     try {
       const response = await fetch(`${this.baseURL}/referrals`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       });
 
       if (!response.ok) {
@@ -31,7 +35,7 @@ class ReferralService {
     try {
       const response = await fetch(`${this.baseURL}/referrals/admin/${adminId}`, {
         method: 'GET',
-        credentials: 'include',
+        headers: getAuthHeaders(),
       });
 
       if (!response.ok) {
@@ -50,11 +54,8 @@ class ReferralService {
     try {
       const response = await fetch(`${this.baseURL}/referrals/${referralId}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(updateData),
-        credentials: 'include',
       });
 
       if (!response.ok) {
@@ -73,7 +74,7 @@ class ReferralService {
     try {
       const response = await fetch(`${this.baseURL}/referrals/${referralId}`, {
         method: 'DELETE',
-        credentials: 'include',
+        headers: getAuthHeaders(),
       });
 
       if (!response.ok) {
@@ -92,7 +93,7 @@ class ReferralService {
     try {
       const response = await fetch(`${this.baseURL}/referrals/metrics/${adminId}`, {
         method: 'GET',
-        credentials: 'include',
+        headers: getAuthHeaders(),
       });
 
       if (!response.ok) {
@@ -111,7 +112,7 @@ class ReferralService {
     try {
       const response = await fetch(`${this.baseURL}/referrals/sync/${adminId}`, {
         method: 'POST',
-        credentials: 'include',
+        headers: getAuthHeaders(),
       });
 
       if (!response.ok) {
