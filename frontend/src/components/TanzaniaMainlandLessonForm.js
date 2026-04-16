@@ -6,6 +6,37 @@ import './LessonForm.css';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
+// Helper to map AI content to Mainland form fields
+const mapMainlandContent = (formData, aiContent) => {
+  const stages = aiContent.stages || {};
+  return {
+    ...formData,
+    mainCompetence: aiContent.mainCompetence || '',
+    specificCompetence: aiContent.specificCompetence || '',
+    mainActivity: aiContent.mainActivity || '',
+    specificActivity: aiContent.specificActivity || '',
+    teachingResources: aiContent.teachingResources || '',
+    references: aiContent.references || '',
+    introTime: stages.introduction?.time || '10 minutes',
+    teachingIntro: stages.introduction?.teachingActivities || '',
+    learningIntro: stages.introduction?.learningActivities || '',
+    assessmentIntro: stages.introduction?.assessment || '',
+    compTime: stages.competenceDevelopment?.time || '20 minutes',
+    teachingComp: stages.competenceDevelopment?.teachingActivities || '',
+    learningComp: stages.competenceDevelopment?.learningActivities || '',
+    assessmentComp: stages.competenceDevelopment?.assessment || '',
+    designTime: stages.design?.time || '10 minutes',
+    teachingDesign: stages.design?.teachingActivities || '',
+    learningDesign: stages.design?.learningActivities || '',
+    assessmentDesign: stages.design?.assessment || '',
+    realTime: stages.realisation?.time || '10 minutes',
+    teachingReal: stages.realisation?.teachingActivities || '',
+    learningReal: stages.realisation?.learningActivities || '',
+    assessmentReal: stages.realisation?.assessment || '',
+    remarks: aiContent.remarks || ''
+  };
+};
+
 // Subject is now editable text field - user can type any subject
 // Language detection will work based on subject name
 
@@ -125,8 +156,8 @@ const TanzaniaMainlandLessonForm = ({ onLessonGenerated }) => {
       });
 
       try {
-        const response = await axios.post(
-          `${API_URL}/api/lessons/generate`,
+        const response = await api.post(
+          `/api/lessons/generate`,
           {
             syllabus: formData.syllabus,
             subject: formData.subject,
@@ -137,42 +168,41 @@ const TanzaniaMainlandLessonForm = ({ onLessonGenerated }) => {
           {  }
         );
 
-        const aiContent = response.data.content;
-        const stages = aiContent.stages || {};
+        const lessonData = response.data;
         
-        // Map AI response to form fields
-        const updatedFormData = {
-          ...formData,
-          mainCompetence: aiContent.mainCompetence || '',
-          specificCompetence: aiContent.specificCompetence || '',
-          mainActivity: aiContent.mainActivity || '',
-          specificActivity: aiContent.specificActivity || '',
-          teachingResources: aiContent.teachingResources || '',
-          references: aiContent.references || '',
-          introTime: stages.introduction?.time || '10 minutes',
-          teachingIntro: stages.introduction?.teachingActivities || '',
-          learningIntro: stages.introduction?.learningActivities || '',
-          assessmentIntro: stages.introduction?.assessment || '',
-          compTime: stages.competenceDevelopment?.time || '20 minutes',
-          teachingComp: stages.competenceDevelopment?.teachingActivities || '',
-          learningComp: stages.competenceDevelopment?.learningActivities || '',
-          assessmentComp: stages.competenceDevelopment?.assessment || '',
-          designTime: stages.design?.time || '10 minutes',
-          teachingDesign: stages.design?.teachingActivities || '',
-          learningDesign: stages.design?.learningActivities || '',
-          assessmentDesign: stages.design?.assessment || '',
-          realTime: stages.realisation?.time || '10 minutes',
-          teachingReal: stages.realisation?.teachingActivities || '',
-          learningReal: stages.realisation?.learningActivities || '',
-          assessmentReal: stages.realisation?.assessment || '',
-          remarks: aiContent.remarks || ''
-        };
-
-        setFormData(updatedFormData);
-        setPreviewData(updatedFormData);
-        
-        if (onLessonGenerated) {
-          onLessonGenerated(response.data);
+        // If generation is async (background), poll for completion
+        if (lessonData.generation_status === 'generating') {
+          const lessonId = lessonData.lesson_id;
+          let attempts = 0;
+          const maxAttempts = 40;
+          
+          while (attempts < maxAttempts) {
+            await new Promise(r => setTimeout(r, 3000));
+            attempts++;
+            try {
+              const statusRes = await api.get(`/api/lessons/${lessonId}/status`);
+              if (statusRes.data.generation_status === 'complete') {
+                const updatedFormData = mapMainlandContent(formData, statusRes.data.content);
+                setFormData(updatedFormData);
+                setPreviewData(updatedFormData);
+                if (onLessonGenerated) onLessonGenerated(statusRes.data);
+                break;
+              } else if (statusRes.data.generation_status === 'failed') {
+                setError('AI generation failed. Please try again.');
+                break;
+              }
+            } catch (pollErr) {
+              // Continue polling on network errors
+            }
+          }
+          if (attempts >= maxAttempts) {
+            setError('Generation is taking too long. Please check My Files later.');
+          }
+        } else {
+          const updatedFormData = mapMainlandContent(formData, lessonData.content);
+          setFormData(updatedFormData);
+          setPreviewData(updatedFormData);
+          if (onLessonGenerated) onLessonGenerated(lessonData);
         }
       } catch (err) {
         if (err.response?.status === 403) {

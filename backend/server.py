@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, BackgroundTasks
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -1446,6 +1446,10 @@ Provide practical, actionable content appropriate for {grade} students in Tanzan
         }
         full_system = f"{system_prompt}\n\nCRITICAL: {json_instruction.get(language, json_instruction['english'])}"
         
+        # Use lower temperature and tokens for non-English to stay under proxy timeout
+        gen_temperature = 0.5 if language != 'english' else 0.7
+        gen_max_tokens = 3000 if language != 'english' else 4096
+        
         payload = {
             "model": "deepseek-chat",
             "messages": [
@@ -1458,11 +1462,11 @@ Provide practical, actionable content appropriate for {grade} students in Tanzan
                     "content": prompt
                 }
             ],
-            "temperature": 0.7,
-            "max_tokens": 4096
+            "temperature": gen_temperature,
+            "max_tokens": gen_max_tokens
         }
         
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=120.0) as client:
             response = await client.post(
                 "https://api.deepseek.com/v1/chat/completions",
                 headers=headers,
@@ -1555,7 +1559,7 @@ async def _generate_lesson_with_intelligence(prompt: str, syllabus: str, subject
             "max_tokens": 4096
         }
         
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=120.0) as client:
             response = await client.post(
                 "https://api.deepseek.com/v1/chat/completions",
                 headers=headers,
@@ -1628,9 +1632,10 @@ async def _generate_lesson_with_intelligence(prompt: str, syllabus: str, subject
 @api_router.post("/lessons/generate")
 async def generate_lesson(
     request: GenerateLessonRequest,
+    background_tasks: BackgroundTasks,
     user: User = Depends(get_current_user)
 ):
-    """Generate a new lesson plan using AI with intelligence features"""
+    """Generate a new lesson plan using AI — async background generation"""
     user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
     plan = _get_user_plan(user_doc or {})
     limit = PLAN_LIMITS.get(plan)
@@ -1643,85 +1648,7 @@ async def generate_lesson(
                 detail=f"{plan.title()} plan limit reached ({limit} lessons/month). Please upgrade to generate more lessons."
             )
     
-    # Check if intelligence services are available
-    if not LESSON_INTELLIGENCE_AVAILABLE:
-        # Fall back to original generation
-        content = await generate_lesson_with_ai(
-            request.syllabus,
-            request.subject,
-            request.grade,
-            request.topic
-        )
-    else:
-        try:
-            # Use lesson intelligence services
-            prompt_builder = LessonPromptBuilder(
-                syllabus=request.syllabus,
-                grade=request.grade,
-                subject=request.subject,
-                topic=request.topic,
-                user_guidance=request.user_guidance,
-                negative_constraints=request.negative_constraints
-            )
-            
-            # Build enhanced prompt
-            prompt = await prompt_builder.build(db)
-            
-            # Initialize memory service
-            memory = LessonMemory(db)
-            
-            if request.check_memory:
-                # Try memory first
-                prompt_context = {
-                    "syllabus": request.syllabus,
-                    "grade": request.grade,
-                    "subject": request.subject,
-                    "topic": request.topic,
-                    "user_guidance": request.user_guidance,
-                    "negative_constraints": request.negative_constraints,
-                    "user_prompt": f"{request.syllabus} {request.grade} {request.subject} {request.topic}"
-                }
-                
-                async def generate_fresh():
-                    return await _generate_lesson_with_intelligence(
-                        prompt, request.syllabus, request.subject, 
-                        request.grade, request.topic
-                    )
-                
-                memory_result = await memory.get_or_generate(prompt_context, generate_fresh)
-                
-                content = memory_result["data"]
-                memory_source = memory_result["source"]
-                memory_type = memory_result["type"]
-                usage_count = memory_result["usage_count"]
-            else:
-                # Skip memory, always generate fresh
-                content = await _generate_lesson_with_intelligence(
-                    prompt, request.syllabus, request.subject, 
-                    request.grade, request.topic
-                )
-                memory_source = "fresh"
-                memory_type = "none"
-                usage_count = 0
-            
-            # Add memory metadata to content
-            content["_memory"] = {
-                "source": memory_source,
-                "type": memory_type,
-                "usage_count": usage_count
-            }
-            
-        except Exception as e:
-            logger.error(f"Lesson intelligence generation failed: {e}")
-            # Fall back to original generation
-            content = await generate_lesson_with_ai(
-                request.syllabus,
-                request.subject,
-                request.grade,
-                request.topic
-            )
-    
-    # Create lesson plan
+    # Create lesson record immediately with "generating" status
     lesson = LessonPlan(
         user_id=user.user_id,
         title=request.topic,
@@ -1729,15 +1656,17 @@ async def generate_lesson(
         subject=request.subject,
         grade=request.grade,
         topic=request.topic,
-        content=content,
+        content={},
         form_data=request.form_data or {}
     )
     
     lesson_doc = lesson.model_dump()
     lesson_doc["created_at"] = lesson_doc["created_at"].isoformat()
     lesson_doc["updated_at"] = lesson_doc["updated_at"].isoformat()
+    lesson_doc["generation_status"] = "generating"
     
     await db.lesson_plans.insert_one(lesson_doc)
+    lesson_doc.pop("_id", None)
     
     # Increment lesson period count
     await db.users.update_one(
@@ -1745,9 +1674,62 @@ async def generate_lesson(
         {"$inc": {"lesson_period_count": 1}}
     )
     
-    # Return without _id
-    lesson_doc.pop("_id", None)
+    # Start background AI generation
+    background_tasks.add_task(
+        _background_generate_lesson,
+        lesson_doc["lesson_id"],
+        request.syllabus,
+        request.subject,
+        request.grade,
+        request.topic,
+        request.user_guidance,
+        request.negative_constraints,
+        request.check_memory
+    )
+    
     return lesson_doc
+
+
+async def _background_generate_lesson(
+    lesson_id: str, syllabus: str, subject: str, 
+    grade: str, topic: str, user_guidance: str = None,
+    negative_constraints: str = None, check_memory: bool = True
+):
+    """Background task to generate lesson content and update the record"""
+    try:
+        content = await generate_lesson_with_ai(syllabus, subject, grade, topic)
+        
+        await db.lesson_plans.update_one(
+            {"lesson_id": lesson_id},
+            {"$set": {
+                "content": content,
+                "generation_status": "complete",
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }}
+        )
+        logger.info(f"Background lesson generation complete: {lesson_id}")
+    except Exception as e:
+        logger.error(f"Background lesson generation failed for {lesson_id}: {e}")
+        await db.lesson_plans.update_one(
+            {"lesson_id": lesson_id},
+            {"$set": {
+                "generation_status": "failed",
+                "generation_error": str(e),
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }}
+        )
+
+
+@api_router.get("/lessons/{lesson_id}/status")
+async def get_lesson_status(lesson_id: str, user: User = Depends(get_current_user)):
+    """Check lesson generation status — used by frontend polling"""
+    lesson = await db.lesson_plans.find_one(
+        {"lesson_id": lesson_id, "user_id": user.user_id},
+        {"_id": 0}
+    )
+    if not lesson:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+    return lesson
 
 # Binti Hamdani AI Chat Assistant
 class BintiChatRequest(BaseModel):
@@ -2835,12 +2817,8 @@ async def delete_scheme(scheme_id: str, user: User = Depends(get_current_user)):
     return {"message": "Scheme deleted"}
 
 @api_router.post("/schemes/generate")
-async def generate_scheme_ai(request: Request, user: User = Depends(get_current_user)):
-    """Generate scheme of work competency rows with AI"""
-    import json
-    import re
-    import httpx
-
+async def generate_scheme_ai(request: Request, background_tasks: BackgroundTasks, user: User = Depends(get_current_user)):
+    """Generate scheme of work competency rows with AI — async background generation"""
     data = await request.json()
     syllabus = data.get("syllabus", "Zanzibar")
     subject = data.get("subject", "")
@@ -2855,6 +2833,51 @@ async def generate_scheme_ai(request: Request, user: User = Depends(get_current_
     api_key = os.environ.get("DEEPSEEK_API_KEY")
     if not api_key:
         raise HTTPException(status_code=500, detail="AI service not configured")
+
+    # Create a scheme generation task record
+    task_id = f"scheme_task_{uuid.uuid4().hex[:12]}"
+    task_doc = {
+        "task_id": task_id,
+        "user_id": user.user_id,
+        "status": "generating",
+        "syllabus": syllabus,
+        "subject": subject,
+        "grade": grade,
+        "term": term,
+        "topics": topics,
+        "num_rows": num_rows,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.scheme_tasks.insert_one(task_doc)
+    
+    # Start background generation
+    background_tasks.add_task(
+        _background_generate_scheme,
+        task_id, syllabus, subject, grade, term, topics, num_rows, api_key
+    )
+    
+    return {"task_id": task_id, "status": "generating", "num_rows": num_rows}
+
+
+@api_router.get("/schemes/generate/{task_id}/status")
+async def get_scheme_generation_status(task_id: str, user: User = Depends(get_current_user)):
+    """Poll scheme generation status"""
+    task = await db.scheme_tasks.find_one(
+        {"task_id": task_id, "user_id": user.user_id},
+        {"_id": 0}
+    )
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return task
+
+
+async def _background_generate_scheme(
+    task_id: str, syllabus: str, subject: str, grade: str, 
+    term: str, topics: str, num_rows: int, api_key: str
+):
+    """Background task to generate scheme rows"""
+    import json
+    import re
 
     try:
         headers = {
@@ -3082,14 +3105,30 @@ IMPORTANT:
                 sanitized_row[k] = str(row.get(k, "")).strip()
             sanitized.append(sanitized_row)
 
-        return {"competencies": sanitized, "count": len(sanitized)}
+        # Save result to task
+        await db.scheme_tasks.update_one(
+            {"task_id": task_id},
+            {"$set": {
+                "status": "complete",
+                "competencies": sanitized,
+                "count": len(sanitized),
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }}
+        )
+        logger.info(f"Background scheme generation complete: {task_id} ({len(sanitized)} rows)")
 
     except json.JSONDecodeError as e:
         logger.error(f"Scheme AI JSON parse error: {e}")
-        raise HTTPException(status_code=500, detail="AI returned invalid format. Please try again.")
+        await db.scheme_tasks.update_one(
+            {"task_id": task_id},
+            {"$set": {"status": "failed", "error": "AI returned invalid format. Please try again."}}
+        )
     except Exception as e:
         logger.error(f"Scheme AI generation error: {e}")
-        raise HTTPException(status_code=500, detail=f"AI generation failed: {str(e)}")
+        await db.scheme_tasks.update_one(
+            {"task_id": task_id},
+            {"$set": {"status": "failed", "error": str(e)}}
+        )
 
 
 # ==================== CURRICULUM INTELLIGENCE SYSTEM ====================
@@ -3121,7 +3160,7 @@ async def call_ai_service(prompt: str, system_prompt: str = None) -> Dict:
     }
     
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=120.0) as client:
             response = await client.post(
                 "https://api.deepseek.com/v1/chat/completions",
                 headers=headers,

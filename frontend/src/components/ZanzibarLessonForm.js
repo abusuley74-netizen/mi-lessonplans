@@ -6,6 +6,28 @@ import './LessonForm.css';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
+// Helper to map AI content to Zanzibar form fields
+const mapZanzibarContent = (formData, aiContent) => ({
+  ...formData,
+  generalOutcome: aiContent.generalOutcome || '',
+  mainTopic: aiContent.mainTopic || formData.topic,
+  subTopic: aiContent.subTopic || '',
+  specificOutcome: aiContent.specificOutcome || '',
+  learningResources: aiContent.learningResources || '',
+  references: aiContent.references || '',
+  introTime: aiContent.introductionActivities?.time || '10 minutes',
+  teachingIntro: aiContent.introductionActivities?.teachingActivities || '',
+  learningIntro: aiContent.introductionActivities?.learningActivities || '',
+  assessmentIntro: aiContent.introductionActivities?.assessment || '',
+  newTime: aiContent.newKnowledgeActivities?.time || '25 minutes',
+  teachingNew: aiContent.newKnowledgeActivities?.teachingActivities || '',
+  learningNew: aiContent.newKnowledgeActivities?.learningActivities || '',
+  assessmentNew: aiContent.newKnowledgeActivities?.assessment || '',
+  teacherEvaluation: aiContent.teacherEvaluation || '',
+  pupilWork: aiContent.pupilWork || '',
+  remarks: aiContent.remarks || ''
+});
+
 // Subject is now editable text field - user can type any subject
 // Language detection will work based on subject name
 
@@ -132,35 +154,44 @@ const ZanzibarLessonForm = ({ onLessonGenerated }) => {
           {  }
         );
 
-        const aiContent = response.data.content;
+        const lessonData = response.data;
         
-        // Map AI response to form fields
-        const updatedFormData = {
-          ...formData,
-          generalOutcome: aiContent.generalOutcome || '',
-          mainTopic: aiContent.mainTopic || formData.topic,
-          subTopic: aiContent.subTopic || '',
-          specificOutcome: aiContent.specificOutcome || '',
-          learningResources: aiContent.learningResources || '',
-          references: aiContent.references || '',
-          introTime: aiContent.introductionActivities?.time || '10 minutes',
-          teachingIntro: aiContent.introductionActivities?.teachingActivities || '',
-          learningIntro: aiContent.introductionActivities?.learningActivities || '',
-          assessmentIntro: aiContent.introductionActivities?.assessment || '',
-          newTime: aiContent.newKnowledgeActivities?.time || '25 minutes',
-          teachingNew: aiContent.newKnowledgeActivities?.teachingActivities || '',
-          learningNew: aiContent.newKnowledgeActivities?.learningActivities || '',
-          assessmentNew: aiContent.newKnowledgeActivities?.assessment || '',
-          teacherEvaluation: aiContent.teacherEvaluation || '',
-          pupilWork: aiContent.pupilWork || '',
-          remarks: aiContent.remarks || ''
-        };
-
-        setFormData(updatedFormData);
-        setPreviewData(updatedFormData);
-        
-        if (onLessonGenerated) {
-          onLessonGenerated(response.data);
+        // If generation is async (background), poll for completion
+        if (lessonData.generation_status === 'generating') {
+          const lessonId = lessonData.lesson_id;
+          let attempts = 0;
+          const maxAttempts = 40; // 40 * 3s = 120s max wait
+          
+          while (attempts < maxAttempts) {
+            await new Promise(r => setTimeout(r, 3000));
+            attempts++;
+            try {
+              const statusRes = await axios.get(`${API_URL}/api/lessons/${lessonId}/status`);
+              if (statusRes.data.generation_status === 'complete') {
+                const aiContent = statusRes.data.content;
+                const updatedFormData = mapZanzibarContent(formData, aiContent);
+                setFormData(updatedFormData);
+                setPreviewData(updatedFormData);
+                if (onLessonGenerated) onLessonGenerated(statusRes.data);
+                break;
+              } else if (statusRes.data.generation_status === 'failed') {
+                setError('AI generation failed. Please try again.');
+                break;
+              }
+            } catch (pollErr) {
+              // Continue polling on network errors
+            }
+          }
+          if (attempts >= maxAttempts) {
+            setError('Generation is taking too long. Please check My Files later.');
+          }
+        } else {
+          // Synchronous response (content already available)
+          const aiContent = lessonData.content;
+          const updatedFormData = mapZanzibarContent(formData, aiContent);
+          setFormData(updatedFormData);
+          setPreviewData(updatedFormData);
+          if (onLessonGenerated) onLessonGenerated(lessonData);
         }
       } catch (err) {
         if (err.response?.status === 403) {

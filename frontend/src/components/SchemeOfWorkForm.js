@@ -172,7 +172,35 @@ const SchemeOfWorkForm = () => {
         topics: topics
       });
 
-      const aiRows = res.data.competencies || [];
+      let aiRows = res.data.competencies || [];
+      
+      // If async generation, poll for completion
+      if (res.data.status === 'generating' && res.data.task_id) {
+        const taskId = res.data.task_id;
+        let attempts = 0;
+        const maxAttempts = 50; // 50 * 3s = 150s max
+        
+        while (attempts < maxAttempts) {
+          await new Promise(r => setTimeout(r, 3000));
+          attempts++;
+          try {
+            const statusRes = await axios.get(`${API_URL}/api/schemes/generate/${taskId}/status`);
+            if (statusRes.data.status === 'complete') {
+              aiRows = statusRes.data.competencies || [];
+              break;
+            } else if (statusRes.data.status === 'failed') {
+              toast.error(statusRes.data.error || 'AI generation failed. Please try again.');
+              return;
+            }
+          } catch (pollErr) {
+            // Continue polling
+          }
+        }
+        if (attempts >= maxAttempts) {
+          toast.error('Generation is taking too long. Please try again.');
+          return;
+        }
+      }
 
       // Animate row-by-row fill
       const newCompetencies = [...formData.competencies];
