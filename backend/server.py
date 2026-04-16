@@ -1406,12 +1406,21 @@ Generate the lesson plan in JSON format with these exact keys:
 
 Provide practical, actionable content appropriate for {grade} students in Tanzania."""
         
+        # Build language-aware system message with strict JSON + language enforcement
+        json_instruction = {
+            'arabic': "يجب عليك الرد بصيغة JSON صالحة فقط. لا تكتب أي كلمة بالإنجليزية مطلقاً. كل المحتوى يجب أن يكون باللغة العربية الفصحى حصرياً بما في ذلك جميع القيم والأمثلة والأنشطة.",
+            'swahili': "Jibu kwa JSON halali tu. Usitumie Kiingereza. Majibu yote yawe kwa KISWAHILI SANIFU pekee.",
+            'french': "Répondez uniquement avec du JSON valide. Ne pas utiliser l'anglais. Tout le contenu doit être en FRANÇAIS uniquement.",
+            'english': "Always respond with valid JSON only."
+        }
+        full_system = f"{system_prompt}\n\nCRITICAL: {json_instruction.get(language, json_instruction['english'])}"
+        
         payload = {
             "model": "deepseek-chat",
             "messages": [
                 {
                     "role": "system",
-                    "content": "You are an expert Tanzanian education curriculum designer. Create practical lesson plans. Be concise but comprehensive. Always respond with valid JSON only."
+                    "content": full_system
                 },
                 {
                     "role": "user",
@@ -2806,7 +2815,8 @@ async def generate_scheme_ai(request: Request, user: User = Depends(get_current_
     subject = data.get("subject", "")
     grade = data.get("class", "")
     term = data.get("term", "")
-    num_rows = min(int(data.get("num_rows", 10)), 20)
+    topics = data.get("topics", "")
+    num_rows = min(max(int(data.get("num_rows", 20)), 5), 60)
 
     if not subject or not grade:
         raise HTTPException(status_code=400, detail="Subject and class are required")
@@ -2826,16 +2836,20 @@ async def generate_scheme_ai(request: Request, user: User = Depends(get_current_
         
         # Language-specific system prompts for scheme generation
         scheme_system_prompts = {
-            'swahili': """Wewe ni mtaalamu wa mipango ya kazi ya Tanzania. Jibu kwa KISWAHILI SANIFU tu. Toa maelezo halisi na mazoezi halisi.""",
+            'swahili': """Wewe ni mtaalamu wa mipango ya kazi ya Tanzania. Jibu kwa KISWAHILI SANIFU tu. Toa maelezo halisi na mazoezi halisi. Jibu kwa JSON halali tu.""",
             
-            'arabic': """أنت خبير في تخطيط العمل في تنزانيا. قم بالرد باللغة العربية الفصحى فقط. قدم تفاصيل حقيقية وتمارين عملية.""",
+            'arabic': """أنت خبير في تخطيط العمل في تنزانيا. يجب عليك الرد باللغة العربية الفصحى فقط. لا تستخدم أي كلمة إنجليزية مطلقاً. كل المحتوى يجب أن يكون بالعربية بما في ذلك الأنشطة والموارد والتقييم. قدم تفاصيل حقيقية وتمارين عملية. ارجع بصيغة JSON صالحة فقط.""",
             
-            'french': """Vous êtes un expert en planification du travail en Tanzanie. Répondez uniquement en FRANÇAIS. Fournissez des détails réels et des exercices pratiques.""",
+            'french': """Vous êtes un expert en planification du travail en Tanzanie. Répondez uniquement en FRANÇAIS. Fournissez des détails réels et des exercices pratiques. Répondez uniquement avec du JSON valide.""",
             
             'english': """You are an expert Tanzanian education curriculum designer specializing in Scheme of Work planning. You know both Zanzibar and Tanzania Mainland syllabus formats deeply. Always respond with valid JSON only."""
         }
         
         system_prompt = scheme_system_prompts.get(language, scheme_system_prompts['english'])
+        
+        # Build topics guidance section
+        topics_ar = f"\n\nالمواضيع التي يجب تغطيتها بالترتيب:\n{topics}\nيجب أن تغطي الصفوف هذه المواضيع بالتسلسل عبر الأسابيع." if topics.strip() else ""
+        topics_en = f"\n\nTopics/Syllabus Guide (cover these topics in order across the weeks):\n{topics}" if topics.strip() else ""
         
         # Generate language-specific content instructions
         if language == 'arabic':
@@ -2845,7 +2859,7 @@ async def generate_scheme_ai(request: Request, user: User = Depends(get_current_
 - المادة: {subject}
 - الصف: {grade}
 - الفصل الدراسي: {term or "الفصل الأول"}
-- عدد الصفوف: {num_rows}
+- عدد الصفوف: {num_rows}{topics_ar}
 
 أنشئ بالضبط {num_rows} صفًا من الكفاءات. يمثل كل صف أسبوعًا/موضوعًا في الخطة.
 ارجع بمصفوفة JSON حيث يحتوي كل عنصر على هذه المفاتيح بالضبط:
@@ -2872,13 +2886,14 @@ async def generate_scheme_ai(request: Request, user: User = Depends(get_current_
 - استخدم مواضيع المنهج التنزاني الواقعية للمادة {subject}
 - وزع على أشهر الفصل الدراسي بشكل واقعي
 - اجعل الأنشطة عملية ومناسبة للعمر
+- لا تكتب أي كلمة بالإنجليزية. كل المحتوى يجب أن يكون بالعربية فقط
 - ارجع بمصفوفة JSON فقط، بدون أي نص آخر"""
             else:
                 prompt = f"""أنشئ خطة عمل لمنهج البر التنزاني:
 - المادة: {subject}
 - الصف: {grade}
 - الفصل الدراسي: {term or "الفصل الأول"}
-- عدد الصفوف: {num_rows}
+- عدد الصفوف: {num_rows}{topics_ar}
 
 أنشئ بالضبط {num_rows} صفًا من الكفاءات. يمثل كل صف أسبوعًا/موضوعًا في الخطة.
 ارجع بمصفوفة JSON حيث يحتوي كل عنصر على هذه المفاتيح بالضبط:
@@ -2905,6 +2920,7 @@ async def generate_scheme_ai(request: Request, user: User = Depends(get_current_
 - استخدم مواضيع المنهج التنزاني الواقعية للمادة {subject}
 - وزع على أشهر الفصل الدراسي بشكل واقعي
 - اجعل الأنشطة عملية ومناسبة للعمر
+- لا تكتب أي كلمة بالإنجليزية. كل المحتوى يجب أن يكون بالعربية فقط
 - ارجع بمصفوفة JSON فقط، بدون أي نص آخر"""
         else:
             # For other languages, use the original prompts
@@ -2913,7 +2929,7 @@ async def generate_scheme_ai(request: Request, user: User = Depends(get_current_
 - Subject: {subject}
 - Class: {grade}
 - Term: {term or "Term 1"}
-- Number of rows: {num_rows}
+- Number of rows: {num_rows}{topics_en}
 
 Generate EXACTLY {num_rows} competency rows. Each row represents a week/topic in the scheme.
 Return a JSON array where each element has these exact keys:
@@ -2946,7 +2962,7 @@ IMPORTANT:
 - Subject: {subject}
 - Class: {grade}
 - Term: {term or "Term 1"}
-- Number of rows: {num_rows}
+- Number of rows: {num_rows}{topics_en}
 
 Generate EXACTLY {num_rows} competency rows. Each row represents a week/topic in the scheme.
 Return a JSON array where each element has these exact keys:
@@ -2976,6 +2992,10 @@ IMPORTANT:
 - Make activities practical and age-appropriate
 - Return ONLY the JSON array, no other text"""
 
+        # Scale max_tokens based on row count (larger schemes need more tokens)
+        # DeepSeek API max is 8192 tokens
+        max_tokens = 4096 if num_rows <= 20 else 8192
+        
         payload = {
             "model": "deepseek-chat",
             "messages": [
@@ -2989,10 +3009,10 @@ IMPORTANT:
                 }
             ],
             "temperature": 0.7,
-            "max_tokens": 4096
+            "max_tokens": max_tokens
         }
 
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=120.0) as client:
             response = await client.post(
                 "https://api.deepseek.com/v1/chat/completions",
                 headers=headers,

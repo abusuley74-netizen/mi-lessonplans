@@ -1,0 +1,81 @@
+{
+  "summary": "Completed testing of Scheme of Work enhancements: Topics textarea, num_rows cap increase to 60, and Arabic lesson generation. All features verified working. Fixed a backend bug where max_tokens exceeded DeepSeek API limit (8192) for num_rows > 40.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "Backend: POST /api/schemes/generate accepts 'topics' field",
+    "Backend: POST /api/schemes/generate accepts num_rows=35 (new default)",
+    "Backend: POST /api/schemes/generate accepts num_rows=60 (new max)",
+    "Backend: POST /api/schemes/generate caps num_rows=100 to 60",
+    "Backend: POST /api/lessons/generate accepts Arabic subject (اللغة العربية)",
+    "Backend: POST /api/schemes/generate with Arabic subject returns Arabic content",
+    "Backend: Validation still requires subject field",
+    "Backend: Validation still requires class field",
+    "Frontend: Topics / Syllabus Guide textarea visible (data-testid='scheme-topics-textarea')",
+    "Frontend: Topics section has header with Lightbulb icon",
+    "Frontend: Row selector dropdown shows options [20,25,30,35,40,45,50,55,60]",
+    "Frontend: Default num_rows value is 35",
+    "Frontend: Table rows contain editable textareas (135 found)",
+    "Frontend: Textareas are editable - can fill with content"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_scheme_topics_rows.py",
+    "/app/test_reports/pytest/pytest_scheme_topics_rows.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_scheme_topics_rows.py (new test file)",
+    "/app/backend/server.py (fixed max_tokens bug - line 2996)"
+  ],
+  "success_rate": {
+    "backend": "100% (8/8 pytest tests passed)",
+    "frontend": "100% (all UI tests passed)"
+  },
+  "test_credentials": {
+    "session_token": "test_session_tts_001",
+    "user_id": "test-user-tts"
+  },
+  "seed_data_creation": "Created test user (test-user-tts) and session (test_session_tts_001) in MongoDB",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Scheme of Work enhancements verified: Topics textarea (data-testid='scheme-topics-textarea'), row selector with options [20-60], default 35 rows. Arabic lesson/scheme generation uses Arabic system prompts. Fixed max_tokens bug in server.py line 2996 - was using 16384 for num_rows>40 but DeepSeek API max is 8192.",
+  "features_verified": {
+    "topics_field": {
+      "backend": "POST /api/schemes/generate accepts 'topics' field and injects into prompts",
+      "frontend": "Topics textarea visible with data-testid='scheme-topics-textarea'",
+      "status": "PASS"
+    },
+    "num_rows_cap": {
+      "backend": "num_rows cap changed from 20 to 60 (line 2819: min(max(num_rows, 5), 60))",
+      "frontend": "Row selector options updated to [20,25,30,35,40,45,50,55,60]",
+      "default_value": "35",
+      "status": "PASS"
+    },
+    "arabic_lesson_generation": {
+      "backend": "detect_language() detects Arabic subjects, system_prompt uses Arabic prompt",
+      "lesson_endpoint": "/api/lessons/generate uses language-specific system prompts",
+      "scheme_endpoint": "/api/schemes/generate uses Arabic prompts for Arabic subjects",
+      "status": "PASS"
+    },
+    "editable_textareas": {
+      "frontend": "Table rows contain textarea elements (135 found)",
+      "editable": "Textareas accept user input",
+      "status": "PASS"
+    }
+  },
+  "bug_fixed": {
+    "issue": "DeepSeek API error: Invalid max_tokens value (16384 > 8192 limit)",
+    "location": "/app/backend/server.py line 2996",
+    "original_code": "max_tokens = 4096 if num_rows <= 20 else (8192 if num_rows <= 40 else 16384)",
+    "fixed_code": "max_tokens = 4096 if num_rows <= 20 else 8192",
+    "root_cause": "DeepSeek API max_tokens limit is 8192, code was using 16384 for num_rows > 40"
+  }
+}

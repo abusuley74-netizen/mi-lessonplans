@@ -70,11 +70,12 @@ const SchemeOfWorkForm = () => {
   const [fillingRows, setFillingRows] = useState(new Set());
   const [savedMsg, setSavedMsg] = useState('');
   const [savedSchemeId, setSavedSchemeId] = useState(null);
-  const [numRows, setNumRows] = useState(10);
+  const [numRows, setNumRows] = useState(35);
+  const [topics, setTopics] = useState('');
   const [formData, setFormData] = useState({
     school: '', teacher: '', subject: '',
     year: new Date().getFullYear(), term: '', class: '',
-    competencies: Array(15).fill(null).map(() => makeEmptyRow())
+    competencies: Array(35).fill(null).map(() => makeEmptyRow())
   });
   const [currentPage, setCurrentPage] = useState(0);
   const rowsPerPage = 15;
@@ -166,7 +167,8 @@ const SchemeOfWorkForm = () => {
         subject: formData.subject,
         class: formData.class,
         term: formData.term || 'Term 1',
-        num_rows: numRows
+        num_rows: numRows,
+        topics: topics
       }, { withCredentials: true });
 
       const aiRows = res.data.competencies || [];
@@ -431,6 +433,24 @@ const SchemeOfWorkForm = () => {
         </div>
       </div>
 
+      {/* Topics / Syllabus Guide Textarea */}
+      <div className="topics-guide-section" data-testid="scheme-topics-section">
+        <div className="topics-guide-header">
+          <Lightbulb className="w-4 h-4" />
+          <label htmlFor="topics-guide">Topics / Syllabus Guide</label>
+          <span className="topics-hint">Paste your syllabus topics here to guide the AI generation</span>
+        </div>
+        <textarea
+          id="topics-guide"
+          value={topics}
+          onChange={(e) => setTopics(e.target.value)}
+          placeholder="Enter topics/syllabus content to guide AI generation. Example:&#10;1. Numbers and Operations&#10;2. Algebra and Equations&#10;3. Geometry - Shapes and Areas&#10;4. Statistics and Probability&#10;..."
+          className="topics-textarea"
+          rows={4}
+          data-testid="scheme-topics-textarea"
+        />
+      </div>
+
       {/* AI Generate Bar */}
       <div className="ai-generate-bar" data-testid="scheme-ai-bar">
         <div className="ai-bar-left">
@@ -440,7 +460,7 @@ const SchemeOfWorkForm = () => {
             <label>Rows:</label>
             <select value={numRows} onChange={(e) => setNumRows(parseInt(e.target.value))}
               disabled={generating} data-testid="scheme-num-rows">
-              {[5, 8, 10, 12, 15, 20].map(n => (
+              {[20, 25, 30, 35, 40, 45, 50, 55, 60].map(n => (
                 <option key={n} value={n}>{n}</option>
               ))}
             </select>
