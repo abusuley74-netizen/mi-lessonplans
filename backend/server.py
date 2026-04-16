@@ -2430,10 +2430,9 @@ async def save_dictation(request: Request, user: User = Depends(get_current_user
 
 @api_router.post("/dictation/generate")
 async def generate_dictation_audio(request: Request, user: User = Depends(get_current_user)):
-    """Generate audio from text using Azure Microsoft Cognitive Services Speech API"""
+    """Generate audio from text using Azure TTS — translates first if needed"""
     from fastapi.responses import Response as FastAPIResponse
     import aiohttp
-    import io
     
     data = await request.json()
     text = data.get("text", "")
@@ -2446,17 +2445,19 @@ async def generate_dictation_audio(request: Request, user: User = Depends(get_cu
     if len(words) > 200:
         raise HTTPException(status_code=400, detail="Text exceeds 200 word limit")
     
-    # Map language codes to Azure Speech voices
+    # Step 1: Translate the text to the target language using DeepSeek
+    translated_text = await _translate_for_dictation(text, language)
+    
+    # Step 2: Generate audio from the translated text
     voice_map = {
-        "en-GB": "en-GB-RyanNeural",      # British English - Male
-        "sw": "sw-TZ-DaudiNeural",        # Swahili (Tanzania) - Male
-        "ar": "ar-SA-HamedNeural",        # Arabic (Saudi Arabia) - Male
-        "tr": "tr-TR-AhmetNeural",        # Turkish (Turkey) - Male
-        "fr": "fr-FR-HenriNeural",        # French (France) - Male
+        "en-GB": "en-GB-RyanNeural",
+        "sw": "sw-TZ-DaudiNeural",
+        "ar": "ar-SA-HamedNeural",
+        "tr": "tr-TR-AhmetNeural",
+        "fr": "fr-FR-HenriNeural",
     }
     voice = voice_map.get(language, "en-US-GuyNeural")
     
-    # Get Azure Speech key and endpoint
     azure_speech_key = os.environ.get("AZURE_SPEECH_KEY_1")
     azure_endpoint = os.environ.get("AZURE_SPEECH_ENDPOINT", "https://eastus.api.cognitive.microsoft.com/")
     
@@ -2464,20 +2465,13 @@ async def generate_dictation_audio(request: Request, user: User = Depends(get_cu
         raise HTTPException(status_code=500, detail="Azure Speech service not configured")
     
     try:
-        # Azure Speech API endpoint for text-to-speech
-        # The correct endpoint is: https://eastus.tts.speech.microsoft.com/cognitiveservices/v1
-        # But we should use the endpoint from environment variable
         tts_url = f"{azure_endpoint.rstrip('/')}/cognitiveservices/v1"
-        
-        # If the endpoint doesn't have the full path, construct it properly
         if "tts.speech.microsoft.com" not in tts_url and "api.cognitive.microsoft.com" in tts_url:
-            # Convert from api.cognitive.microsoft.com to tts.speech.microsoft.com
             tts_url = "https://eastus.tts.speech.microsoft.com/cognitiveservices/v1"
         
-        # SSML for Azure Speech
         ssml = f"""<speak version='1.0' xml:lang='{language}'>
     <voice name='{voice}'>
-        {text}
+        {translated_text}
     </voice>
 </speak>"""
         
@@ -2501,9 +2495,83 @@ async def generate_dictation_audio(request: Request, user: User = Depends(get_cu
             media_type="audio/mpeg",
             headers={"Content-Disposition": safe_content_disposition(f"dictation_{language}.mp3")}
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Azure TTS generation error: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to generate audio: {str(e)}")
+
+
+async def _translate_for_dictation(text: str, target_language: str) -> str:
+    """Translate text to the target language using DeepSeek before TTS"""
+    
+    language_names = {
+        "en-GB": "British English",
+        "sw": "Swahili",
+        "ar": "Arabic",
+        "tr": "Turkish",
+        "fr": "French",
+    }
+    target_name = language_names.get(target_language, "English")
+    
+    # Detect if text is already in the target language
+    if target_language == "ar" and any('\u0600' <= c <= '\u06FF' for c in text):
+        return text  # Already Arabic
+    if target_language == "en-GB" and all(ord(c) < 256 or c.isspace() for c in text):
+        return text  # Already English (ASCII)
+    
+    api_key = os.environ.get("DEEPSEEK_API_KEY")
+    if not api_key:
+        logger.warning("No DEEPSEEK_API_KEY for translation, using original text")
+        return text
+    
+    try:
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {api_key}'
+        }
+        
+        payload = {
+            "model": "deepseek-chat",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": f"You are a professional translator. Translate the given text to {target_name}. Return ONLY the translated text, nothing else. No explanations, no quotes, no labels."
+                },
+                {
+                    "role": "user",
+                    "content": text
+                }
+            ],
+            "temperature": 0.3,
+            "max_tokens": 1000
+        }
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                "https://api.deepseek.com/v1/chat/completions",
+                headers=headers,
+                json=payload
+            )
+            
+            if response.status_code != 200:
+                logger.error(f"DeepSeek translation error: {response.status_code}")
+                return text  # Fallback to original
+            
+            data = response.json()
+            translated = data["choices"][0]["message"]["content"].strip()
+            
+            # Remove any surrounding quotes the model might add
+            if (translated.startswith('"') and translated.endswith('"')) or \
+               (translated.startswith("'") and translated.endswith("'")):
+                translated = translated[1:-1]
+            
+            logger.info(f"Translated to {target_name}: '{text[:50]}...' -> '{translated[:50]}...'")
+            return translated
+            
+    except Exception as e:
+        logger.error(f"Translation error: {e}")
+        return text  # Fallback to original text
 
 @api_router.delete("/dictations/{dictation_id}")
 async def delete_dictation(dictation_id: str, user: User = Depends(get_current_user)):
