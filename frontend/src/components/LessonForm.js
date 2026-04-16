@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronDown, BookOpen, GraduationCap, FileText, Calendar, Sparkles, MessageCircle, X } from 'lucide-react';
+import { ChevronDown, BookOpen, GraduationCap, FileText, Calendar } from 'lucide-react';
 import axios from 'axios';
 
 const SUBJECTS = [
@@ -73,14 +73,6 @@ const LessonForm = ({ onSubmit, isLoading }) => {
     date: new Date().toISOString().split('T')[0]
   });
 
-  // Binti Hamdani Chat State
-  const [showBintiChat, setShowBintiChat] = useState(false);
-  const [chatInput, setChatInput] = useState('');
-  const [chatMessages, setChatMessages] = useState([
-    { role: 'binti', text: 'Hujambo! I am Binti Hamdani, your AI lesson planning assistant. Tell me what kind of lesson plan you need, and I will help you create something amazing! 📚✨' }
-  ]);
-  const [isChatLoading, setIsChatLoading] = useState(false);
-  
   // Guidance textareas (populated by Binti)
   const [userGuidance, setUserGuidance] = useState('');
   const [negativeConstraints, setNegativeConstraints] = useState('');
@@ -95,46 +87,6 @@ const LessonForm = ({ onSubmit, isLoading }) => {
       }
       return updated;
     });
-  };
-
-  // Binti Hamdani Chat Handler
-  const handleBintiChat = async () => {
-    if (!chatInput.trim()) return;
-    
-    // Add user message to chat
-    setChatMessages(prev => [...prev, { role: 'user', text: chatInput }]);
-    const userQuestion = chatInput;
-    setChatInput('');
-    setIsChatLoading(true);
-    
-    try {
-      // Call AI with Binti Hamdani persona
-      const response = await axios.post(`${process.env.REACT_APP_BACKEND_URL}/api/binti-chat`, {
-        message: userQuestion,
-        context: {
-          syllabus: formData.syllabus,
-          subject: formData.subject,
-          grade: formData.grade,
-          topic: formData.topic
-        }
-      });
-      
-      const bintiResponse = response.data.message;
-      setChatMessages(prev => [...prev, { role: 'binti', text: bintiResponse }]);
-      
-      // Auto-extract guidance from Binti's response if she suggests things
-      if (bintiResponse.includes('focus on') || bintiResponse.includes('avoid')) {
-        // Optional: auto-populate guidance fields
-      }
-      
-    } catch (error) {
-      setChatMessages(prev => [...prev, { 
-        role: 'binti', 
-        text: 'Samahani, I am having trouble connecting. Please try again or generate the lesson plan directly.' 
-      }]);
-    } finally {
-      setIsChatLoading(false);
-    }
   };
 
   const handleSubmit = async (e) => {
@@ -160,16 +112,6 @@ const LessonForm = ({ onSubmit, isLoading }) => {
           <h2 className="font-heading text-xl font-semibold text-[#1A2E16]">
             Lesson Details
           </h2>
-          
-          {/* Binti Hamdani Chat Button */}
-          <button
-            type="button"
-            onClick={() => setShowBintiChat(!showBintiChat)}
-            className="flex items-center gap-2 px-4 py-2 bg-[#2D5A27] text-white rounded-lg hover:bg-[#1E3A1A] transition-colors"
-          >
-            <MessageCircle className="w-4 h-4" />
-            <span>Chat with Binti Hamdani</span>
-          </button>
         </div>
 
         <div className="space-y-5">
@@ -346,82 +288,6 @@ const LessonForm = ({ onSubmit, isLoading }) => {
         </div>
       </form>
 
-      {/* Binti Hamdani Chat Modal */}
-      {showBintiChat && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl w-full max-w-lg mx-4 shadow-2xl">
-            {/* Chat Header */}
-            <div className="flex justify-between items-center p-4 border-b border-[#E4DFD5] bg-[#2D5A27] text-white rounded-t-xl">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-5 h-5" />
-                <h3 className="font-semibold">Binti Hamdani</h3>
-                <span className="text-xs bg-white/20 px-2 py-0.5 rounded-full">AI Assistant</span>
-              </div>
-              <button onClick={() => setShowBintiChat(false)} className="hover:bg-white/20 rounded p-1">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            
-            {/* Chat Messages */}
-            <div className="h-96 overflow-y-auto p-4 space-y-3 bg-[#F8F9FA]">
-              {chatMessages.map((msg, idx) => (
-                <div
-                  key={idx}
-                  className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                >
-                  <div
-                    className={`max-w-[80%] p-3 rounded-lg ${
-                      msg.role === 'user'
-                        ? 'bg-[#2D5A27] text-white rounded-br-none'
-                        : 'bg-white border border-[#E4DFD5] text-[#1A2E16] rounded-bl-none'
-                    }`}
-                  >
-                    {msg.role === 'binti' && (
-                      <div className="font-semibold text-xs mb-1 text-[#2D5A27]">Binti Hamdani</div>
-                    )}
-                    <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
-                  </div>
-                </div>
-              ))}
-              {isChatLoading && (
-                <div className="flex justify-start">
-                  <div className="bg-white border border-[#E4DFD5] p-3 rounded-lg rounded-bl-none">
-                    <div className="flex gap-1">
-                      <span className="w-2 h-2 bg-[#2D5A27] rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                      <span className="w-2 h-2 bg-[#2D5A27] rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                      <span className="w-2 h-2 bg-[#2D5A27] rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-            
-            {/* Chat Input */}
-            <div className="p-4 border-t border-[#E4DFD5]">
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleBintiChat()}
-                  placeholder="Ask Binti Hamdani anything about your lesson plan..."
-                  className="flex-1 bg-white border border-[#E4DFD5] rounded-lg p-3 text-sm focus:border-[#2D5A27] focus:ring-1 focus:ring-[#2D5A27]"
-                />
-                <button
-                  onClick={handleBintiChat}
-                  disabled={isChatLoading || !chatInput.trim()}
-                  className="px-4 py-2 bg-[#2D5A27] text-white rounded-lg hover:bg-[#1E3A1A] disabled:opacity-50 transition-colors"
-                >
-                  Send
-                </button>
-              </div>
-              <p className="text-xs text-[#7A8A76] mt-2">
-                💡 Ask me: "Focus on group activities" or "Avoid too much writing" or "Make it suitable for Form 6 Arabic"
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 };

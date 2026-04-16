@@ -1,7 +1,7 @@
 # Mi-LessonPlan - Product Requirements Document
 
 ## Overview
-A comprehensive education platform for Tanzanian teachers supporting both Tanzania Mainland and Zanzibar syllabi. Features AI-powered lesson plan generation, scheme of work management, dictation tools, template library, and file sharing with payment integration.
+A comprehensive education platform for Tanzanian teachers supporting both Tanzania Mainland and Zanzibar syllabi. Features AI-powered lesson plan generation, scheme of work management, dictation tools, template library, file sharing with payment integration, and Binti Hamdani AI chatbot.
 
 ## Core Tech Stack
 - **Frontend**: React, Tailwind CSS, Shadcn/UI, DOMPurify
@@ -9,7 +9,9 @@ A comprehensive education platform for Tanzanian teachers supporting both Tanzan
 - **Database**: MongoDB Atlas (platform-managed)
 - **Auth**: Direct Google OAuth (`@react-oauth/google`)
 - **Payments**: ClickPesa (PesaPal)
-- **AI**: OpenAI GPT-5.2 + TTS via Emergent LLM Key
+- **AI (Chatbot)**: DeepSeek API (`deepseek-chat` model) for Binti Hamdani
+- **AI (Lessons/Schemes)**: Uses Emergent LLM Key (GPT-5.2) — user wants to migrate to DeepSeek
+- **TTS**: OpenAI TTS via Emergent LLM Key
 
 ## Completed Features
 - Google OAuth authentication (direct, not Emergent-managed)
@@ -19,43 +21,41 @@ A comprehensive education platform for Tanzanian teachers supporting both Tanzan
 - My Files repository with search/filter
 - Shareable links with payment gating
 - WhatsApp share integration
-- PDF exports (lessons, schemes, templates, notes) via WeasyPrint
-- Landscape PDF for Scheme of Work (12-column tables)
+- PDF exports via WeasyPrint (landscape for schemes)
 - Refer & Earn commission system
 - Admin dashboard with analytics
-- ClickPesa payment integration (live, not sandbox)
+- ClickPesa payment integration (live)
 - PWA support
 - Dictation: translate-then-speak with stored audio playback
+- **Binti Hamdani**: Global AI chatbot powered by DeepSeek
 
-## Dictation Feature Details
-- User types text in ANY language, selects output language
-- Backend always translates to target language via GPT-5.2
-- TTS generates audio in target language voice
-- Audio saved as base64 in MongoDB with dictation record
-- MyFiles playback uses stored audio (no re-generation cost)
-- Download serves stored audio or regenerates as fallback
+## Binti Hamdani Chatbot (Apr 2026)
+- Global floating chatbot accessible from ANY page
+- Single BintiChat component (removed 3 duplicated copies from form files)
+- Powered by DeepSeek API (`deepseek-chat` model)
+- Full conversation history (last 10 messages)
+- Markdown rendering (bold, lists, headings, code)
+- Auto-scroll to latest message
+- Quick prompt suggestions for new users
+- Minimize/maximize/clear chat controls
+- Deep curriculum knowledge: Tanzania Mainland (NECTA) + Zanzibar (ZEC)
+- Knows all subjects, grade levels, Bloom's Taxonomy, CBC methodology
+- Can explain app features and guide users
+- Public endpoint available for non-logged-in users (limited)
 
-## Subscription Tiers & Limits
-- Free: 10 lessons/month, basic features (my-files, profile, payment, activities)
-- Basic/Standard (TZS 5,999): 50 lessons/month + notes, shared-links
-- Premium/Professional (TZS 14,999): Unlimited + uploads, schemes, templates, dictation
+## Subscription Tiers
+- Free: 10 lessons/month
+- Standard (TZS 5,999): 50/month + notes, shared-links
+- Professional (TZS 14,999): Unlimited + uploads, schemes, templates, dictation
 - Master (TZS 29,999): Unlimited + Refer & Earn
 
-## Link creation: Free and unlimited (all paid plans)
-## Audio/AI generation: Uses Emergent LLM Key credits (not unlimited)
-
-## Code Quality Fixes Applied (Apr 2026)
-- Fixed CSP: Added cdn.fontshare.com, mi-lessonplan.site
-- Fixed XSS: DOMPurify for all innerHTML/dangerouslySetInnerHTML
-- Fixed 7+ missing React hook dependencies
-- Fixed base64 scoping bug, period_start undefined, clickpesa syntax
-- Fixed array index keys in dynamic lists
-- Improved MongoDB connection resilience
-
-## Known Infrastructure Issue
-- MongoDB Atlas connectivity from preview pods is intermittent (IP whitelist)
-- Production frontend .env must use REACT_APP_BACKEND_URL=https://mi-lessonplan.site
+## Production Setup
+- Domain: mi-lessonplan.site
+- Backend: mi-learning-hub.emergent.host
+- Google OAuth origins: mi-lessonplan.site, mi-learning-hub.emergent.host, mi-learning-hub.preview.emergentagent.com
 
 ## Upcoming Tasks
-- P1: Refactor server.py (3500+ lines) into modular route files
+- P0: Arabic lesson plan full-Arabic content generation
+- P0: Scheme of Work - topics textarea + row count selector (20-60)
+- P1: Refactor server.py (4600+ lines) into modular route files
 - P4: Team accounts, mobile app, offline mode, Swahili UI

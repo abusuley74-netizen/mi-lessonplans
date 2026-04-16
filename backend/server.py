@@ -1715,404 +1715,135 @@ class BintiChatRequest(BaseModel):
     context: Optional[Dict[str, Any]] = None
     conversation_history: Optional[List[Dict[str, str]]] = None
 
-# Unified Binti Hamdani Endpoint
+@api_router.post("/binti-chat")
+async def binti_chat(request: BintiChatRequest, user: User = Depends(get_current_user)):
+    """Global Binti Hamdani chatbot — uses DeepSeek API directly"""
+    import httpx
+
+    api_key = os.environ.get("DEEPSEEK_API_KEY")
+    if not api_key:
+        return {"message": "Samahani, my AI brain is not configured. Please contact the administrator."}
+
+    context = request.context or {}
+    history = request.conversation_history or []
+
+    # Build system prompt with deep curriculum knowledge
+    system_prompt = """You are Binti Hamdani, a warm, brilliant Tanzanian curriculum expert with 20+ years of experience helping teachers in both Tanzania Mainland and Zanzibar create exceptional lesson plans and schemes of work.
+
+PERSONALITY:
+- Warm, encouraging, and professional. You greet in Swahili but converse in the user's language.
+- You call teachers "Mwalimu" (teacher) respectfully.
+- You give specific, actionable advice — never vague platitudes.
+- You use markdown formatting: **bold** for emphasis, bullet lists, numbered steps.
+
+EXPERTISE:
+- Tanzania Mainland syllabus (NECTA) and Zanzibar syllabus (ZEC)
+- All subjects: English, Kiswahili, Mathematics, Science, Social Studies, History, Geography, Civics, Physics, Chemistry, Biology, Commerce, Bookkeeping, Computer Science, Arabic, French
+- All levels: Standard 1-7 (Primary), Form 1-6 (Secondary)
+- Bloom's Taxonomy alignment per grade level
+- Competence-based curriculum (CBC) methodology
+- Age-appropriate teaching methods and assessment strategies
+
+ABOUT MI-LESSONPLAN APP (answer these if asked):
+- Mi-LessonPlan helps teachers create AI-powered lesson plans and schemes of work
+- Features: Lesson Plan creation (Tanzania Mainland & Zanzibar syllabi), Scheme of Work generation, Notes, Templates, Dictation (text-to-speech), File uploads
+- Subscription tiers: Free (10 lessons/month), Standard (50/month), Professional (unlimited), Master (unlimited + referral earnings)
+- Teachers can share lesson plans and schemes via shareable links (with optional pricing)
+- WhatsApp sharing is available for all shared links
+- The app supports English, Swahili, Arabic, French, and Turkish for dictation
+- Files can be downloaded as PDF
+
+LESSON PLAN GUIDANCE:
+When helping with lesson plans, consider:
+- Grade level determines complexity (Standard 1-3: play-based, songs, games; Standard 4-7: group work, projects; Form 1-4: analysis, research; Form 5-6: critical thinking, independent work)
+- Each lesson should have: Introduction (5-10 min), New Knowledge/Main Activity (20-25 min), Reinforcement (10 min), Assessment (5-10 min)
+- For Arabic subject: write ALL content in Arabic script
+- For Kiswahili subject: write content in Kiswahili
+- Always include: learning objectives, teaching activities, resources needed, assessment methods
+
+SCHEME OF WORK GUIDANCE:
+When helping with schemes, consider:
+- Standard structure: 12 columns (Main Competence, Specific Competences, Learning Activities, Specific Activities, Month, Week, Periods, Methods, Resources, Assessment, References, Remarks)
+- Typical term: 12-16 weeks
+- Full year: 36-40 weeks across 3 terms
+- Each row = 1 week of teaching
+- Topics should progress logically from simple to complex"""
+
+    # Add current context if available
+    if any(context.values()):
+        ctx_parts = []
+        if context.get("syllabus"): ctx_parts.append(f"Syllabus: {context['syllabus']}")
+        if context.get("subject"): ctx_parts.append(f"Subject: {context['subject']}")
+        if context.get("grade"): ctx_parts.append(f"Grade/Class: {context['grade']}")
+        if context.get("topic"): ctx_parts.append(f"Topic: {context['topic']}")
+        if context.get("current_page"): ctx_parts.append(f"User is on: {context['current_page']} page")
+        if ctx_parts:
+            system_prompt += f"\n\nCURRENT USER CONTEXT:\n" + "\n".join(ctx_parts)
+
+    # Build messages array with conversation history
+    messages = [{"role": "system", "content": system_prompt}]
+    for msg in history[-10:]:  # Keep last 10 messages for context
+        role = "assistant" if msg.get("role") == "binti" else "user"
+        messages.append({"role": role, "content": msg.get("text", "")})
+    messages.append({"role": "user", "content": request.message})
+
+    try:
+        async with httpx.AsyncClient(timeout=45.0) as client:
+            resp = await client.post(
+                "https://api.deepseek.com/v1/chat/completions",
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                json={"model": "deepseek-chat", "messages": messages, "temperature": 0.7, "max_tokens": 2048}
+            )
+            if resp.status_code != 200:
+                logger.error(f"DeepSeek API error in Binti: {resp.status_code} - {resp.text[:200]}")
+                return {"message": "Samahani Mwalimu, I'm having a moment. Please try again."}
+
+            data = resp.json()
+            reply = data["choices"][0]["message"]["content"]
+            return {"message": reply}
+
+    except Exception as e:
+        logger.error(f"Binti chat error: {e}")
+        return {"message": "Samahani Mwalimu, I'm having trouble connecting. Please try again in a moment."}
+
 class BintiRequest(BaseModel):
     message: str
     context: Optional[Dict[str, Any]] = None
     conversation_history: Optional[List[Dict[str, str]]] = None
 
-@api_router.post("/binti-chat")
-async def binti_chat(
-    request: BintiChatRequest,
-    user: User = Depends(get_current_user)
-):
-    """Chat with Binti Hamdani, the AI lesson planning assistant"""
-    try:
-        # Get context from request
-        context = request.context or {}
-        
-        # Use the enhanced Binti persona
-        from backend.services.bintiPrompt import get_binti_prompt
-        
-        # Create conversation history from context if available
-        conversation_history = request.conversation_history or []
-        
-        # Get the enhanced Binti prompt
-        binti_prompt = get_binti_prompt(context, conversation_history)
-        
-        # Add the user's message
-        full_prompt = f"{binti_prompt}\n\nUser asks: {request.message}\n\nRespond as Binti Hamdani."
-        
-        # Use the existing AI service to generate a response
-        if LESSON_INTELLIGENCE_AVAILABLE:
-            try:
-                # Use the lesson intelligence helper
-                from backend.lesson_intelligence_helper import generate_with_intelligence
-                
-                response = await generate_with_intelligence(
-                    prompt=full_prompt,
-                    system_prompt="",  # System prompt is already in binti_prompt
-                    temperature=0.7
-                )
-                
-                return {"message": response}
-            except Exception as e:
-                logger.warning(f"Intelligence service failed for Binti chat: {e}")
-                # Fall through to basic response
-        
-        # Basic response if intelligence service fails or isn't available
-        syllabus = context.get("syllabus", "Zanzibar")
-        subject = context.get("subject", "")
-        grade = context.get("grade", "")
-        topic = context.get("topic", "")
-        
-        basic_responses = [
-            f"Hujambo! Based on your {subject} lesson for {grade} on '{topic}', I suggest focusing on hands-on activities that engage students. For {syllabus} syllabus, consider incorporating local examples that students can relate to.",
-            f"Karibu! For your {grade} {subject} lesson about '{topic}', I recommend starting with a quick review of prior knowledge, then introducing new concepts through group work. Remember to include assessment methods to check understanding.",
-            f"Shikamoo! I see you're planning a {subject} lesson for {grade}. For the topic '{topic}', consider using visual aids and real-world examples. The {syllabus} syllabus emphasizes practical application of knowledge.",
-            f"Hello! As Binti Hamdani, I suggest breaking down your '{topic}' lesson into clear steps: introduction (5-10 mins), main activity (20-25 mins), and assessment (5-10 mins). For {subject}, include both individual and group work.",
-            f"Habari! For {grade} {subject}, the topic '{topic}' could be taught through storytelling or problem-solving activities. The {syllabus} syllabus values critical thinking, so include questions that make students analyze rather than just recall."
-        ]
-        
-        import random
-        response = random.choice(basic_responses)
-        
-        return {"message": response}
-        
-    except Exception as e:
-        logger.error(f"Error in Binti chat: {e}")
-        return {"message": "Samahani, I'm having trouble thinking right now. Please try again or proceed with generating your lesson plan directly."}
-
 @api_router.post("/binti")
-async def binti_unified(
-    request: BintiRequest,
-    user: User = Depends(get_current_user)
-):
-    """Unified Binti Hamdani endpoint - generates actual documents or provides curriculum advice"""
-    try:
-        # Get context from request
-        context = request.context or {}
-        message = request.message.lower()
-        conversation_history = request.conversation_history or []
-        
-        # Detect intent
-        wants_scheme = any(word in message for word in ["scheme of work", "scheme", "sow", "schemes"])
-        wants_lesson = any(word in message for word in ["lesson plan", "lesson", "plan", "lessonplan"])
-        wants_modification = any(word in message for word in ["add", "change", "update", "modify", "improve", "enhance"])
-        
-        # CASE 1: Generate Scheme of Work
-        if wants_scheme and (context.get("subject") or context.get("grade")):
-            try:
-                # Import scheme generation function
-                from backend.services.promptBuilder import PromptBuilder
-                from backend.services.promptMemory import PromptMemory
-                
-                syllabus = context.get("syllabus", "Zanzibar")
-                subject = context.get("subject", "")
-                grade = context.get("grade", "")
-                term = context.get("term", "Full Year")
-                total_weeks = context.get("total_weeks", 36)
-                user_guidance = context.get("user_guidance", "")
-                negative_constraints = context.get("negative_constraints", "")
-                
-                # Initialize prompt builder
-                prompt_builder = PromptBuilder(
-                    syllabus, grade, subject, term, user_guidance, negative_constraints
-                )
-                
-                # Build base prompt
-                base_prompt = await prompt_builder.build(db)
-                
-                # Initialize memory service
-                memory = PromptMemory(db)
-                
-                # Try memory first
-                prompt_context = {
-                    "syllabus": syllabus,
-                    "level": grade,
-                    "subject": subject,
-                    "term": term,
-                    "total_weeks": total_weeks,
-                    "user_guidance": user_guidance,
-                    "negative_constraints": negative_constraints,
-                    "user_prompt": f"{syllabus} {grade} {subject} {term}"
-                }
-                
-                async def generate_fresh():
-                    # Generate scheme using AI
-                    from backend.services.bintiPrompt import get_binti_prompt
-                    binti_prompt = get_binti_prompt(context, conversation_history)
-                    
-                    scheme_prompt = f"""{binti_prompt}
+async def binti_unified(request: BintiRequest, user: User = Depends(get_current_user)):
+    """Legacy endpoint - redirects to binti-chat"""
+    chat_req = BintiChatRequest(message=request.message, context=request.context, conversation_history=request.conversation_history)
+    result = await binti_chat(chat_req, user)
+    return {"type": "chat", **result}
 
-User wants a scheme of work for {subject} {grade} {syllabus}.
-
-Generate a complete scheme of work with {total_weeks} weeks.
-Return as JSON with this structure:
-{{
-    "total_weeks": {total_weeks},
-    "pages": [
-        {{
-            "page_number": 1,
-            "weeks": [1, 2, 3, ...],
-            "competencies": [
-                {{
-                    "main": "Main competence",
-                    "specific": "Specific competences",
-                    "activities": "Learning activities",
-                    "specificActivities": "Specific activities",
-                    "month": "Month name",
-                    "week": "Week number",
-                    "periods": "Number of periods",
-                    "methods": "Teaching methods",
-                    "resources": "Resources needed",
-                    "assessment": "Assessment methods",
-                    "references": "References",
-                    "remarks": ""
-                }}
-            ]
-        }}
-    ]
-}}
-
-Generate actual content, not placeholders."""
-                    
-                    # Call AI service
-                    ai_response = await call_ai_service(scheme_prompt, "")
-                    
-                    # Parse response
-                    import json
-                    import re
-                    
-                    json_match = re.search(r'\{[\s\S]*\}', ai_response)
-                    if json_match:
-                        return json.loads(json_match.group())
-                    else:
-                        # Fallback structure
-                        return {
-                            "total_weeks": total_weeks,
-                            "pages": [{
-                                "page_number": 1,
-                                "weeks": list(range(1, min(total_weeks, 15) + 1)),
-                                "competencies": []
-                            }]
-                        }
-                
-                memory_result = await memory.get_or_generate(prompt_context, generate_fresh)
-                
-                scheme_data = memory_result["data"]
-                
-                return {
-                    "type": "scheme",
-                    "data": scheme_data,
-                    "message": f"Hujambo! I have created a {subject} Scheme of Work for {grade} ({syllabus}). It includes {scheme_data.get('total_weeks', 0)} weeks covering all topics. You can ask me to modify any week."
-                }
-                
-            except Exception as e:
-                logger.error(f"Scheme generation failed: {e}")
-                # Fall through to regular chat
-        
-        # CASE 2: Generate Lesson Plan
-        if wants_lesson and context.get("subject") and context.get("grade") and context.get("topic"):
-            try:
-                # Use existing lesson generation endpoint
-                generate_request = GenerateLessonRequest(
-                    syllabus=context.get("syllabus", "Zanzibar"),
-                    subject=context.get("subject", ""),
-                    grade=context.get("grade", ""),
-                    topic=context.get("topic", ""),
-                    form_data=context.get("form_data", {}),
-                    user_guidance=context.get("user_guidance", ""),
-                    negative_constraints=context.get("negative_constraints", ""),
-                    check_memory=True
-                )
-                
-                # Call the existing lesson generation function
-                lesson_result = await generate_lesson(generate_request, user)
-                
-                return {
-                    "type": "lesson",
-                    "data": lesson_result,
-                    "message": f"Karibu! I have created a lesson plan for '{context.get('topic')}' in {context.get('subject')} for {context.get('grade')}. The lesson includes comprehensive learning objectives and activities."
-                }
-                
-            except Exception as e:
-                logger.error(f"Lesson generation failed: {e}")
-                # Fall through to regular chat
-        
-        # CASE 3: Curriculum Question or General Chat (use AI with full Binti persona)
-        from backend.services.bintiPrompt import get_binti_prompt
-        
-        # Get the enhanced Binti prompt
-        binti_prompt = get_binti_prompt(context, conversation_history)
-        
-        # Add the user's message
-        full_prompt = f"{binti_prompt}\n\nUser asks: {request.message}\n\nRespond as Binti Hamdani."
-        
-        # Use the existing AI service to generate a response
-        if LESSON_INTELLIGENCE_AVAILABLE:
-            try:
-                # Use the lesson intelligence helper
-                from backend.lesson_intelligence_helper import generate_with_intelligence
-                
-                response = await generate_with_intelligence(
-                    prompt=full_prompt,
-                    system_prompt="",  # System prompt is already in binti_prompt
-                    temperature=0.7
-                )
-                
-                # Try to parse if AI returned JSON
-                try:
-                    import json
-                    parsed = json.loads(response)
-                    if isinstance(parsed, dict) and parsed.get("type"):
-                        return parsed
-                except:
-                    pass
-                
-                return {
-                    "type": "chat",
-                    "message": response
-                }
-                
-            except Exception as e:
-                logger.warning(f"Intelligence service failed for Binti: {e}")
-                # Fall through to basic response
-        
-        # Basic response if intelligence service fails
-        syllabus = context.get("syllabus", "Zanzibar")
-        subject = context.get("subject", "")
-        grade = context.get("grade", "")
-        topic = context.get("topic", "")
-        
-        basic_responses = [
-            f"Hujambo! Based on your {subject} lesson for {grade} on '{topic}', I suggest focusing on hands-on activities that engage students. For {syllabus} syllabus, consider incorporating local examples that students can relate to.",
-            f"Karibu! For your {grade} {subject} lesson about '{topic}', I recommend starting with a quick review of prior knowledge, then introducing new concepts through group work. Remember to include assessment methods to check understanding.",
-            f"Shikamoo! I see you're planning a {subject} lesson for {grade}. For the topic '{topic}', consider using visual aids and real-world examples. The {syllabus} syllabus emphasizes practical application of knowledge.",
-        ]
-        
-        import random
-        response = random.choice(basic_responses)
-        
-        return {
-            "type": "chat",
-            "message": response
-        }
-        
-    except Exception as e:
-        logger.error(f"Error in unified Binti endpoint: {e}")
-        return {
-            "type": "error",
-            "message": "Samahani, I'm having trouble thinking right now. Please try again or proceed with generating your lesson plan directly."
-        }
-
-# Public Binti endpoint for demo/landing page use
 @api_router.post("/binti-public")
-async def binti_public(
-    request: BintiRequest
-):
-    """Public Binti Hamdani endpoint - no authentication required for demo"""
+async def binti_public(request: BintiRequest):
+    """Public Binti endpoint - limited responses without auth"""
+    import httpx
+    api_key = os.environ.get("DEEPSEEK_API_KEY")
+    if not api_key:
+        return {"type": "chat_response", "message": "Hujambo! Sign in to Mi-LessonPlan to access my full curriculum expertise."}
+    context = request.context or {}
+    history = request.conversation_history or []
+    system_prompt = "You are Binti Hamdani, a Tanzanian curriculum expert. Give brief, helpful answers about education and lesson planning. Keep responses under 150 words. Greet in Swahili. End by encouraging the user to sign in for full access."
+    messages = [{"role": "system", "content": system_prompt}]
+    for msg in history[-5:]:
+        role = "assistant" if msg.get("role") == "binti" else "user"
+        messages.append({"role": role, "content": msg.get("text", "")})
+    messages.append({"role": "user", "content": request.message})
     try:
-        # Get context from request
-        context = request.context or {}
-        message = request.message.lower()
-        conversation_history = request.conversation_history or []
-        
-        # For public endpoint, only allow basic chat and curriculum questions
-        # Don't allow generating actual documents (schemes/lessons) without auth
-        
-        # Use the enhanced Binti persona
-        try:
-            from backend.services.bintiPrompt import get_binti_prompt
-            
-            # Get the enhanced Binti prompt
-            binti_prompt = get_binti_prompt(context, conversation_history)
-        except Exception as e:
-            logger.warning(f"Failed to import bintiPrompt: {e}")
-            # Fall back to basic prompt
-            binti_prompt = f"""You are Binti Hamdani, a senior curriculum expert for Tanzanian education with 20 years of experience. You have helped thousands of teachers in Zanzibar and Tanzania Mainland create exceptional schemes of work and lesson plans.
-            
-USER CONTEXT:
-- Syllabus: {context.get('syllabus', 'Not specified')}
-- Subject: {context.get('subject', 'Not specified')}
-- Grade: {context.get('grade', 'Not specified')}
-- Topic: {context.get('topic', 'Not specified')}"""
-        
-        # Add the user's message
-        full_prompt = f"{binti_prompt}\n\nUser asks: {request.message}\n\nRespond as Binti Hamdani."
-        
-        # Debug: Check if LESSON_INTELLIGENCE_AVAILABLE is True
-        logger.info(f"LESSON_INTELLIGENCE_AVAILABLE: {LESSON_INTELLIGENCE_AVAILABLE}")
-        
-        # Use the existing AI service to generate a response
-        if LESSON_INTELLIGENCE_AVAILABLE:
-            try:
-                # Use the lesson intelligence helper
-                from backend.lesson_intelligence_helper import _generate_lesson_with_intelligence
-                
-                # We need to extract syllabus, subject, grade, topic from context
-                syllabus = context.get("syllabus", "Zanzibar")
-                subject = context.get("subject", "General")
-                grade = context.get("grade", "5")
-                topic = context.get("topic", "General Topic")
-                
-                logger.info(f"Calling _generate_lesson_with_intelligence with: syllabus={syllabus}, subject={subject}, grade={grade}, topic={topic}")
-                
-                # Call the async function
-                result = await _generate_lesson_with_intelligence(
-                    prompt=full_prompt,
-                    syllabus=syllabus,
-                    subject=subject,
-                    grade=grade,
-                    topic=topic
-                )
-                
-                logger.info(f"_generate_lesson_with_intelligence returned: {type(result)}")
-                
-                # Extract the response from the result
-                if isinstance(result, dict) and "content" in result:
-                    response = result.get("content", "I'm here to help with your curriculum questions!")
-                else:
-                    response = str(result) if result else "I'm here to help with your curriculum questions!"
-                
-                return {
-                    "type": "chat_response",
-                    "message": response,
-                    "note": "This is a demo response from Binti Hamdani. Sign in to generate actual lesson plans and schemes of work."
-                }
-            except Exception as e:
-                logger.warning(f"Intelligence service failed for public Binti: {e}", exc_info=True)
-                # Fall through to basic response
-        
-        # Basic response if intelligence service fails or isn't available
-        syllabus = context.get("syllabus", "Zanzibar")
-        subject = context.get("subject", "")
-        grade = context.get("grade", "")
-        topic = context.get("topic", "")
-        
-        basic_responses = [
-            f"Hujambo! Based on your {subject} lesson for {grade} on '{topic}', I suggest focusing on hands-on activities that engage students. For {syllabus} syllabus, consider incorporating local examples that students can relate to.",
-            f"Karibu! For your {grade} {subject} lesson about '{topic}', I recommend starting with a quick review of prior knowledge, then introducing new concepts through group work. Remember to include assessment methods to check understanding.",
-            f"Shikamoo! I see you're planning a {subject} lesson for {grade}. For the topic '{topic}', consider using visual aids and real-world examples. The {syllabus} syllabus emphasizes practical application of knowledge.",
-            f"Hello! As Binti Hamdani, I suggest breaking down your '{topic}' lesson into clear steps: introduction (5-10 mins), main activity (20-25 mins), and assessment (5-10 mins). For {subject}, include both individual and group work.",
-            f"Habari! For {grade} {subject}, the topic '{topic}' could be taught through storytelling or problem-solving activities. The {syllabus} syllabus values critical thinking, so include questions that make students analyze rather than just recall."
-        ]
-        
-        import random
-        response = random.choice(basic_responses)
-        
-        return {
-            "type": "chat_response",
-            "message": response,
-            "note": "This is a demo response from Binti Hamdani. Sign in to generate actual lesson plans and schemes of work."
-        }
-        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post("https://api.deepseek.com/v1/chat/completions",
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                json={"model": "deepseek-chat", "messages": messages, "temperature": 0.7, "max_tokens": 500})
+            if resp.status_code == 200:
+                reply = resp.json()["choices"][0]["message"]["content"]
+                return {"type": "chat_response", "message": reply}
     except Exception as e:
-        logger.error(f"Error in public Binti endpoint: {e}")
-        return {
-            "type": "error",
-            "message": "Samahani, I'm having trouble thinking right now. Please try again or sign in for full access."
-        }
+        logger.error(f"Public Binti error: {e}")
+    return {"type": "chat_response", "message": "Hujambo Mwalimu! Sign in to Mi-LessonPlan to get personalized lesson planning help."}
 
 @api_router.get("/lessons")
 async def get_lessons(user: User = Depends(get_current_user)):

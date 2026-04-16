@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import api from '../services/api';
-import { Loader2, MessageCircle, X, Sparkles } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import './LessonForm.css';
 
@@ -63,14 +63,6 @@ const TanzaniaMainlandLessonForm = ({ onLessonGenerated }) => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [loadingFields, setLoadingFields] = useState({});
   const [error, setError] = useState(null);
-
-  // Binti Hamdani Chat State
-  const [showBintiChat, setShowBintiChat] = useState(false);
-  const [chatInput, setChatInput] = useState('');
-  const [chatMessages, setChatMessages] = useState([
-    { role: 'binti', text: 'Hujambo! I am Binti Hamdani, your AI lesson planning assistant. Tell me what kind of lesson plan you need, and I will help you create something amazing! 📚✨' }
-  ]);
-  const [isChatLoading, setIsChatLoading] = useState(false);
 
   // Calculate totals
   const totalEnrolled = (+formData.enrolledGirls || 0) + (+formData.enrolledBoys || 0);
@@ -232,46 +224,6 @@ const TanzaniaMainlandLessonForm = ({ onLessonGenerated }) => {
     }
   };
 
-  // Binti Hamdani Chat Handler
-  const handleBintiChat = async () => {
-    if (!chatInput.trim()) return;
-    
-    // Add user message to chat
-    setChatMessages(prev => [...prev, { role: 'user', text: chatInput }]);
-    const userQuestion = chatInput;
-    setChatInput('');
-    setIsChatLoading(true);
-    
-    try {
-      // Call AI with Binti Hamdani persona
-      const response = await api.post('/api/binti-chat', {
-        message: userQuestion,
-        context: {
-          syllabus: formData.syllabus,
-          subject: formData.subject,
-          grade: formData.grade,
-          topic: formData.topic
-        }
-      });
-      
-      const bintiResponse = response.data.message;
-      setChatMessages(prev => [...prev, { role: 'binti', text: bintiResponse }]);
-      
-      // Auto-extract guidance from Binti's response if she suggests things
-      if (bintiResponse.includes('focus on') || bintiResponse.includes('avoid')) {
-        // Optional: auto-populate guidance fields
-      }
-      
-    } catch (error) {
-      setChatMessages(prev => [...prev, { 
-        role: 'binti', 
-        text: 'Samahani, I am having trouble connecting. Please try again or generate the lesson plan directly.' 
-      }]);
-    } finally {
-      setIsChatLoading(false);
-    }
-  };
-
   // Loading spinner component for fields
   const FieldLoader = () => (
     <div className="field-loader">
@@ -286,15 +238,6 @@ const TanzaniaMainlandLessonForm = ({ onLessonGenerated }) => {
           <div className="form-header">
             <h2>Create Tanzania Mainland Lesson Plan</h2>
             
-            {/* Binti Hamdani Chat Button */}
-            <button
-              type="button"
-              onClick={() => setShowBintiChat(!showBintiChat)}
-              className="binti-chat-btn"
-            >
-              <MessageCircle className="w-5 h-5" />
-              <span>Chat with Binti Hamdani</span>
-            </button>
           </div>
 
           {error && (
@@ -627,73 +570,6 @@ const TanzaniaMainlandLessonForm = ({ onLessonGenerated }) => {
                 <h4>REMARKS: MAELEZO</h4>
                 <p>{previewData.remarks}</p>
               </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Binti Hamdani Chat Modal */}
-      {showBintiChat && (
-        <div className="binti-chat-modal">
-          <div className="binti-chat-overlay" onClick={() => setShowBintiChat(false)}></div>
-          <div className="binti-chat-container">
-            {/* Chat Header */}
-            <div className="binti-chat-header">
-              <div className="binti-chat-title">
-                <Sparkles className="w-5 h-5" />
-                <h3>Binti Hamdani</h3>
-                <span className="binti-chat-badge">AI Assistant</span>
-              </div>
-              <button onClick={() => setShowBintiChat(false)} className="binti-chat-close">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            
-            {/* Chat Messages */}
-            <div className="binti-chat-messages">
-              {chatMessages.map((msg, idx) => (
-                <div
-                  key={idx}
-                  className={`binti-chat-message ${msg.role === 'user' ? 'user-message' : 'binti-message'}`}
-                >
-                  {msg.role === 'binti' && (
-                    <div className="binti-name">Binti Hamdani</div>
-                  )}
-                  <p className="binti-text">{msg.text}</p>
-                </div>
-              ))}
-              {isChatLoading && (
-                <div className="binti-chat-message binti-message">
-                  <div className="binti-name">Binti Hamdani</div>
-                  <div className="binti-typing">
-                    <span className="typing-dot"></span>
-                    <span className="typing-dot"></span>
-                    <span className="typing-dot"></span>
-                  </div>
-                </div>
-              )}
-            </div>
-            
-            {/* Chat Input */}
-            <div className="binti-chat-input">
-              <input
-                type="text"
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleBintiChat()}
-                placeholder="Ask Binti Hamdani anything about your lesson plan..."
-                className="binti-chat-textbox"
-              />
-              <button
-                onClick={handleBintiChat}
-                disabled={isChatLoading || !chatInput.trim()}
-                className="binti-chat-send"
-              >
-                Send
-              </button>
-            </div>
-            <div className="binti-chat-hint">
-              💡 Ask me: "Focus on group activities" or "Avoid too much writing" or "Make it suitable for Form 6 Arabic"
             </div>
           </div>
         </div>

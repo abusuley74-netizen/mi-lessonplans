@@ -13,6 +13,7 @@ import AdminProfileManager from './components/AdminProfileManager';
 import UserManagement from './components/UserManagement';
 import SharedView from './components/SharedView';
 import InstallPrompt from './components/InstallPrompt';
+import BintiChat from './components/BintiChat';
 import { Toaster } from './components/ui/sonner';
 import './index.css';
 
@@ -106,6 +107,7 @@ function App() {
       <AuthProvider>
         <BrowserRouter>
           <AppRouter />
+          <BintiChat />
           <InstallPrompt />
           <Toaster position="top-right" richColors closeButton />
         </BrowserRouter>
