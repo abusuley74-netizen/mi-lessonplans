@@ -46,7 +46,7 @@ const ShareModal = ({ isOpen, onClose, resourceType, resourceId, resourceName })
   };
 
   const handleWhatsApp = () => {
-    const text = `Check out "${resourceName}" on Mi-LessonPlan:\n${generatedLink}`;
+    const text = `Check out "${resourceName}" on mi-lessonplan.site:\n${generatedLink}`;
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   };
 

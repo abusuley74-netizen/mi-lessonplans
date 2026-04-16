@@ -1,9 +1,10 @@
-import React, { useRef } from 'react';
-import { Printer, Download, Share2, Check } from 'lucide-react';
+import React, { useRef, useState } from 'react';
+import { Printer, Download, Share2, Check, Image as ImageIcon } from 'lucide-react';
 import { toast } from 'sonner';
 
 const LessonPreview = ({ lessonData }) => {
   const printRef = useRef();
+  const [downloadingImage, setDownloadingImage] = useState(false);
 
   const handlePrint = () => {
     window.print();
@@ -20,6 +21,42 @@ const LessonPreview = ({ lessonData }) => {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  };
+
+  const handleImageDownload = async () => {
+    if (!lessonData.lesson_id) {
+      toast.error('Lesson ID not found');
+      return;
+    }
+
+    setDownloadingImage(true);
+    try {
+      const API_URL = process.env.REACT_APP_BACKEND_URL;
+      const response = await fetch(`${API_URL}/api/lessons/${lessonData.lesson_id}/export/image`, {
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
+        throw new Error('Image download failed');
+      }
+      
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${lessonData.subject}_${lessonData.topic}_lesson.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      toast.success('Image downloaded successfully!');
+    } catch (error) {
+      console.error('Image download error:', error);
+      toast.error('Failed to download image');
+    } finally {
+      setDownloadingImage(false);
+    }
   };
 
   const handleShare = async () => {
@@ -125,6 +162,27 @@ const LessonPreview = ({ lessonData }) => {
             <Download className="w-4 h-4" />
             Download
           </button>
+          {/* Image download button for Arabic lessons */}
+          {lessonData.subject && (lessonData.subject.toLowerCase().includes('arabic') || lessonData.subject.includes('اللغة العربية') || lessonData.subject.includes('عربي')) && (
+            <button
+              onClick={handleImageDownload}
+              disabled={downloadingImage}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-white border border-[#E4DFD5] rounded-lg text-[#D95D39] hover:bg-[#FDFBF7] hover:text-[#B8431F] transition-colors disabled:opacity-50"
+              data-testid="image-download-btn"
+            >
+              {downloadingImage ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-[#D95D39] border-t-transparent rounded-full animate-spin" />
+                  Loading
+                </>
+              ) : (
+                <>
+                  <ImageIcon className="w-4 h-4" />
+                  Image
+                </>
+              )}
+            </button>
+          )}
           <button
             onClick={handleShare}
             className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-[#2D5A27] text-white rounded-lg hover:bg-[#21441C] transition-colors"
@@ -236,7 +294,7 @@ const LessonPreview = ({ lessonData }) => {
         {/* Success Badge */}
         <div className="mt-8 pt-6 border-t border-[#E4DFD5] flex items-center justify-center gap-2 text-[#2D5A27]">
           <Check className="w-5 h-5" />
-          <span className="font-medium">Generated with Mi-LessonPlan AI</span>
+          <span className="font-medium">Generated with mi-lessonplan.site AI</span>
         </div>
       </div>
     </div>

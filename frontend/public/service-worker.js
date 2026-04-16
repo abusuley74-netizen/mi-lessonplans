@@ -36,13 +36,17 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // Always go to network for API calls
-  if (url.pathname.startsWith('/api')) {
+  // Skip Google CSP checks and API calls
+  if (url.hostname.includes('csp.withgoogle.com') || 
+      url.pathname.startsWith('/api')) {
     return;
   }
 
   event.respondWith(
-    fetch(event.request)
+    fetch(event.request, { 
+      mode: 'cors',
+      redirect: 'follow'
+    })
       .then((response) => {
         // Cache successful GET responses
         if (event.request.method === 'GET' && response.status === 200) {

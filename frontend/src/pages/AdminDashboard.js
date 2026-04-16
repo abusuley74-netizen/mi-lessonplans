@@ -41,8 +41,8 @@ const AdminDashboard = () => {
           <div className="flex justify-between h-16">
             <div className="flex">
               <div className="flex-shrink-0 flex items-center gap-2">
-                <img src="/logo.jpg" alt="Mi-LessonPlan" className="w-8 h-8 rounded-md object-contain" />
-                <h1 className="text-xl font-bold text-gray-900">Mi-LessonPlan Admin</h1>
+                <img src="/logo.jpg" alt="mi-lessonplan.site" className="w-8 h-8 rounded-md object-contain" />
+                <h1 className="text-xl font-bold text-gray-900">mi-lessonplan.site Admin</h1>
               </div>
             </div>
             <div className="flex items-center space-x-4">

@@ -12,6 +12,19 @@ import uuid
 import base64
 from datetime import datetime, timezone, timedelta
 import httpx
+import urllib.parse
+
+def safe_content_disposition(filename: str) -> str:
+    """Generate a safe Content-Disposition header with proper encoding for non-ASCII filenames"""
+    try:
+        # Check if filename contains non-ASCII characters
+        filename.encode('ascii')
+        # ASCII-only filename, use simple format
+        return f'attachment; filename="{filename}"'
+    except UnicodeEncodeError:
+        # Non-ASCII characters, use RFC 5987 encoding
+        encoded_filename = urllib.parse.quote(filename, safe='')
+        return f"attachment; filename*=UTF-8''{encoded_filename}"
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -24,7 +37,7 @@ db = client[os.environ['DB_NAME']]
 # PesaPal configuration
 PESAPAL_CONSUMER_KEY = os.environ.get('PESAPAL_CONSUMER_KEY', 'Sp9V76FmwL0dS4qAaVcL7PoIuH/gkInm')
 PESAPAL_CONSUMER_SECRET = os.environ.get('PESAPAL_CONSUMER_SECRET', 'ukStYbZKDpjgb6Rgk/AP2bFuy8I=')
-PESAPAL_CALLBACK_URL = os.environ.get('PESAPAL_CALLBACK_URL', 'https://Mi-LessonPlan.site/listentowebsitepaymentsipn.php')
+PESAPAL_CALLBACK_URL = os.environ.get('PESAPAL_CALLBACK_URL', 'https://mi-lessonplan.site.site/listentowebsitepaymentsipn.php')
 PESAPAL_USE_SANDBOX = os.environ.get('PESAPAL_USE_SANDBOX', 'false').lower() in ['true', '1', 'yes']
 PESAPAL_BASE_URL = 'https://cybqa.pesapal.com' if PESAPAL_USE_SANDBOX else 'https://www.pesapal.com'
 
@@ -98,6 +111,9 @@ class GenerateLessonRequest(BaseModel):
     grade: str
     topic: str
     form_data: Optional[Dict[str, Any]] = {}
+    user_guidance: Optional[str] = None
+    negative_constraints: Optional[str] = None
+    check_memory: Optional[bool] = True
 
 class Referral(BaseModel):
     referral_id: str = Field(default_factory=lambda: f"ref_{uuid.uuid4().hex[:12]}")
@@ -296,8 +312,8 @@ async def admin_login(request: Request, response: Response):
         key="admin_session_token",
         value=session_token,
         httponly=True,
-        secure=True,
-        samesite="none",
+        secure=False,
+        samesite="lax",
         path="/",
         max_age=8 * 60 * 60
     )
@@ -851,8 +867,8 @@ async def google_auth(request: Request, response: Response):
         key="session_token",
         value=session_token,
         httponly=True,
-        secure=True,
-        samesite="none",
+        secure=False,
+        samesite="lax",
         path="/",
         max_age=7 * 24 * 60 * 60
     )
@@ -951,8 +967,8 @@ async def create_session(request: Request, response: Response):
         key="session_token",
         value=session_token,
         httponly=True,
-        secure=True,
-        samesite="none",
+        secure=False,
+        samesite="lax",
         path="/",
         max_age=7 * 24 * 60 * 60  # 7 days
     )
@@ -1057,6 +1073,54 @@ async def logout(request: Request, response: Response):
 
 # ==================== AI LESSON GENERATION ====================
 
+def detect_language(subject: str) -> str:
+    """Detect language based on subject name"""
+    subject_lower = subject.lower()
+    
+    swahili_subjects = [
+        'kiswahili', 'uraia', 'maadili', 'sayansi', 'hisabati', 
+        'jiografia', 'historia', 'biologia', 'kemia', 'fizikia',
+        'swahili', 'civics', 'civic education', 'elimu ya maadili'
+    ]
+    
+    arabic_subjects = [
+        'اللغة العربية', 'عربي', 'اسلامية', 'التربية الإسلامية',
+        'علوم', 'رياضيات', 'اجتماعيات', 'arabic', 'islamic', 'islamiya',
+        'العربية', 'الضماير', 'القرآن', 'التجويد', 'الفقه', 'التفسير',
+        'اللغة', 'عرب', 'اسلام', 'إسلامية', 'إسلام', 'قرآن', 'تجويد',
+        'فقه', 'تفسير', 'عربية'
+    ]
+    
+    french_subjects = [
+        'français', 'french', 'mathématiques', 'sciences', 'francais'
+    ]
+    
+    # Check for Arabic characters in the subject
+    arabic_chars = any('\u0600' <= char <= '\u06FF' for char in subject)
+    if arabic_chars:
+        return 'arabic'
+    
+    if any(s in subject_lower for s in swahili_subjects):
+        return 'swahili'
+    
+    if any(s in subject_lower for s in arabic_subjects):
+        return 'arabic'
+    
+    if any(s in subject_lower for s in french_subjects):
+        return 'french'
+    
+    return 'english'
+
+# Import lesson intelligence services
+try:
+    from backend.services.lessonPromptBuilder import LessonPromptBuilder
+    from backend.services.lessonMemory import LessonMemory
+    LESSON_INTELLIGENCE_AVAILABLE = True
+    logger.info("Lesson intelligence services imported successfully")
+except ImportError as e:
+    logger.warning(f"Lesson intelligence services not available: {e}")
+    LESSON_INTELLIGENCE_AVAILABLE = False
+
 async def generate_lesson_with_ai(syllabus: str, subject: str, grade: str, topic: str) -> Dict[str, Any]:
     """Generate lesson plan content using DeepSeek API"""
     import asyncio
@@ -1070,14 +1134,203 @@ async def generate_lesson_with_ai(syllabus: str, subject: str, grade: str, topic
         return get_fallback_lesson_content(syllabus, subject, grade, topic)
     
     try:
+        # Detect language based on subject
+        language = detect_language(subject)
+        
+        # Language-specific system prompts
+        system_prompts = {
+            'swahili': """Wewe ni mwalimu mtaalamu wa kuandaa mipango ya somo iliyo kamili, yenye maelezo ya kina, na tayari kufundishwa. 
+Jibu kwa KISWAHILI SANIFU tu. 
+Hakuna sehemu za "kujazwa na mwalimu" - kila sehemu lazima iwe na maelezo halisi.
+Tumia mifano halisi, maswali halisi, na shughuli halisi za wanafunzi.
+Toa maelezo ya kina na mazoezi halisi.""",
+            
+            'arabic': """أنت خبير في تصميم خطط الدروس الكاملة والمفصلة الجاهزة للتدريس.
+قم بالرد باللغة العربية الفصحى فقط.
+لا توجد أقسام "يترك للمعلم" - كل قسم يجب أن يحتوي على محتوى فعلي.
+استخدم أمثلة حقيقية وأسئلة حقيقية وأنشطة حقيقية للطلاب.
+قدم تفاصيل شاملة وتمارين عملية.""",
+            
+            'french': """Vous êtes un expert en conception de plans de cours complets, détaillés et prêts à être enseignés.
+Répondez uniquement en FRANÇAIS.
+Pas de sections "à remplir par l'enseignant" - chaque section doit avoir un contenu réel.
+Utilisez des exemples concrets, des questions réelles et des activités réelles pour les élèves.
+Fournissez des détails complets et des exercices pratiques.""",
+            
+            'english': """You are an expert Tanzanian education curriculum designer. Create COMPLETE, DETAILED, READY-TO-TEACH lesson plans.
+No "to be filled by teacher" sections - every section must have actual content.
+Use real examples, real questions, and real student activities.
+Provide comprehensive details and practical exercises."""
+        }
+        
+        system_prompt = system_prompts.get(language, system_prompts['english'])
+        
         # DeepSeek API is OpenAI-compatible
         headers = {
             'Content-Type': 'application/json',
             'Authorization': f'Bearer {api_key}'
         }
         
-        if syllabus == "Zanzibar":
-            prompt = f"""Create a detailed lesson plan for the Zanzibar syllabus with the following details:
+        if language == 'arabic':
+            # Arabic prompts
+            if syllabus == "Zanzibar":
+                prompt = f"""أنشئ خطة درس مفصلة لمنهج زنجبار بالتفاصيل التالية:
+- المادة: {subject}
+- الصف: {grade}
+- الموضوع: {topic}
+
+أنشئ خطة الدرس بتنسيق JSON مع هذه المفاتيح بالضبط:
+{{
+    "generalOutcome": "النتيجة التعليمية العامة لهذا الدرس",
+    "mainTopic": "الموضوع الرئيسي الذي يتم تغطيته",
+    "subTopic": "الموضوع الفرعي المحدد",
+    "specificOutcome": "النتائج التعليمية المحددة التي يجب أن يحققها الطلاب",
+    "learningResources": "قائمة المواد والموارد التعليمية المطلوبة",
+    "references": "مراجع الكتب المدرسية والمواد الأخرى",
+    "introductionActivities": {{
+        "time": "5-10 دقائق",
+        "teachingActivities": "ما سيفعله المعلم أثناء المقدمة",
+        "learningActivities": "ما سيفعله الطلاب أثناء المقدمة",
+        "assessment": "كيفية تقييم الفهم أثناء المقدمة"
+    }},
+    "newKnowledgeActivities": {{
+        "time": "25-30 دقيقة",
+        "teachingActivities": "الأنشطة التعليمية الرئيسية للمحتوى الجديد",
+        "learningActivities": "أنشطة الطلاب لتعلم المحتوى الجديد",
+        "assessment": "طرق التقييم للمعرفة الجديدة"
+    }},
+    "teacherEvaluation": "",
+    "pupilWork": "العمل الصفي أو الأنشطة للطلاب",
+    "remarks": ""
+}}
+
+قدم محتوى عمليًا وقابلًا للتطبيق مناسبًا لطلاب الصف {grade} في تنزانيا."""
+            else:  # Tanzania Mainland
+                prompt = f"""أنشئ خطة درس مفصلة لمنهج البر التنزاني بالتفاصيل التالية:
+- المادة: {subject}
+- الصف/المستوى: {grade}
+- الموضوع: {topic}
+
+أنشئ خطة الدرس بتنسيق JSON مع هذه المفاتيح بالضبط:
+{{
+    "mainCompetence": "الكفاءة الرئيسية التي يجب تطويرها",
+    "specificCompetence": "الكفاءات المحددة التي سيحققها الطلاب",
+    "mainActivity": "النشاط التعليمي الرئيسي",
+    "specificActivity": "الأنشطة المحددة للطلاب",
+    "teachingResources": "الموارد التعليمية والتعلمية المطلوبة",
+    "references": "مراجع الكتب المدرسية والمواد",
+    "stages": {{
+        "introduction": {{
+            "time": "5-10 دقائق",
+            "teachingActivities": "أنشطة المعلم للمقدمة",
+            "learningActivities": "أنشطة الطلاب للمقدمة",
+            "assessment": "معايير التقييم للمقدمة"
+        }},
+        "competenceDevelopment": {{
+            "time": "15-20 دقيقة",
+            "teachingActivities": "أنشطة المعلم لتطوير الكفاءة",
+            "learningActivities": "أنشطة الطلاب لتطوير الكفاءة",
+            "assessment": "معايير التقييم"
+        }},
+        "design": {{
+            "time": "10-15 دقيقة",
+            "teachingActivities": "أنشطة المعلم لمرحلة التصميم",
+            "learningActivities": "أنشطة الطلاب لمرحلة التصميم",
+            "assessment": "التقييم لمرحلة التصميم"
+        }},
+        "realisation": {{
+            "time": "10-15 دقيقة",
+            "teachingActivities": "أنشطة المعلم لمرحلة التنفيذ",
+            "learningActivities": "أنشطة الطلاب لمرحلة التنفيذ",
+            "assessment": "التقييم لمرحلة التنفيذ"
+        }}
+    }},
+    "remarks": ""
+}}
+
+قدم محتوى عمليًا وقابلًا للتطبيق مناسبًا لطلاب الصف {grade} في تنزانيا."""
+        elif language == 'swahili':
+            # Swahili prompts
+            if syllabus == "Zanzibar":
+                prompt = f"""Tengeneza mpango wa somo wa kina kwa mtaala wa Zanzibar na maelezo yafuatayo:
+- Somo: {subject}
+- Darasa: {grade}
+- Mada: {topic}
+
+Tengeneza mpango wa somo katika umbizo la JSON na funguo hizi haswa:
+{{
+    "generalOutcome": "Matokeo ya jumla ya kujifunza kwa somo hili",
+    "mainTopic": "Mada kuu inayofunikwa",
+    "subTopic": "Mada ndogo maalum",
+    "specificOutcome": "Matokeo maalum ya kujifunza ambayo wanafunzi wanapaswa kufikia",
+    "learningResources": "Orodha ya vifaa na rasilimali za kufundishia zinazohitajika",
+    "references": "Marejeo ya vitabu vya kiada na vifaa vingine",
+    "introductionActivities": {{
+        "time": "Dakika 5-10",
+        "teachingActivities": "Mwalimu atafanya nini wakati wa utangulizi",
+        "learningActivities": "Wanafunzi watafanya nini wakati wa utangulizi",
+        "assessment": "Jinsi ya kutathmini uelewa wakati wa utangulizi"
+    }},
+    "newKnowledgeActivities": {{
+        "time": "Dakika 25-30",
+        "teachingActivities": "Shughuli kuu za kufundishia kwa maudhui mapya",
+        "learningActivities": "Shughuli za wanafunzi za kujifunza maudhui mapya",
+        "assessment": "Mbinu za tathmini kwa ujuzi mpya"
+    }},
+    "teacherEvaluation": "",
+    "pupilWork": "Kazi ya darasa au shughuli za wanafunzi",
+    "remarks": ""
+}}
+
+Toa maudhui ya vitendo, yanayoweza kutekelezwa yanayofaa kwa wanafunzi wa darasa {grade} nchini Tanzania."""
+            else:  # Tanzania Mainland
+                prompt = f"""Tengeneza mpango wa somo wa kina kwa mtaala wa Tanzania Bara na maelezo yafuatayo:
+- Somo: {subject}
+- Darasa/Kiwango: {grade}
+- Mada: {topic}
+
+Tengeneza mpango wa somo katika umbizo la JSON na funguo hizi haswa:
+{{
+    "mainCompetence": "Umahiri mkuu unaopaswa kukuzwa",
+    "specificCompetence": "Umahiri mahususi ambayo wanafunzi watafikia",
+    "mainActivity": "Shughuli kuu ya kujifunza",
+    "specificActivity": "Shughuli mahususi za wanafunzi",
+    "teachingResources": "Rasilimali za kufundishia na kujifunza zinazohitajika",
+    "references": "Marejeo ya vitabu vya kiada na vifaa",
+    "stages": {{
+        "introduction": {{
+            "time": "Dakika 5-10",
+            "teachingActivities": "Shughuli za mwalimu kwa utangulizi",
+            "learningActivities": "Shughuli za wanafunzi kwa utangulizi",
+            "assessment": "Vigezo vya tathmini kwa utangulizi"
+        }},
+        "competenceDevelopment": {{
+            "time": "Dakika 15-20",
+            "teachingActivities": "Shughuli za mwalimu kwa ukuzaji wa umahiri",
+            "learningActivities": "Shughuli za wanafunzi kwa ukuzaji wa umahiri",
+            "assessment": "Vigezo vya tathmini"
+        }},
+        "design": {{
+            "time": "Dakika 10-15",
+            "teachingActivities": "Shughuli za mwalimu kwa hatua ya ubunifu",
+            "learningActivities": "Shughuli za wanafunzi kwa hatua ya ubunifu",
+            "assessment": "Tathmini kwa hatua ya ubunifu"
+        }},
+        "realisation": {{
+            "time": "Dakika 10-15",
+            "teachingActivities": "Shughuli za mwalimu kwa hatua ya utekelezaji",
+            "learningActivities": "Shughuli za wanafunzi kwa hatua ya utekelezaji",
+            "assessment": "Tathmini kwa hatua ya utekelezaji"
+        }}
+    }},
+    "remarks": ""
+}}
+
+Toa maudhui ya vitendo, yanayoweza kutekelezwa yanayofaa kwa wanafunzi wa darasa {grade} nchini Tanzania."""
+        else:
+            # English prompts (default)
+            if syllabus == "Zanzibar":
+                prompt = f"""Create a detailed lesson plan for the Zanzibar syllabus with the following details:
 - Subject: {subject}
 - Grade: {grade}
 - Topic: {topic}
@@ -1108,8 +1361,8 @@ Generate the lesson plan in JSON format with these exact keys:
 }}
 
 Provide practical, actionable content appropriate for {grade} students in Tanzania."""
-        else:  # Tanzania Mainland
-            prompt = f"""Create a detailed lesson plan for the Tanzania Mainland syllabus with the following details:
+            else:  # Tanzania Mainland
+                prompt = f"""Create a detailed lesson plan for the Tanzania Mainland syllabus with the following details:
 - Subject: {subject}
 - Grade/Level: {grade}
 - Topic: {topic}
@@ -1227,6 +1480,72 @@ def get_fallback_lesson_content(syllabus: str, subject: str, grade: str, topic: 
             "pupilWork": "Complete practice exercises in notebook",
             "remarks": ""
         }
+
+
+async def _generate_lesson_with_intelligence(prompt: str, syllabus: str, subject: str, grade: str, topic: str) -> Dict[str, Any]:
+    """Generate lesson content using enhanced intelligence prompt"""
+    import json
+    import re
+    import httpx
+    
+    api_key = os.environ.get("DEEPSEEK_API_KEY")
+    if not api_key:
+        logger.warning("No DEEPSEEK_API_KEY found, using fallback content")
+        return get_fallback_lesson_content(syllabus, subject, grade, topic)
+    
+    try:
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {api_key}'
+        }
+        
+        payload = {
+            "model": "deepseek-chat",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "You are an expert Tanzanian education curriculum designer. Create practical lesson plans. Be concise but comprehensive. Always respond with valid JSON only."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            "temperature": 0.7,
+            "max_tokens": 4096
+        }
+        
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                "https://api.deepseek.com/v1/chat/completions",
+                headers=headers,
+                json=payload
+            )
+            
+            if response.status_code != 200:
+                logger.error(f"DeepSeek API error: {response.status_code} - {response.text}")
+                return get_fallback_lesson_content(syllabus, subject, grade, topic)
+            
+            data = response.json()
+            response_text = data["choices"][0]["message"]["content"]
+            
+            # Try to extract JSON from the response
+            json_match = re.search(r'\{[\s\S]*\}', response_text)
+            if json_match:
+                content = json.loads(json_match.group())
+                # Force teacherEvaluation and remarks to be empty for teacher input
+                if "teacherEvaluation" in content:
+                    content["teacherEvaluation"] = ""
+                if "remarks" in content:
+                    content["remarks"] = ""
+                return content
+            else:
+                logger.warning("Could not parse AI response, using fallback")
+                return get_fallback_lesson_content(syllabus, subject, grade, topic)
+            
+    except Exception as e:
+        logger.error(f"AI generation error: {e}")
+        return get_fallback_lesson_content(syllabus, subject, grade, topic)
     else:
         return {
             "mainCompetence": f"Develop understanding and application of {topic}",
@@ -1271,7 +1590,7 @@ async def generate_lesson(
     request: GenerateLessonRequest,
     user: User = Depends(get_current_user)
 ):
-    """Generate a new lesson plan using AI"""
+    """Generate a new lesson plan using AI with intelligence features"""
     user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
     plan = _get_user_plan(user_doc or {})
     limit = PLAN_LIMITS.get(plan)
@@ -1284,13 +1603,83 @@ async def generate_lesson(
                 detail=f"{plan.title()} plan limit reached ({limit} lessons/month). Please upgrade to generate more lessons."
             )
     
-    # Generate lesson content
-    content = await generate_lesson_with_ai(
-        request.syllabus,
-        request.subject,
-        request.grade,
-        request.topic
-    )
+    # Check if intelligence services are available
+    if not LESSON_INTELLIGENCE_AVAILABLE:
+        # Fall back to original generation
+        content = await generate_lesson_with_ai(
+            request.syllabus,
+            request.subject,
+            request.grade,
+            request.topic
+        )
+    else:
+        try:
+            # Use lesson intelligence services
+            prompt_builder = LessonPromptBuilder(
+                syllabus=request.syllabus,
+                grade=request.grade,
+                subject=request.subject,
+                topic=request.topic,
+                user_guidance=request.user_guidance,
+                negative_constraints=request.negative_constraints
+            )
+            
+            # Build enhanced prompt
+            prompt = await prompt_builder.build(db)
+            
+            # Initialize memory service
+            memory = LessonMemory(db)
+            
+            if request.check_memory:
+                # Try memory first
+                prompt_context = {
+                    "syllabus": request.syllabus,
+                    "grade": request.grade,
+                    "subject": request.subject,
+                    "topic": request.topic,
+                    "user_guidance": request.user_guidance,
+                    "negative_constraints": request.negative_constraints,
+                    "user_prompt": f"{request.syllabus} {request.grade} {request.subject} {request.topic}"
+                }
+                
+                async def generate_fresh():
+                    return await _generate_lesson_with_intelligence(
+                        prompt, request.syllabus, request.subject, 
+                        request.grade, request.topic
+                    )
+                
+                memory_result = await memory.get_or_generate(prompt_context, generate_fresh)
+                
+                content = memory_result["data"]
+                memory_source = memory_result["source"]
+                memory_type = memory_result["type"]
+                usage_count = memory_result["usage_count"]
+            else:
+                # Skip memory, always generate fresh
+                content = await _generate_lesson_with_intelligence(
+                    prompt, request.syllabus, request.subject, 
+                    request.grade, request.topic
+                )
+                memory_source = "fresh"
+                memory_type = "none"
+                usage_count = 0
+            
+            # Add memory metadata to content
+            content["_memory"] = {
+                "source": memory_source,
+                "type": memory_type,
+                "usage_count": usage_count
+            }
+            
+        except Exception as e:
+            logger.error(f"Lesson intelligence generation failed: {e}")
+            # Fall back to original generation
+            content = await generate_lesson_with_ai(
+                request.syllabus,
+                request.subject,
+                request.grade,
+                request.topic
+            )
     
     # Create lesson plan
     lesson = LessonPlan(
@@ -1319,6 +1708,411 @@ async def generate_lesson(
     # Return without _id
     lesson_doc.pop("_id", None)
     return lesson_doc
+
+# Binti Hamdani AI Chat Assistant
+class BintiChatRequest(BaseModel):
+    message: str
+    context: Optional[Dict[str, Any]] = None
+    conversation_history: Optional[List[Dict[str, str]]] = None
+
+# Unified Binti Hamdani Endpoint
+class BintiRequest(BaseModel):
+    message: str
+    context: Optional[Dict[str, Any]] = None
+    conversation_history: Optional[List[Dict[str, str]]] = None
+
+@api_router.post("/binti-chat")
+async def binti_chat(
+    request: BintiChatRequest,
+    user: User = Depends(get_current_user)
+):
+    """Chat with Binti Hamdani, the AI lesson planning assistant"""
+    try:
+        # Get context from request
+        context = request.context or {}
+        
+        # Use the enhanced Binti persona
+        from backend.services.bintiPrompt import get_binti_prompt
+        
+        # Create conversation history from context if available
+        conversation_history = request.conversation_history or []
+        
+        # Get the enhanced Binti prompt
+        binti_prompt = get_binti_prompt(context, conversation_history)
+        
+        # Add the user's message
+        full_prompt = f"{binti_prompt}\n\nUser asks: {request.message}\n\nRespond as Binti Hamdani."
+        
+        # Use the existing AI service to generate a response
+        if LESSON_INTELLIGENCE_AVAILABLE:
+            try:
+                # Use the lesson intelligence helper
+                from backend.lesson_intelligence_helper import generate_with_intelligence
+                
+                response = await generate_with_intelligence(
+                    prompt=full_prompt,
+                    system_prompt="",  # System prompt is already in binti_prompt
+                    temperature=0.7
+                )
+                
+                return {"message": response}
+            except Exception as e:
+                logger.warning(f"Intelligence service failed for Binti chat: {e}")
+                # Fall through to basic response
+        
+        # Basic response if intelligence service fails or isn't available
+        syllabus = context.get("syllabus", "Zanzibar")
+        subject = context.get("subject", "")
+        grade = context.get("grade", "")
+        topic = context.get("topic", "")
+        
+        basic_responses = [
+            f"Hujambo! Based on your {subject} lesson for {grade} on '{topic}', I suggest focusing on hands-on activities that engage students. For {syllabus} syllabus, consider incorporating local examples that students can relate to.",
+            f"Karibu! For your {grade} {subject} lesson about '{topic}', I recommend starting with a quick review of prior knowledge, then introducing new concepts through group work. Remember to include assessment methods to check understanding.",
+            f"Shikamoo! I see you're planning a {subject} lesson for {grade}. For the topic '{topic}', consider using visual aids and real-world examples. The {syllabus} syllabus emphasizes practical application of knowledge.",
+            f"Hello! As Binti Hamdani, I suggest breaking down your '{topic}' lesson into clear steps: introduction (5-10 mins), main activity (20-25 mins), and assessment (5-10 mins). For {subject}, include both individual and group work.",
+            f"Habari! For {grade} {subject}, the topic '{topic}' could be taught through storytelling or problem-solving activities. The {syllabus} syllabus values critical thinking, so include questions that make students analyze rather than just recall."
+        ]
+        
+        import random
+        response = random.choice(basic_responses)
+        
+        return {"message": response}
+        
+    except Exception as e:
+        logger.error(f"Error in Binti chat: {e}")
+        return {"message": "Samahani, I'm having trouble thinking right now. Please try again or proceed with generating your lesson plan directly."}
+
+@api_router.post("/binti")
+async def binti_unified(
+    request: BintiRequest,
+    user: User = Depends(get_current_user)
+):
+    """Unified Binti Hamdani endpoint - generates actual documents or provides curriculum advice"""
+    try:
+        # Get context from request
+        context = request.context or {}
+        message = request.message.lower()
+        conversation_history = request.conversation_history or []
+        
+        # Detect intent
+        wants_scheme = any(word in message for word in ["scheme of work", "scheme", "sow", "schemes"])
+        wants_lesson = any(word in message for word in ["lesson plan", "lesson", "plan", "lessonplan"])
+        wants_modification = any(word in message for word in ["add", "change", "update", "modify", "improve", "enhance"])
+        
+        # CASE 1: Generate Scheme of Work
+        if wants_scheme and (context.get("subject") or context.get("grade")):
+            try:
+                # Import scheme generation function
+                from backend.services.promptBuilder import PromptBuilder
+                from backend.services.promptMemory import PromptMemory
+                
+                syllabus = context.get("syllabus", "Zanzibar")
+                subject = context.get("subject", "")
+                grade = context.get("grade", "")
+                term = context.get("term", "Full Year")
+                total_weeks = context.get("total_weeks", 36)
+                user_guidance = context.get("user_guidance", "")
+                negative_constraints = context.get("negative_constraints", "")
+                
+                # Initialize prompt builder
+                prompt_builder = PromptBuilder(
+                    syllabus, grade, subject, term, user_guidance, negative_constraints
+                )
+                
+                # Build base prompt
+                base_prompt = await prompt_builder.build(db)
+                
+                # Initialize memory service
+                memory = PromptMemory(db)
+                
+                # Try memory first
+                prompt_context = {
+                    "syllabus": syllabus,
+                    "level": grade,
+                    "subject": subject,
+                    "term": term,
+                    "total_weeks": total_weeks,
+                    "user_guidance": user_guidance,
+                    "negative_constraints": negative_constraints,
+                    "user_prompt": f"{syllabus} {grade} {subject} {term}"
+                }
+                
+                async def generate_fresh():
+                    # Generate scheme using AI
+                    from backend.services.bintiPrompt import get_binti_prompt
+                    binti_prompt = get_binti_prompt(context, conversation_history)
+                    
+                    scheme_prompt = f"""{binti_prompt}
+
+User wants a scheme of work for {subject} {grade} {syllabus}.
+
+Generate a complete scheme of work with {total_weeks} weeks.
+Return as JSON with this structure:
+{{
+    "total_weeks": {total_weeks},
+    "pages": [
+        {{
+            "page_number": 1,
+            "weeks": [1, 2, 3, ...],
+            "competencies": [
+                {{
+                    "main": "Main competence",
+                    "specific": "Specific competences",
+                    "activities": "Learning activities",
+                    "specificActivities": "Specific activities",
+                    "month": "Month name",
+                    "week": "Week number",
+                    "periods": "Number of periods",
+                    "methods": "Teaching methods",
+                    "resources": "Resources needed",
+                    "assessment": "Assessment methods",
+                    "references": "References",
+                    "remarks": ""
+                }}
+            ]
+        }}
+    ]
+}}
+
+Generate actual content, not placeholders."""
+                    
+                    # Call AI service
+                    ai_response = await call_ai_service(scheme_prompt, "")
+                    
+                    # Parse response
+                    import json
+                    import re
+                    
+                    json_match = re.search(r'\{[\s\S]*\}', ai_response)
+                    if json_match:
+                        return json.loads(json_match.group())
+                    else:
+                        # Fallback structure
+                        return {
+                            "total_weeks": total_weeks,
+                            "pages": [{
+                                "page_number": 1,
+                                "weeks": list(range(1, min(total_weeks, 15) + 1)),
+                                "competencies": []
+                            }]
+                        }
+                
+                memory_result = await memory.get_or_generate(prompt_context, generate_fresh)
+                
+                scheme_data = memory_result["data"]
+                
+                return {
+                    "type": "scheme",
+                    "data": scheme_data,
+                    "message": f"Hujambo! I have created a {subject} Scheme of Work for {grade} ({syllabus}). It includes {scheme_data.get('total_weeks', 0)} weeks covering all topics. You can ask me to modify any week."
+                }
+                
+            except Exception as e:
+                logger.error(f"Scheme generation failed: {e}")
+                # Fall through to regular chat
+        
+        # CASE 2: Generate Lesson Plan
+        if wants_lesson and context.get("subject") and context.get("grade") and context.get("topic"):
+            try:
+                # Use existing lesson generation endpoint
+                generate_request = GenerateLessonRequest(
+                    syllabus=context.get("syllabus", "Zanzibar"),
+                    subject=context.get("subject", ""),
+                    grade=context.get("grade", ""),
+                    topic=context.get("topic", ""),
+                    form_data=context.get("form_data", {}),
+                    user_guidance=context.get("user_guidance", ""),
+                    negative_constraints=context.get("negative_constraints", ""),
+                    check_memory=True
+                )
+                
+                # Call the existing lesson generation function
+                lesson_result = await generate_lesson(generate_request, user)
+                
+                return {
+                    "type": "lesson",
+                    "data": lesson_result,
+                    "message": f"Karibu! I have created a lesson plan for '{context.get('topic')}' in {context.get('subject')} for {context.get('grade')}. The lesson includes comprehensive learning objectives and activities."
+                }
+                
+            except Exception as e:
+                logger.error(f"Lesson generation failed: {e}")
+                # Fall through to regular chat
+        
+        # CASE 3: Curriculum Question or General Chat (use AI with full Binti persona)
+        from backend.services.bintiPrompt import get_binti_prompt
+        
+        # Get the enhanced Binti prompt
+        binti_prompt = get_binti_prompt(context, conversation_history)
+        
+        # Add the user's message
+        full_prompt = f"{binti_prompt}\n\nUser asks: {request.message}\n\nRespond as Binti Hamdani."
+        
+        # Use the existing AI service to generate a response
+        if LESSON_INTELLIGENCE_AVAILABLE:
+            try:
+                # Use the lesson intelligence helper
+                from backend.lesson_intelligence_helper import generate_with_intelligence
+                
+                response = await generate_with_intelligence(
+                    prompt=full_prompt,
+                    system_prompt="",  # System prompt is already in binti_prompt
+                    temperature=0.7
+                )
+                
+                # Try to parse if AI returned JSON
+                try:
+                    import json
+                    parsed = json.loads(response)
+                    if isinstance(parsed, dict) and parsed.get("type"):
+                        return parsed
+                except:
+                    pass
+                
+                return {
+                    "type": "chat",
+                    "message": response
+                }
+                
+            except Exception as e:
+                logger.warning(f"Intelligence service failed for Binti: {e}")
+                # Fall through to basic response
+        
+        # Basic response if intelligence service fails
+        syllabus = context.get("syllabus", "Zanzibar")
+        subject = context.get("subject", "")
+        grade = context.get("grade", "")
+        topic = context.get("topic", "")
+        
+        basic_responses = [
+            f"Hujambo! Based on your {subject} lesson for {grade} on '{topic}', I suggest focusing on hands-on activities that engage students. For {syllabus} syllabus, consider incorporating local examples that students can relate to.",
+            f"Karibu! For your {grade} {subject} lesson about '{topic}', I recommend starting with a quick review of prior knowledge, then introducing new concepts through group work. Remember to include assessment methods to check understanding.",
+            f"Shikamoo! I see you're planning a {subject} lesson for {grade}. For the topic '{topic}', consider using visual aids and real-world examples. The {syllabus} syllabus emphasizes practical application of knowledge.",
+        ]
+        
+        import random
+        response = random.choice(basic_responses)
+        
+        return {
+            "type": "chat",
+            "message": response
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in unified Binti endpoint: {e}")
+        return {
+            "type": "error",
+            "message": "Samahani, I'm having trouble thinking right now. Please try again or proceed with generating your lesson plan directly."
+        }
+
+# Public Binti endpoint for demo/landing page use
+@api_router.post("/binti-public")
+async def binti_public(
+    request: BintiRequest
+):
+    """Public Binti Hamdani endpoint - no authentication required for demo"""
+    try:
+        # Get context from request
+        context = request.context or {}
+        message = request.message.lower()
+        conversation_history = request.conversation_history or []
+        
+        # For public endpoint, only allow basic chat and curriculum questions
+        # Don't allow generating actual documents (schemes/lessons) without auth
+        
+        # Use the enhanced Binti persona
+        try:
+            from backend.services.bintiPrompt import get_binti_prompt
+            
+            # Get the enhanced Binti prompt
+            binti_prompt = get_binti_prompt(context, conversation_history)
+        except Exception as e:
+            logger.warning(f"Failed to import bintiPrompt: {e}")
+            # Fall back to basic prompt
+            binti_prompt = f"""You are Binti Hamdani, a senior curriculum expert for Tanzanian education with 20 years of experience. You have helped thousands of teachers in Zanzibar and Tanzania Mainland create exceptional schemes of work and lesson plans.
+            
+USER CONTEXT:
+- Syllabus: {context.get('syllabus', 'Not specified')}
+- Subject: {context.get('subject', 'Not specified')}
+- Grade: {context.get('grade', 'Not specified')}
+- Topic: {context.get('topic', 'Not specified')}"""
+        
+        # Add the user's message
+        full_prompt = f"{binti_prompt}\n\nUser asks: {request.message}\n\nRespond as Binti Hamdani."
+        
+        # Debug: Check if LESSON_INTELLIGENCE_AVAILABLE is True
+        logger.info(f"LESSON_INTELLIGENCE_AVAILABLE: {LESSON_INTELLIGENCE_AVAILABLE}")
+        
+        # Use the existing AI service to generate a response
+        if LESSON_INTELLIGENCE_AVAILABLE:
+            try:
+                # Use the lesson intelligence helper
+                from backend.lesson_intelligence_helper import _generate_lesson_with_intelligence
+                
+                # We need to extract syllabus, subject, grade, topic from context
+                syllabus = context.get("syllabus", "Zanzibar")
+                subject = context.get("subject", "General")
+                grade = context.get("grade", "5")
+                topic = context.get("topic", "General Topic")
+                
+                logger.info(f"Calling _generate_lesson_with_intelligence with: syllabus={syllabus}, subject={subject}, grade={grade}, topic={topic}")
+                
+                # Call the async function
+                result = await _generate_lesson_with_intelligence(
+                    prompt=full_prompt,
+                    syllabus=syllabus,
+                    subject=subject,
+                    grade=grade,
+                    topic=topic
+                )
+                
+                logger.info(f"_generate_lesson_with_intelligence returned: {type(result)}")
+                
+                # Extract the response from the result
+                if isinstance(result, dict) and "content" in result:
+                    response = result.get("content", "I'm here to help with your curriculum questions!")
+                else:
+                    response = str(result) if result else "I'm here to help with your curriculum questions!"
+                
+                return {
+                    "type": "chat_response",
+                    "message": response,
+                    "note": "This is a demo response from Binti Hamdani. Sign in to generate actual lesson plans and schemes of work."
+                }
+            except Exception as e:
+                logger.warning(f"Intelligence service failed for public Binti: {e}", exc_info=True)
+                # Fall through to basic response
+        
+        # Basic response if intelligence service fails or isn't available
+        syllabus = context.get("syllabus", "Zanzibar")
+        subject = context.get("subject", "")
+        grade = context.get("grade", "")
+        topic = context.get("topic", "")
+        
+        basic_responses = [
+            f"Hujambo! Based on your {subject} lesson for {grade} on '{topic}', I suggest focusing on hands-on activities that engage students. For {syllabus} syllabus, consider incorporating local examples that students can relate to.",
+            f"Karibu! For your {grade} {subject} lesson about '{topic}', I recommend starting with a quick review of prior knowledge, then introducing new concepts through group work. Remember to include assessment methods to check understanding.",
+            f"Shikamoo! I see you're planning a {subject} lesson for {grade}. For the topic '{topic}', consider using visual aids and real-world examples. The {syllabus} syllabus emphasizes practical application of knowledge.",
+            f"Hello! As Binti Hamdani, I suggest breaking down your '{topic}' lesson into clear steps: introduction (5-10 mins), main activity (20-25 mins), and assessment (5-10 mins). For {subject}, include both individual and group work.",
+            f"Habari! For {grade} {subject}, the topic '{topic}' could be taught through storytelling or problem-solving activities. The {syllabus} syllabus values critical thinking, so include questions that make students analyze rather than just recall."
+        ]
+        
+        import random
+        response = random.choice(basic_responses)
+        
+        return {
+            "type": "chat_response",
+            "message": response,
+            "note": "This is a demo response from Binti Hamdani. Sign in to generate actual lesson plans and schemes of work."
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in public Binti endpoint: {e}")
+        return {
+            "type": "error",
+            "message": "Samahani, I'm having trouble thinking right now. Please try again or sign in for full access."
+        }
 
 @api_router.get("/lessons")
 async def get_lessons(user: User = Depends(get_current_user)):
@@ -1918,7 +2712,14 @@ async def generate_dictation_audio(request: Request, user: User = Depends(get_cu
     
     try:
         # Azure Speech API endpoint for text-to-speech
+        # The correct endpoint is: https://eastus.tts.speech.microsoft.com/cognitiveservices/v1
+        # But we should use the endpoint from environment variable
         tts_url = f"{azure_endpoint.rstrip('/')}/cognitiveservices/v1"
+        
+        # If the endpoint doesn't have the full path, construct it properly
+        if "tts.speech.microsoft.com" not in tts_url and "api.cognitive.microsoft.com" in tts_url:
+            # Convert from api.cognitive.microsoft.com to tts.speech.microsoft.com
+            tts_url = "https://eastus.tts.speech.microsoft.com/cognitiveservices/v1"
         
         # SSML for Azure Speech
         ssml = f"""<speak version='1.0' xml:lang='{language}'>
@@ -1938,14 +2739,14 @@ async def generate_dictation_audio(request: Request, user: User = Depends(get_cu
                 if response.status != 200:
                     error_text = await response.text()
                     logger.error(f"Azure TTS API error: {response.status} - {error_text}")
-                    raise HTTPException(status_code=500, detail=f"Azure Speech API error: {response.status}")
+                    raise HTTPException(status_code=500, detail=f"Azure Speech API error: {response.status} - {error_text}")
                 
                 audio_bytes = await response.read()
         
         return FastAPIResponse(
             content=audio_bytes,
             media_type="audio/mpeg",
-            headers={"Content-Disposition": f"inline; filename=dictation_{language}.mp3"}
+            headers={"Content-Disposition": safe_content_disposition(f"dictation_{language}.mp3")}
         )
     except Exception as e:
         logger.error(f"Azure TTS generation error: {e}")
@@ -1978,7 +2779,7 @@ async def get_dictation_audio(dictation_id: str, user: User = Depends(get_curren
     return FastAPIResponse(
         content=audio_bytes,
         media_type="audio/mpeg",
-        headers={"Content-Disposition": f'inline; filename="{safe_title}.mp3"'}
+        headers={"Content-Disposition": safe_content_disposition(f"{safe_title}.mp3")}
     )
 
 @api_router.get("/dictations/{dictation_id}/download")
@@ -2001,7 +2802,7 @@ async def download_dictation_audio(dictation_id: str, user: User = Depends(get_c
         return FastAPIResponse(
             content=audio_bytes,
             media_type="audio/mpeg",
-            headers={"Content-Disposition": f'attachment; filename="{safe_title}_{language}.mp3"'}
+            headers={"Content-Disposition": safe_content_disposition(f"{safe_title}_{language}.mp3")}
         )
 
     # Fallback: regenerate audio
@@ -2104,7 +2905,7 @@ async def download_dictation_audio(dictation_id: str, user: User = Depends(get_c
         return FastAPIResponse(
             content=audio_bytes,
             media_type="audio/mpeg",
-            headers={"Content-Disposition": f'attachment; filename="{safe_title}_{language}.mp3"'}
+            headers={"Content-Disposition": safe_content_disposition(f"{safe_title}_{language}.mp3")}
         )
     except Exception as e:
         logger.error(f"Dictation download TTS error: {e}")
@@ -2177,7 +2978,7 @@ async def download_upload(upload_id: str, user: User = Depends(get_current_user)
     return FastAPIResponse(
         content=raw,
         media_type=content_type,
-        headers={"Content-Disposition": f'attachment; filename="{name}"'}
+        headers={"Content-Disposition": safe_content_disposition(name)}
     )
 
 @api_router.get("/uploads/{upload_id}/view")
@@ -2204,7 +3005,7 @@ async def view_upload(upload_id: str, user: User = Depends(get_current_user)):
         headers["Content-Disposition"] = "inline"
     else:
         name = upload.get("name", "download")
-        headers["Content-Disposition"] = f'attachment; filename="{name}"'
+        headers["Content-Disposition"] = safe_content_disposition(name)
     
     return FastAPIResponse(
         content=raw,
@@ -2289,8 +3090,95 @@ async def generate_scheme_ai(request: Request, user: User = Depends(get_current_
             'Authorization': f'Bearer {api_key}'
         }
 
-        if syllabus == "Zanzibar":
-            prompt = f"""Generate a Scheme of Work for the ZANZIBAR syllabus:
+        # Detect language based on subject
+        language = detect_language(subject)
+        
+        # Language-specific system prompts for scheme generation
+        scheme_system_prompts = {
+            'swahili': """Wewe ni mtaalamu wa mipango ya kazi ya Tanzania. Jibu kwa KISWAHILI SANIFU tu. Toa maelezo halisi na mazoezi halisi.""",
+            
+            'arabic': """أنت خبير في تخطيط العمل في تنزانيا. قم بالرد باللغة العربية الفصحى فقط. قدم تفاصيل حقيقية وتمارين عملية.""",
+            
+            'french': """Vous êtes un expert en planification du travail en Tanzanie. Répondez uniquement en FRANÇAIS. Fournissez des détails réels et des exercices pratiques.""",
+            
+            'english': """You are an expert Tanzanian education curriculum designer specializing in Scheme of Work planning. You know both Zanzibar and Tanzania Mainland syllabus formats deeply. Always respond with valid JSON only."""
+        }
+        
+        system_prompt = scheme_system_prompts.get(language, scheme_system_prompts['english'])
+        
+        # Generate language-specific content instructions
+        if language == 'arabic':
+            # For Arabic subjects, generate ALL content in Arabic
+            if syllabus == "Zanzibar":
+                prompt = f"""أنشئ خطة عمل للمنهج الزنجباري:
+- المادة: {subject}
+- الصف: {grade}
+- الفصل الدراسي: {term or "الفصل الأول"}
+- عدد الصفوف: {num_rows}
+
+أنشئ بالضبط {num_rows} صفًا من الكفاءات. يمثل كل صف أسبوعًا/موضوعًا في الخطة.
+ارجع بمصفوفة JSON حيث يحتوي كل عنصر على هذه المفاتيح بالضبط:
+[
+  {{
+    "main": "الكفاءة الرئيسية - مجال الكفاءة الواسع",
+    "specific": "الكفاءات المحددة - الكفاءات التفصيلية التي يجب تحقيقها",
+    "activities": "أنشطة التعلم - ما سيفعله الطلاب",
+    "specificActivities": "الأنشطة المحددة - المهام التفصيلية للطلاب",
+    "month": "اسم الشهر (مثال: يناير، فبراير)",
+    "week": "رقم الأسبوع (مثال: الأسبوع 1، الأسبوع 2)",
+    "periods": "عدد الحصص (مثال: 4، 6)",
+    "methods": "طرق التدريس والتعلم (مثال: المناقشة، العمل الجماعي، العرض التوضيحي)",
+    "resources": "موارد التدريس والتعلم (مثال: الكتب المدرسية، الرسوم البيانية، النماذج)",
+    "assessment": "أدوات التقييم (مثال: الأسئلة الشفهية، الاختبار الكتابي، المحفظة)",
+    "references": "المراجع (مثال: صفحة المنهج، فصل الكتاب المدرسي)",
+    "remarks": ""
+  }}
+]
+
+هام:
+- يجب أن يكون المحتوى مناسبًا لمستوى {grade} في تنزانيا
+- التقدم من المواضيع الأبسط إلى الأكثر تعقيدًا عبر الأسابيع
+- استخدم مواضيع المنهج التنزاني الواقعية للمادة {subject}
+- وزع على أشهر الفصل الدراسي بشكل واقعي
+- اجعل الأنشطة عملية ومناسبة للعمر
+- ارجع بمصفوفة JSON فقط، بدون أي نص آخر"""
+            else:
+                prompt = f"""أنشئ خطة عمل لمنهج البر التنزاني:
+- المادة: {subject}
+- الصف: {grade}
+- الفصل الدراسي: {term or "الفصل الأول"}
+- عدد الصفوف: {num_rows}
+
+أنشئ بالضبط {num_rows} صفًا من الكفاءات. يمثل كل صف أسبوعًا/موضوعًا في الخطة.
+ارجع بمصفوفة JSON حيث يحتوي كل عنصر على هذه المفاتيح بالضبط:
+[
+  {{
+    "main": "الكفاءة الرئيسية - مجال الكفاءة الواسع",
+    "specific": "الكفاءة المحددة - الكفاءات التفصيلية",
+    "activities": "النشاط الرئيسي - النشاط التعليمي الرئيسي",
+    "specificActivities": "النشاط المحدد - المهام التفصيلية",
+    "month": "اسم الشهر (مثال: يناير، فبراير)",
+    "week": "الأسبوع (مثال: الأسبوع 1، الأسبوع 2)",
+    "periods": "عدد الحصص (مثال: 4، 6)",
+    "methods": "طرق التدريس والتعلم (مثال: المناقشة، العمل الجماعي، العرض التوضيحي)",
+    "resources": "موارد التدريس والتعلم (مثال: الكتب المدرسية، الرسوم البيانية، النماذج)",
+    "assessment": "أدوات التقييم (مثال: الأسئلة الشفهية، الاختبار الكتابي)",
+    "references": "المراجع (مثال: صفحة المنهج، فصل الكتاب المدرسي)",
+    "remarks": ""
+  }}
+]
+
+هام:
+- يجب أن يكون المحتوى مناسبًا لمستوى {grade} في تنزانيا
+- التقدم من المواضيع الأبسط إلى الأكثر تعقيدًا عبر الأسابيع
+- استخدم مواضيع المنهج التنزاني الواقعية للمادة {subject}
+- وزع على أشهر الفصل الدراسي بشكل واقعي
+- اجعل الأنشطة عملية ومناسبة للعمر
+- ارجع بمصفوفة JSON فقط، بدون أي نص آخر"""
+        else:
+            # For other languages, use the original prompts
+            if syllabus == "Zanzibar":
+                prompt = f"""Generate a Scheme of Work for the ZANZIBAR syllabus:
 - Subject: {subject}
 - Class: {grade}
 - Term: {term or "Term 1"}
@@ -2322,8 +3210,8 @@ IMPORTANT:
 - Distribute across months of the term realistically
 - Make activities practical and age-appropriate
 - Return ONLY the JSON array, no other text"""
-        else:
-            prompt = f"""Generate a Scheme of Work for the TANZANIA MAINLAND syllabus:
+            else:
+                prompt = f"""Generate a Scheme of Work for the TANZANIA MAINLAND syllabus:
 - Subject: {subject}
 - Class: {grade}
 - Term: {term or "Term 1"}
@@ -2362,7 +3250,7 @@ IMPORTANT:
             "messages": [
                 {
                     "role": "system",
-                    "content": "You are an expert Tanzanian education curriculum designer specializing in Scheme of Work planning. You know both Zanzibar and Tanzania Mainland syllabus formats deeply. Always respond with valid JSON only."
+                    "content": system_prompt
                 },
                 {
                     "role": "user",
@@ -2420,6 +3308,244 @@ IMPORTANT:
     except Exception as e:
         logger.error(f"Scheme AI generation error: {e}")
         raise HTTPException(status_code=500, detail=f"AI generation failed: {str(e)}")
+
+
+# ==================== CURRICULUM INTELLIGENCE SYSTEM ====================
+
+async def call_ai_service(prompt: str, system_prompt: str = None) -> Dict:
+    """Call AI service with given prompt"""
+    import httpx
+    
+    api_key = os.environ.get("DEEPSEEK_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="AI service not configured")
+    
+    headers = {
+        'Content-Type': 'application/json',
+        'Authorization': f'Bearer {api_key}'
+    }
+    
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    
+    messages.append({"role": "user", "content": prompt})
+    
+    payload = {
+        "model": "deepseek-chat",
+        "messages": messages,
+        "temperature": 0.7,
+        "max_tokens": 4000
+    }
+    
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                "https://api.deepseek.com/v1/chat/completions",
+                headers=headers,
+                json=payload
+            )
+            response.raise_for_status()
+            result = response.json()
+            return result["choices"][0]["message"]["content"]
+    except Exception as e:
+        logger.error(f"AI service call failed: {e}")
+        raise HTTPException(status_code=500, detail=f"AI service error: {str(e)}")
+
+
+@api_router.post("/schemes/generate-full-year")
+async def generate_scheme_full_year(request: Request, user: User = Depends(get_current_user)):
+    """Generate full academic year scheme with pagination and memory"""
+    from backend.services.promptBuilder import PromptBuilder
+    from backend.services.promptMemory import PromptMemory
+    import json
+    
+    data = await request.json()
+    syllabus = data.get("syllabus", "Zanzibar")
+    subject = data.get("subject", "")
+    grade = data.get("class", "")
+    term = data.get("term", "Full Year")
+    total_weeks = int(data.get("total_weeks", 36))
+    weeks_per_page = int(data.get("weeks_per_page", 15))
+    user_guidance = data.get("user_guidance", "")
+    negative_constraints = data.get("negative_constraints", "")
+    check_memory = data.get("check_memory", True)
+    
+    if not subject or not grade:
+        raise HTTPException(status_code=400, detail="Subject and class are required")
+    
+    if total_weeks < 30 or total_weeks > 42:
+        raise HTTPException(status_code=400, detail="Total weeks must be between 30 and 42")
+    
+    try:
+        # Initialize prompt builder
+        prompt_builder = PromptBuilder(
+            syllabus, grade, subject, term, user_guidance, negative_constraints
+        )
+        
+        # Build base prompt
+        try:
+            base_prompt = await prompt_builder.build(db)
+        except Exception as e:
+            logger.warning(f"PromptBuilder failed, using fallback: {e}")
+            # Fallback prompt if database query fails
+            base_prompt = f"""Generate a scheme of work for {subject} {grade} ({syllabus} syllabus) for {term}.
+            
+            User guidance: {user_guidance}
+            Avoid: {negative_constraints}
+            
+            Generate a complete scheme with {total_weeks} weeks."""
+        
+        # Initialize memory service
+        memory = PromptMemory(db)
+        
+        if check_memory:
+            # Try memory first
+            prompt_context = {
+                "syllabus": syllabus,
+                "level": grade,
+                "subject": subject,
+                "term": term,
+                "total_weeks": total_weeks,
+                "user_guidance": user_guidance,
+                "negative_constraints": negative_constraints,
+                "user_prompt": f"{syllabus} {grade} {subject} {term}"
+            }
+            
+            async def generate_fresh():
+                return await _generate_full_year_scheme(
+                    base_prompt, syllabus, grade, subject, term, 
+                    total_weeks, weeks_per_page
+                )
+            
+            try:
+                memory_result = await memory.get_or_generate(prompt_context, generate_fresh)
+                
+                response_data = memory_result["data"]
+                response_data["memory_source"] = memory_result["source"]
+                response_data["memory_type"] = memory_result["type"]
+                response_data["usage_count"] = memory_result["usage_count"]
+                
+                return response_data
+            except Exception as e:
+                logger.warning(f"Memory service failed, generating fresh: {e}")
+                # Fall back to fresh generation
+        
+        # Skip memory or fallback to fresh generation
+        fresh_data = await _generate_full_year_scheme(
+            base_prompt, syllabus, grade, subject, term, 
+            total_weeks, weeks_per_page
+        )
+        
+        return fresh_data
+        
+    except Exception as e:
+        logger.error(f"Full year generation error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Generation failed: {str(e)}")
+
+
+async def _generate_full_year_scheme(base_prompt: str, syllabus: str, grade: str, 
+                                    subject: str, term: str, total_weeks: int, 
+                                    weeks_per_page: int) -> Dict:
+    """Generate full year scheme in chunks"""
+    import json
+    
+    # Generate in chunks to avoid timeout
+    pages = []
+    weeks_per_chunk = weeks_per_page
+    num_chunks = (total_weeks + weeks_per_chunk - 1) // weeks_per_chunk
+    
+    for chunk in range(num_chunks):
+        start_week = chunk * weeks_per_chunk + 1
+        end_week = min((chunk + 1) * weeks_per_chunk, total_weeks)
+        chunk_weeks = end_week - start_week + 1
+        
+        chunk_prompt = f"""
+{base_prompt}
+
+Generate weeks {start_week} to {end_week} ({chunk_weeks} weeks).
+This is page {chunk + 1} of {num_chunks}.
+Continue from where the previous page ended.
+Ensure progression and continuity across pages.
+"""
+        
+        # Call AI service
+        system_prompt = "You are an expert Tanzanian education curriculum designer. Always respond with valid JSON only."
+        ai_response = await call_ai_service(chunk_prompt, system_prompt)
+        
+        try:
+            # Parse AI response
+            ai_data = json.loads(ai_response)
+            
+            # Ensure we have the right structure
+            if isinstance(ai_data, list):
+                competencies = ai_data
+            elif isinstance(ai_data, dict) and "competencies" in ai_data:
+                competencies = ai_data["competencies"]
+            elif isinstance(ai_data, dict) and "pages" in ai_data:
+                # Already in paginated format
+                return ai_data
+            else:
+                competencies = []
+            
+            pages.append({
+                "page_number": chunk + 1,
+                "weeks": list(range(start_week, end_week + 1)),
+                "competencies": competencies[:chunk_weeks]  # Ensure correct number
+            })
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"AI JSON parse error for chunk {chunk}: {e}")
+            # Create empty competencies for this chunk
+            pages.append({
+                "page_number": chunk + 1,
+                "weeks": list(range(start_week, end_week + 1)),
+                "competencies": []
+            })
+    
+    return {
+        "total_weeks": total_weeks,
+        "total_pages": len(pages),
+        "pages": pages
+    }
+
+
+@api_router.post("/schemes/memory-suggestions")
+async def get_memory_suggestions(request: Request, user: User = Depends(get_current_user)):
+    """Get memory suggestions for similar prompts"""
+    from backend.services.promptMemory import PromptMemory
+    
+    data = await request.json()
+    syllabus = data.get("syllabus", "Zanzibar")
+    subject = data.get("subject", "")
+    grade = data.get("class", "")
+    
+    if not subject or not grade:
+        raise HTTPException(status_code=400, detail="Subject and class are required")
+    
+    try:
+        memory = PromptMemory(db)
+        suggestions = await memory.get_suggestions(syllabus, grade, subject)
+        
+        return {"suggestions": suggestions}
+    except Exception as e:
+        logger.error(f"Memory suggestions error: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get suggestions: {str(e)}")
+
+
+@api_router.get("/schemes/memory-stats")
+async def get_memory_stats(user: User = Depends(get_current_user)):
+    """Get memory statistics (admin/analytics)"""
+    from backend.services.promptMemory import PromptMemory
+    
+    try:
+        memory = PromptMemory(db)
+        stats = await memory.get_memory_stats()
+        
+        return stats
+    except Exception as e:
+        logger.error(f"Memory stats error: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get stats: {str(e)}")
 
 
 # ==================== TEMPLATE ROUTES ====================
@@ -2626,7 +3752,7 @@ async def export_template(template_id: str, request: Request, user: User = Depen
     return FastAPIResponse(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        headers={"Content-Disposition": safe_content_disposition(filename)}
     )
 
 @api_router.get("/templates/{template_id}/export")
@@ -2720,7 +3846,7 @@ async def export_template_get(template_id: str, user: User = Depends(get_current
     return FastAPIResponse(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        headers={"Content-Disposition": safe_content_disposition(filename)}
     )
 
 @api_router.get("/templates/{template_id}/view")
@@ -2830,7 +3956,7 @@ async def view_template_html(template_id: str, user: User = Depends(get_current_
     <h1>{title}</h1>
     <div class="meta"><strong>Subject:</strong> {subject} | <strong>Category:</strong> {category} | <strong>Type:</strong> {t_type.title()}</div>
     {layout}
-    <p style="text-align:center;margin-top:20px;font-size:9pt;color:#888;">Generated by Mi-LessonPlan</p>
+    <p style="text-align:center;margin-top:20px;font-size:9pt;color:#888;">Generated by mi-lessonplan.site</p>
     </body></html>"""
     
     return HTMLResponse(content=html)
@@ -2901,7 +4027,7 @@ def _build_scheme_html(scheme: dict, for_word: bool = False) -> str:
       <thead><tr>{"".join(f'<th>{c}</th>' for c in cols)}</tr></thead>
       <tbody>{rows_html}</tbody>
     </table>
-    <p class="footer">Generated by Mi-LessonPlan</p>
+    <p class="footer">Generated by mi-lessonplan.site</p>
     </body></html>"""
     return html
 
@@ -3013,15 +4139,46 @@ def _build_lesson_html(lesson: dict, for_word: bool = False) -> str:
       th {{ background:#2D5A27; color:white; font-weight:bold; text-align:center; }}
       .footer {{ text-align:center; margin-top:15px; font-size:8pt; color:#888; }}
     </style></head><body>{body}
-    <p class="footer">Generated by Mi-LessonPlan</p>
+    <p class="footer">Generated by mi-lessonplan.site</p>
     </body></html>"""
     return html
 
 def _html_to_pdf(html: str) -> bytes:
     """Convert HTML to PDF using weasyprint"""
     import weasyprint
-    pdf_bytes = weasyprint.HTML(string=html).write_pdf()
-    return pdf_bytes
+    
+    try:
+        # Ensure the HTML is properly encoded as UTF-8 bytes
+        # Weasyprint may default to latin-1 encoding, so we pass it as UTF-8 bytes
+        pdf_bytes = weasyprint.HTML(string=html.encode('utf-8')).write_pdf()
+        return pdf_bytes
+    except Exception as e:
+        logger.error(f"PDF generation failed: {e}")
+        # Return a simple fallback PDF
+        fallback_html = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <style>
+                body { font-family: Arial, sans-serif; padding: 20px; }
+                h1 { color: #333; }
+                p { color: #666; }
+            </style>
+        </head>
+        <body>
+            <h1>PDF Generation Error</h1>
+            <p>Unable to generate PDF. Please try again later.</p>
+            <p>Error: """ + str(e) + """</p>
+        </body>
+        </html>
+        """
+        try:
+            pdf_bytes = weasyprint.HTML(string=fallback_html.encode('utf-8')).write_pdf()
+            return pdf_bytes
+        except:
+            # Ultimate fallback - return empty bytes
+            return b"%PDF-1.4\n1 0 obj\n<<>>\nendobj\nxref\n0 1\n0000000000 65535 f \ntrailer\n<<>>\nstartxref\n0\n%%EOF"
 
 @api_router.get("/schemes/{scheme_id}/export")
 async def export_scheme_docx(scheme_id: str, user: User = Depends(get_current_user)):
@@ -3042,7 +4199,7 @@ async def export_scheme_docx(scheme_id: str, user: User = Depends(get_current_us
     return FastAPIResponse(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        headers={"Content-Disposition": safe_content_disposition(filename)}
     )
 
 @api_router.get("/schemes/{scheme_id}/view")
@@ -3061,6 +4218,7 @@ async def view_scheme_html(scheme_id: str, user: User = Depends(get_current_user
 async def export_lesson_txt(lesson_id: str, user: User = Depends(get_current_user)):
     """Export a lesson plan as PDF with proper table formatting"""
     from fastapi.responses import Response as FastAPIResponse
+    import urllib.parse
 
     lesson = await db.lesson_plans.find_one({"lesson_id": lesson_id, "user_id": user.user_id}, {"_id": 0})
     if not lesson:
@@ -3071,10 +4229,22 @@ async def export_lesson_txt(lesson_id: str, user: User = Depends(get_current_use
     topic = lesson.get("topic", "")
     filename = f"{subject.replace(' ', '_')}_{topic.replace(' ', '_')}_lesson.pdf"
     pdf_bytes = _html_to_pdf(html)
+    
+    # Properly encode filename for Content-Disposition header (RFC 5987)
+    # Check if filename contains non-ASCII characters
+    try:
+        filename.encode('ascii')
+        # ASCII-only filename, use simple format
+        content_disposition = f'attachment; filename="{filename}"'
+    except UnicodeEncodeError:
+        # Non-ASCII characters, use RFC 5987 encoding
+        encoded_filename = urllib.parse.quote(filename, safe='')
+        content_disposition = f"attachment; filename*=UTF-8''{encoded_filename}"
+    
     return FastAPIResponse(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        headers={"Content-Disposition": content_disposition}
     )
 @api_router.get("/lessons/{lesson_id}/view")
 async def view_lesson_html(lesson_id: str, user: User = Depends(get_current_user)):
@@ -3087,6 +4257,96 @@ async def view_lesson_html(lesson_id: str, user: User = Depends(get_current_user
 
     html = _build_lesson_html(lesson, for_word=False)
     return HTMLResponse(content=html)
+
+def _html_to_image(html: str) -> bytes:
+    """Convert HTML to PNG image using imgkit"""
+    import imgkit
+    import tempfile
+    import os
+    
+    try:
+        # Create a temporary file for the HTML
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False) as f:
+            f.write(html)
+            html_file = f.name
+        
+        # Create a temporary file for the output image
+        with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as f:
+            image_file = f.name
+        
+        # Configure imgkit options for better rendering
+        options = {
+            'format': 'png',
+            'encoding': "UTF-8",
+            'quiet': '',
+            'width': 800,  # Set width for better rendering
+            'disable-smart-width': '',  # Disable smart width calculation
+            'quality': 100,  # Highest quality
+        }
+        
+        # Convert HTML to image
+        imgkit.from_file(html_file, image_file, options=options)
+        
+        # Read the image file
+        with open(image_file, 'rb') as f:
+            image_bytes = f.read()
+        
+        # Clean up temporary files
+        os.unlink(html_file)
+        os.unlink(image_file)
+        
+        return image_bytes
+    except Exception as e:
+        logger.error(f"Image generation failed: {e}")
+        # Return a simple fallback image using PIL
+        try:
+            from PIL import Image, ImageDraw, ImageFont
+            import io
+            
+            # Create a simple error image
+            img = Image.new('RGB', (800, 400), color='white')
+            draw = ImageDraw.Draw(img)
+            
+            # Try to use a font, fallback to default if not available
+            try:
+                font = ImageFont.truetype("DejaVuSans.ttf", 20)
+            except:
+                font = ImageFont.load_default()
+            
+            draw.text((50, 50), "Image Generation Error", fill='black', font=font)
+            draw.text((50, 100), f"Unable to generate image. Please try PDF download.", fill='black', font=font)
+            draw.text((50, 150), f"Error: {str(e)}", fill='red', font=font)
+            
+            # Save to bytes
+            img_byte_arr = io.BytesIO()
+            img.save(img_byte_arr, format='PNG')
+            return img_byte_arr.getvalue()
+        except Exception as fallback_error:
+            logger.error(f"Fallback image generation also failed: {fallback_error}")
+            # Return empty bytes as last resort
+            return b''
+
+@api_router.get("/lessons/{lesson_id}/export/image")
+async def export_lesson_image(lesson_id: str, user: User = Depends(get_current_user)):
+    """Export a lesson plan as PNG image - better for Arabic text"""
+    from fastapi.responses import Response as FastAPIResponse
+
+    lesson = await db.lesson_plans.find_one({"lesson_id": lesson_id, "user_id": user.user_id}, {"_id": 0})
+    if not lesson:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+
+    html = _build_lesson_html(lesson, for_word=False)
+    subject = lesson.get("subject", "")
+    topic = lesson.get("topic", "")
+    filename = f"{subject.replace(' ', '_')}_{topic.replace(' ', '_')}_lesson.png"
+    
+    image_bytes = _html_to_image(html)
+    
+    return FastAPIResponse(
+        content=image_bytes,
+        media_type="image/png",
+        headers={"Content-Disposition": safe_content_disposition(filename)}
+    )
 
 # ==================== PROFILE ROUTES ====================
 
@@ -3235,7 +4495,7 @@ def build_download_content(resource_type: str, resource: dict) -> tuple:
         <h1>{title}</h1>
         <p class="subtitle">Created: {created[:10] if created else ''}</p>
         <div class="content">{note_content}</div>
-        <div class="footer">Shared via Mi-LessonPlan</div>
+        <div class="footer">Shared via mi-lessonplan.site</div>
         </body></html>"""
         filename = f"{title.replace(' ','_')}.pdf"
         pdf_bytes = _html_to_pdf(html)
@@ -3307,7 +4567,7 @@ def build_download_content(resource_type: str, resource: dict) -> tuple:
         <h1>{title}</h1>
         <p class="subtitle">{meta_line}</p>
         {body_html}
-        <div class="footer">Shared via Mi-LessonPlan</div>
+        <div class="footer">Shared via mi-lessonplan.site</div>
         </body></html>"""
         filename = f"{title.replace(' ','_')}_{tpl_type}.pdf"
 
@@ -3343,7 +4603,7 @@ def build_download_content(resource_type: str, resource: dict) -> tuple:
             <head><meta charset="utf-8"><style>{doc_styles}</style></head><body>
             <h1>{title}</h1>
             <p class="subtitle">Dictation &mdash; Empty</p>
-            <div class="footer">Shared via Mi-LessonPlan</div>
+            <div class="footer">Shared via mi-lessonplan.site</div>
             </body></html>"""
             filename = f"Dictation_{title.replace(' ','_')}.pdf"
             pdf_bytes = _html_to_pdf(html)
@@ -3366,7 +4626,7 @@ def build_download_content(resource_type: str, resource: dict) -> tuple:
             <div class="content" style="font-size:14pt; line-height:2.2; padding:20px; border:1px solid #e2e8f0; border-radius:8px; background:#fafaf8;">
             {text}
             </div>
-            <div class="footer">Shared via Mi-LessonPlan</div>
+            <div class="footer">Shared via mi-lessonplan.site</div>
             </body></html>"""
             filename = f"Dictation_{title.replace(' ','_')}.pdf"
             pdf_bytes = _html_to_pdf(html)
@@ -3518,7 +4778,7 @@ async def download_shared_link(code: str):
             return FastAPIResponse(
                 content=audio_bytes,
                 media_type="audio/mpeg",
-                headers={"Content-Disposition": f'attachment; filename="{audio_filename}"'}
+                headers={"Content-Disposition": safe_content_disposition(audio_filename)}
             )
         except Exception as e:
             logger.error(f"Shared dictation TTS error: {e}")
@@ -3535,7 +4795,7 @@ async def download_shared_link(code: str):
     return FastAPIResponse(
         content=content_bytes,
         media_type=media_type,
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        headers={"Content-Disposition": safe_content_disposition(filename)}
     )
 
 @api_router.post("/links/{code}/rate")
@@ -3692,11 +4952,14 @@ async def clickpesa_webhook_redirect(request: Request):
 
 @api_router.get("/")
 async def root():
-    return {"message": "Mi-LessonPlan API", "version": "1.0.0"}
+    return {"message": "mi-lessonplan.site API", "version": "1.0.0"}
 
 @api_router.get("/health")
 async def health():
     return {"status": "healthy", "timestamp": datetime.now(timezone.utc).isoformat()}
+
+# Include the router in the main app
+app.include_router(api_router)
 
 # Default CORS origins as fallback if environment variable is not set
 DEFAULT_CORS_ORIGINS = [
@@ -3705,7 +4968,8 @@ DEFAULT_CORS_ORIGINS = [
     "https://mi-learning-hub.preview.emergentagent.com",
     "https://mi-learning-hub.preview.static.emergentagent.com",
     "http://localhost:3000",
-    "http://localhost:5000"
+    "http://localhost:5000",
+    "https://mi-lessonplan.site.site"  # Add the .site.site domain that appears in some requests
 ]
 
 cors_origins_str = os.environ.get("CORS_ORIGINS", "")
@@ -3725,9 +4989,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Include the router in the main app
-app.include_router(api_router)
 
 @app.on_event("shutdown")
 async def shutdown_db_client():

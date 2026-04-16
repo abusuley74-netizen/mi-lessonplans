@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import axios from 'axios';
-import { Sparkles, Save, Printer, FileDown, Plus, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { Sparkles, Save, Printer, FileDown, Plus, ChevronLeft, ChevronRight, Loader2, Brain, Lightbulb, Shield, History, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import './SchemeOfWork.css';
 
@@ -80,6 +80,17 @@ const SchemeOfWorkForm = () => {
   const rowsPerPage = 15;
   const totalPages = Math.ceil(formData.competencies.length / rowsPerPage);
   const printRef = useRef(null);
+  
+  // Curriculum Intelligence System State
+  const [showCurriculumIntelligence, setShowCurriculumIntelligence] = useState(false);
+  const [generatingFullYear, setGeneratingFullYear] = useState(false);
+  const [userGuidance, setUserGuidance] = useState('');
+  const [negativeConstraints, setNegativeConstraints] = useState('');
+  const [totalWeeks, setTotalWeeks] = useState(36);
+  const [weeksPerPage, setWeeksPerPage] = useState(15);
+  const [checkMemory, setCheckMemory] = useState(true);
+  const [memorySuggestions, setMemorySuggestions] = useState([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
 
   const columns = syllabus === 'Zanzibar' ? ZANZIBAR_COLUMNS : MAINLAND_COLUMNS;
 
@@ -269,6 +280,106 @@ const SchemeOfWorkForm = () => {
     }
   };
 
+  // Curriculum Intelligence Functions
+  const handleFullYearGenerate = async () => {
+    if (!formData.subject.trim()) {
+      toast.error('Please enter a Subject first');
+      return;
+    }
+    if (!formData.class.trim()) {
+      toast.error('Please enter a Class first');
+      return;
+    }
+
+    setGeneratingFullYear(true);
+    setSavedSchemeId(null);
+    setCurrentPage(0);
+
+    try {
+      const res = await axios.post(`${API_URL}/api/schemes/generate-full-year`, {
+        syllabus,
+        subject: formData.subject,
+        class: formData.class,
+        term: formData.term || 'Full Year',
+        total_weeks: totalWeeks,
+        weeks_per_page: weeksPerPage,
+        user_guidance: userGuidance,
+        negative_constraints: negativeConstraints,
+        check_memory: checkMemory
+      }, { withCredentials: true });
+
+      const result = res.data;
+      
+      if (result.memory_source === 'memory') {
+        toast.success(`Loaded from memory! Used ${result.usage_count} times`);
+      } else {
+        toast.success(`Generated fresh full-year scheme with ${result.total_weeks} weeks`);
+      }
+
+      // Process paginated data
+      const allCompetencies = [];
+      if (result.pages && Array.isArray(result.pages)) {
+        result.pages.forEach(page => {
+          if (page.competencies && Array.isArray(page.competencies)) {
+            allCompetencies.push(...page.competencies);
+          }
+        });
+      }
+
+      // Update form with all competencies
+      if (allCompetencies.length > 0) {
+        const newCompetencies = [...allCompetencies];
+        // Fill remaining slots with empty rows if needed
+        while (newCompetencies.length < totalWeeks) {
+          newCompetencies.push(makeEmptyRow());
+        }
+        setFormData(prev => ({
+          ...prev,
+          competencies: newCompetencies
+        }));
+      }
+
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Full-year generation failed. Please try again.');
+    } finally {
+      setGeneratingFullYear(false);
+    }
+  };
+
+  const fetchMemorySuggestions = async () => {
+    if (!formData.subject.trim() || !formData.class.trim()) {
+      toast.error('Please enter Subject and Class first');
+      return;
+    }
+
+    setLoadingSuggestions(true);
+    try {
+      const res = await axios.post(`${API_URL}/api/schemes/memory-suggestions`, {
+        syllabus,
+        subject: formData.subject,
+        class: formData.class
+      }, { withCredentials: true });
+
+      setMemorySuggestions(res.data.suggestions || []);
+      if (res.data.suggestions?.length > 0) {
+        toast.success(`Found ${res.data.suggestions.length} suggestions from other teachers`);
+      } else {
+        toast.info('No suggestions found. Be the first to generate for this subject!');
+      }
+    } catch (err) {
+      toast.error('Failed to load suggestions');
+    } finally {
+      setLoadingSuggestions(false);
+    }
+  };
+
+  const applySuggestion = (suggestion) => {
+    if (suggestion.preview) {
+      setUserGuidance(prev => prev ? `${prev}\n${suggestion.preview}` : suggestion.preview);
+      toast.success('Suggestion added to guidance');
+    }
+  };
+
   const currentCompetencies = formData.competencies.slice(
     currentPage * rowsPerPage,
     (currentPage + 1) * rowsPerPage
@@ -353,6 +464,17 @@ const SchemeOfWorkForm = () => {
             </>
           )}
         </button>
+        
+        {/* Curriculum Intelligence Toggle */}
+        <button
+          onClick={() => setShowCurriculumIntelligence(!showCurriculumIntelligence)}
+          className="curriculum-intelligence-toggle"
+          data-testid="curriculum-intelligence-toggle"
+        >
+          <Brain className="w-4 h-4" />
+          <span>Curriculum Intelligence</span>
+          {showCurriculumIntelligence ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+        </button>
       </div>
 
       {/* Generating overlay progress */}
@@ -367,6 +489,174 @@ const SchemeOfWorkForm = () => {
               className="ai-progress-fill"
               style={{ width: `${((numRows - fillingRows.size) / numRows) * 100}%` }}
             />
+          </div>
+        </div>
+      )}
+
+      {/* Curriculum Intelligence Panel */}
+      {showCurriculumIntelligence && (
+        <div className="curriculum-intelligence-panel" data-testid="curriculum-intelligence-panel">
+          <div className="curriculum-panel-header">
+            <Brain className="w-5 h-5" />
+            <h3>Curriculum Intelligence System</h3>
+            <span className="curriculum-panel-subtitle">Full-year generation with memory & suggestions</span>
+          </div>
+
+          <div className="curriculum-panel-grid">
+            {/* Left Column: Guidance & Constraints */}
+            <div className="curriculum-column">
+              <div className="curriculum-section">
+                <div className="section-header">
+                  <Lightbulb className="w-4 h-4" />
+                  <h4>User Guidance</h4>
+                </div>
+                <textarea
+                  value={userGuidance}
+                  onChange={(e) => setUserGuidance(e.target.value)}
+                  placeholder="Add specific guidance for the AI (e.g., 'Focus on practical activities', 'Include local examples', 'Emphasize critical thinking')"
+                  className="guidance-textarea"
+                  rows={4}
+                />
+              </div>
+
+              <div className="curriculum-section">
+                <div className="section-header">
+                  <Shield className="w-4 h-4" />
+                  <h4>Negative Constraints</h4>
+                </div>
+                <textarea
+                  value={negativeConstraints}
+                  onChange={(e) => setNegativeConstraints(e.target.value)}
+                  placeholder="What to avoid (e.g., 'No rote memorization', 'Avoid outdated examples', 'Don't include religious content')"
+                  className="constraints-textarea"
+                  rows={3}
+                />
+              </div>
+            </div>
+
+            {/* Middle Column: Settings & Memory */}
+            <div className="curriculum-column">
+              <div className="curriculum-section">
+                <div className="section-header">
+                  <Zap className="w-4 h-4" />
+                  <h4>Generation Settings</h4>
+                </div>
+                <div className="settings-grid">
+                  <div className="setting-item">
+                    <label>Total Weeks:</label>
+                    <select value={totalWeeks} onChange={(e) => setTotalWeeks(parseInt(e.target.value))}>
+                      {[30, 32, 34, 36, 38, 40, 42].map(w => (
+                        <option key={w} value={w}>{w} weeks</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="setting-item">
+                    <label>Weeks per Page:</label>
+                    <select value={weeksPerPage} onChange={(e) => setWeeksPerPage(parseInt(e.target.value))}>
+                      {[10, 12, 15, 18, 20].map(w => (
+                        <option key={w} value={w}>{w} weeks</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="setting-item checkbox-item">
+                    <input
+                      type="checkbox"
+                      id="checkMemory"
+                      checked={checkMemory}
+                      onChange={(e) => setCheckMemory(e.target.checked)}
+                    />
+                    <label htmlFor="checkMemory">Check memory first (faster, reuses successful prompts)</label>
+                  </div>
+                </div>
+              </div>
+
+              <div className="curriculum-section">
+                <div className="section-header">
+                  <History className="w-4 h-4" />
+                  <h4>Memory Suggestions</h4>
+                  <button
+                    onClick={fetchMemorySuggestions}
+                    disabled={loadingSuggestions || !formData.subject.trim() || !formData.class.trim()}
+                    className="suggestions-btn"
+                  >
+                    {loadingSuggestions ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Load Suggestions'}
+                  </button>
+                </div>
+                
+                {memorySuggestions.length > 0 ? (
+                  <div className="suggestions-list">
+                    {memorySuggestions.map((suggestion, idx) => (
+                      <div key={idx} className="suggestion-item">
+                        <div className="suggestion-preview">{suggestion.preview}</div>
+                        <div className="suggestion-meta">
+                          <span className="suggestion-usage">Used {suggestion.usage_count} times</span>
+                          <button
+                            onClick={() => applySuggestion(suggestion)}
+                            className="apply-suggestion-btn"
+                          >
+                            Apply
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="no-suggestions">
+                    {loadingSuggestions ? (
+                      <div className="loading-suggestions">Loading suggestions...</div>
+                    ) : (
+                      <div className="empty-suggestions">
+                        No suggestions yet. Generate a scheme to contribute to the knowledge base!
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Right Column: Generate Button */}
+            <div className="curriculum-column">
+              <div className="curriculum-section generate-section">
+                <div className="section-header">
+                  <Sparkles className="w-5 h-5" />
+                  <h4>Full-Year Generation</h4>
+                </div>
+                <div className="generate-info">
+                  <p>Generate a complete academic year scheme with:</p>
+                  <ul>
+                    <li>Progressive learning across {totalWeeks} weeks</li>
+                    <li>Pagination for better performance</li>
+                    <li>Memory system for reuse</li>
+                    <li>Custom guidance & constraints</li>
+                  </ul>
+                </div>
+                <button
+                  onClick={handleFullYearGenerate}
+                  disabled={generatingFullYear || !formData.subject.trim() || !formData.class.trim()}
+                  className="full-year-generate-btn"
+                  data-testid="full-year-generate-btn"
+                >
+                  {generatingFullYear ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Generating Full Year...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="w-4 h-4" />
+                      <span>Generate Full Year Scheme</span>
+                    </>
+                  )}
+                </button>
+                <div className="generate-note">
+                  {checkMemory ? (
+                    <span className="memory-note">Will check memory first for similar prompts</span>
+                  ) : (
+                    <span className="fresh-note">Will always generate fresh content</span>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

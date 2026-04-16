@@ -166,7 +166,7 @@ const SharedView = () => {
           <h1 className="text-2xl font-bold text-[#1A2E16] mb-2">Link Not Found</h1>
           <p className="text-[#7A8A76] mb-6">This shared link doesn't exist or has been removed.</p>
           <Link to="/login" className="inline-flex items-center gap-2 text-[#2D5A27] font-medium hover:underline">
-            <ArrowLeft className="w-4 h-4" /> Go to Mi-LessonPlan
+            <ArrowLeft className="w-4 h-4" /> Go to mi-lessonplan.site
           </Link>
         </div>
       </div>
@@ -179,8 +179,8 @@ const SharedView = () => {
       <header className="bg-white border-b border-[#E4DFD5] px-4 py-3">
         <div className="max-w-3xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2 text-[#2D5A27] font-bold text-lg" data-testid="shared-logo">
-            <img src="/logo.jpg" alt="Mi-LessonPlan" className="w-8 h-8 rounded-md object-contain" />
-            Mi-LessonPlan
+            <img src="/logo.jpg" alt="mi-lessonplan.site" className="w-8 h-8 rounded-md object-contain" />
+            mi-lessonplan.site
           </div>
           <span className="text-xs text-[#7A8A76]">Shared Resource</span>
         </div>
@@ -409,7 +409,7 @@ const SharedView = () => {
 
       {/* Footer */}
       <footer className="text-center py-6">
-        <p className="text-xs text-[#7A8A76]">Powered by Mi-LessonPlan</p>
+        <p className="text-xs text-[#7A8A76]">Powered by mi-lessonplan.site</p>
       </footer>
     </div>
   );

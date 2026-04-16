@@ -1,10 +1,10 @@
 """
-Iteration 19 Tests - Mi-LessonPlan Rebranding & Fixes
+Iteration 19 Tests - mi-lessonplan.site Rebranding & Fixes
 Tests:
-1. Branding: 'Mi-LessonPlan' (not 'miLessonPlan') everywhere
-2. Backend API health returns 'Mi-LessonPlan API' (if applicable)
+1. Branding: 'mi-lessonplan.site' (not 'miLessonPlan') everywhere
+2. Backend API health returns 'mi-lessonplan.site API' (if applicable)
 3. Referral links contain mi-lessonplan.site domain
-4. manifest.json short_name is 'Mi-LessonPlan'
+4. manifest.json short_name is 'mi-lessonplan.site'
 5. service-worker.js cache name contains 'mi-lessonplan'
 6. Dictation shared link download returns audio/mpeg (not application/msword)
 """
@@ -18,22 +18,22 @@ BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 SESSION_TOKEN = "test_session_tts_001"
 
 class TestBrandingAndPWA:
-    """Test branding changes from miLessonPlan to Mi-LessonPlan"""
+    """Test branding changes from miLessonPlan to mi-lessonplan.site"""
     
     def test_manifest_json_short_name(self):
-        """manifest.json short_name should be 'Mi-LessonPlan'"""
+        """manifest.json short_name should be 'mi-lessonplan.site'"""
         response = requests.get(f"{BASE_URL}/manifest.json")
         assert response.status_code == 200, f"manifest.json not accessible: {response.status_code}"
         data = response.json()
-        assert data.get("short_name") == "Mi-LessonPlan", f"Expected 'Mi-LessonPlan', got '{data.get('short_name')}'"
+        assert data.get("short_name") == "mi-lessonplan.site", f"Expected 'mi-lessonplan.site', got '{data.get('short_name')}'"
         print(f"✓ manifest.json short_name: {data.get('short_name')}")
     
     def test_manifest_json_name(self):
-        """manifest.json name should contain 'Mi-LessonPlan'"""
+        """manifest.json name should contain 'mi-lessonplan.site'"""
         response = requests.get(f"{BASE_URL}/manifest.json")
         assert response.status_code == 200
         data = response.json()
-        assert "Mi-LessonPlan" in data.get("name", ""), f"Expected 'Mi-LessonPlan' in name, got '{data.get('name')}'"
+        assert "mi-lessonplan.site" in data.get("name", ""), f"Expected 'mi-lessonplan.site' in name, got '{data.get('name')}'"
         print(f"✓ manifest.json name: {data.get('name')}")
     
     def test_service_worker_cache_name(self):
@@ -53,12 +53,12 @@ class TestBrandingAndPWA:
         print(f"✓ API health check passed: {data}")
     
     def test_login_page_accessible(self):
-        """Login page should be accessible and contain Mi-LessonPlan"""
+        """Login page should be accessible and contain mi-lessonplan.site"""
         response = requests.get(f"{BASE_URL}/login")
         assert response.status_code == 200, f"Login page not accessible: {response.status_code}"
         # Check page title or content
-        assert "Mi-LessonPlan" in response.text or "mi-lessonplan" in response.text.lower(), "Login page should contain Mi-LessonPlan branding"
-        print(f"✓ Login page accessible with Mi-LessonPlan branding")
+        assert "mi-lessonplan.site" in response.text or "mi-lessonplan" in response.text.lower(), "Login page should contain mi-lessonplan.site branding"
+        print(f"✓ Login page accessible with mi-lessonplan.site branding")
 
 
 class TestReferralLinks:
@@ -198,17 +198,17 @@ class TestFrontendBranding:
     """Test frontend pages contain correct branding"""
     
     def test_login_page_h1_branding(self):
-        """Login page H1 should show 'Mi-LessonPlan'"""
+        """Login page H1 should show 'mi-lessonplan.site'"""
         response = requests.get(f"{BASE_URL}/login")
         assert response.status_code == 200
         
-        # Check for Mi-LessonPlan in the HTML
+        # Check for mi-lessonplan.site in the HTML
         html = response.text
-        assert "Mi-LessonPlan" in html, "Login page should contain 'Mi-LessonPlan'"
+        assert "mi-lessonplan.site" in html, "Login page should contain 'mi-lessonplan.site'"
         
         # Verify no old branding 'miLessonPlan' (lowercase m)
         # Note: This is a simple check - the actual text might be in JS bundles
-        print(f"✓ Login page contains Mi-LessonPlan branding")
+        print(f"✓ Login page contains mi-lessonplan.site branding")
     
     def test_admin_login_page(self):
         """Admin login page should be accessible"""

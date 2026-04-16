@@ -54,14 +54,14 @@ const AdminReferAndEarn = () => {
 
   const shareOnSocial = (platform) => {
     if (!codeData) return;
-    const text = `Join Mi-LessonPlan - Create amazing lesson plans with AI! Use my referral link:`;
+    const text = `Join mi-lessonplan.site - Create amazing lesson plans with AI! Use my referral link:`;
     const url = encodeURIComponent(codeData.referral_link);
     let shareUrl = '';
     switch (platform) {
       case 'whatsapp': shareUrl = `https://wa.me/?text=${encodeURIComponent(text + ' ' + codeData.referral_link)}`; break;
       case 'facebook': shareUrl = `https://www.facebook.com/sharer/sharer.php?u=${url}`; break;
       case 'twitter': shareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${url}`; break;
-      case 'email': shareUrl = `mailto:?subject=${encodeURIComponent('Join Mi-LessonPlan')}&body=${encodeURIComponent(text + '\n\n' + codeData.referral_link)}`; break;
+      case 'email': shareUrl = `mailto:?subject=${encodeURIComponent('Join mi-lessonplan.site')}&body=${encodeURIComponent(text + '\n\n' + codeData.referral_link)}`; break;
       default: return;
     }
     window.open(shareUrl, '_blank');
@@ -78,7 +78,7 @@ const AdminReferAndEarn = () => {
       {/* Header */}
       <div>
         <h2 className="text-2xl font-bold text-gray-800 mb-1">Refer & Earn</h2>
-        <p className="text-gray-500">Share Mi-LessonPlan and earn 30% commission on every subscription!</p>
+        <p className="text-gray-500">Share mi-lessonplan.site and earn 30% commission on every subscription!</p>
       </div>
 
       {/* Stats */}

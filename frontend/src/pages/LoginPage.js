@@ -50,6 +50,9 @@ const LoginPage = () => {
             <h1 className="font-heading text-4xl font-bold text-[#1A2E16] mb-3">
               Mi-LessonPlan
             </h1>
+            <p className="text-[#4A5B46] text-lg font-bold mb-2">
+              AUTOMATIC LESSON PLAN AND SCHEME OF WORK GENERATOR
+            </p>
             <p className="text-[#4A5B46] text-lg">
               Secure Tanzania Mindset
             </p>
@@ -93,7 +96,14 @@ const LoginPage = () => {
               <div className="flex items-start gap-3 text-sm text-[#7A8A76]">
                 <LogIn className="w-5 h-5 mt-0.5 text-[#2D5A27]" />
                 <p>
-                  By signing in, you agree to our Terms of Service and Privacy Policy. 
+                  By signing in, you agree to our{' '}
+                  <a href="/terms-of-service.html" target="_blank" rel="noopener noreferrer" className="text-[#2D5A27] font-medium hover:underline">
+                    Terms of Service
+                  </a>{' '}
+                  and{' '}
+                  <a href="/privacy-policy.html" target="_blank" rel="noopener noreferrer" className="text-[#2D5A27] font-medium hover:underline">
+                    Privacy Policy
+                  </a>. 
                   Your data is secured and never shared.
                 </p>
               </div>

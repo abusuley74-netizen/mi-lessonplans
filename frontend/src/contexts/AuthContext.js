@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import axios from 'axios';
+import api from '../services/api';
 
 const AuthContext = createContext(null);
 
@@ -11,9 +11,7 @@ export const AuthProvider = ({ children }) => {
 
   const checkAuth = useCallback(async () => {
     try {
-      const response = await axios.get(`${API_URL}/api/auth/me`, {
-        withCredentials: true
-      });
+      const response = await api.get('/api/auth/me');
       setUser(response.data);
     } catch (error) {
       setUser(null);
@@ -30,11 +28,10 @@ export const AuthProvider = ({ children }) => {
   const loginWithGoogle = async (credential) => {
     const referralCode = sessionStorage.getItem('referral_code') || '';
     try {
-      const response = await axios.post(
-        `${API_URL}/api/auth/google`,
-        { credential, referral_code: referralCode },
-        { withCredentials: true }
-      );
+      const response = await api.post('/api/auth/google', { 
+        credential, 
+        referral_code: referralCode 
+      });
       if (response.data.user) {
         setUser(response.data.user);
         sessionStorage.removeItem('referral_code');
@@ -49,9 +46,7 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
-      await axios.post(`${API_URL}/api/auth/logout`, {}, {
-        withCredentials: true
-      });
+      await api.post('/api/auth/logout', {});
     } catch (error) {
       console.error('Logout error:', error);
     }

@@ -142,17 +142,17 @@ class TestManifestAndStaticAssets:
         assert response.status_code == 200, f"Expected 200, got {response.status_code}"
         data = response.json()
         assert "name" in data, "manifest.json should have name"
-        assert "Mi-LessonPlan" in data.get("name", ""), "manifest should have Mi-LessonPlan branding"
+        assert "mi-lessonplan.site" in data.get("name", ""), "manifest should have mi-lessonplan.site branding"
         print(f"PASS: manifest.json accessible with name: {data.get('name')}")
     
     def test_login_page_accessible(self):
         """Login page should be accessible"""
         response = requests.get(f"{BASE_URL}/login")
         assert response.status_code == 200, f"Expected 200, got {response.status_code}"
-        # Check for Mi-LessonPlan branding in HTML
-        assert "Mi-LessonPlan" in response.text or "mi-lessonplan" in response.text.lower(), \
-            "Login page should have Mi-LessonPlan branding"
-        print("PASS: Login page accessible with Mi-LessonPlan branding")
+        # Check for mi-lessonplan.site branding in HTML
+        assert "mi-lessonplan.site" in response.text or "mi-lessonplan" in response.text.lower(), \
+            "Login page should have mi-lessonplan.site branding"
+        print("PASS: Login page accessible with mi-lessonplan.site branding")
 
 
 class TestNoBrandingLeaks:
