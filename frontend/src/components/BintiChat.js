@@ -57,8 +57,33 @@ const BintiChat = () => {
       };
 
       const response = await axios.post(`${API_URL}${endpoint}`, payload);
-      const reply = response.data.message || response.data?.data?.message || 'Samahani, I could not process that.';
-      setMessages(prev => [...prev, { role: 'binti', text: reply }]);
+      
+      // Handle async response (authenticated users)
+      if (response.data.chat_id && response.data.status === 'generating') {
+        const chatId = response.data.chat_id;
+        let attempts = 0;
+        const maxAttempts = 40; // 40 * 2s = 80s max wait
+        
+        while (attempts < maxAttempts) {
+          await new Promise(r => setTimeout(r, 2000));
+          attempts++;
+          try {
+            const statusRes = await axios.get(`${API_URL}/api/binti-chat/${chatId}/status`);
+            if (statusRes.data.status === 'complete') {
+              const reply = statusRes.data.message || 'Samahani, I could not process that.';
+              setMessages(prev => [...prev, { role: 'binti', text: reply }]);
+              return;
+            }
+          } catch (pollErr) {
+            // Continue polling
+          }
+        }
+        setMessages(prev => [...prev, { role: 'binti', text: 'Samahani Mwalimu, the response is taking too long. Please try again.' }]);
+      } else {
+        // Direct response (public endpoint or immediate)
+        const reply = response.data.message || response.data?.data?.message || 'Samahani, I could not process that.';
+        setMessages(prev => [...prev, { role: 'binti', text: reply }]);
+      }
     } catch (error) {
       console.error('Binti chat error:', error);
       setMessages(prev => [...prev, { role: 'binti', text: 'Samahani Mwalimu, I had trouble connecting. Please try again.' }]);

@@ -1738,8 +1738,8 @@ class BintiChatRequest(BaseModel):
     conversation_history: Optional[List[Dict[str, str]]] = None
 
 @api_router.post("/binti-chat")
-async def binti_chat(request: BintiChatRequest, user: User = Depends(get_current_user)):
-    """Global Binti Hamdani chatbot — uses DeepSeek API directly"""
+async def binti_chat(request: BintiChatRequest, background_tasks: BackgroundTasks, user: User = Depends(get_current_user)):
+    """Global Binti Hamdani chatbot — async background generation"""
     import httpx
 
     api_key = os.environ.get("DEEPSEEK_API_KEY")
@@ -1750,83 +1750,91 @@ async def binti_chat(request: BintiChatRequest, user: User = Depends(get_current
     history = request.conversation_history or []
 
     # Build system prompt with deep curriculum knowledge
-    system_prompt = """You are Binti Hamdani, a warm, brilliant Tanzanian curriculum expert with 20+ years of experience helping teachers in both Tanzania Mainland and Zanzibar create exceptional lesson plans and schemes of work.
+    system_prompt = """You are Binti Hamdani, a warm Tanzanian curriculum expert. Help teachers with lesson plans and schemes of work.
 
-PERSONALITY:
-- Warm, encouraging, and professional. You greet in Swahili but converse in the user's language.
-- You call teachers "Mwalimu" (teacher) respectfully.
-- You give specific, actionable advice — never vague platitudes.
-- You use markdown formatting: **bold** for emphasis, bullet lists, numbered steps.
+RULES:
+- Greet in Swahili, converse in user's language. Call teachers "Mwalimu".
+- Give specific, actionable advice with markdown formatting.
+- You know Tanzania Mainland (NECTA) and Zanzibar (ZEC) syllabi deeply.
+- All subjects, all levels (Standard 1-7, Form 1-6).
+- For Arabic subjects: respond in Arabic. For Kiswahili: respond in Kiswahili.
 
-EXPERTISE:
-- Tanzania Mainland syllabus (NECTA) and Zanzibar syllabus (ZEC)
-- All subjects: English, Kiswahili, Mathematics, Science, Social Studies, History, Geography, Civics, Physics, Chemistry, Biology, Commerce, Bookkeeping, Computer Science, Arabic, French
-- All levels: Standard 1-7 (Primary), Form 1-6 (Secondary)
-- Bloom's Taxonomy alignment per grade level
-- Competence-based curriculum (CBC) methodology
-- Age-appropriate teaching methods and assessment strategies
+ABOUT MI-LESSONPLAN:
+- AI-powered lesson plans & schemes of work for Tanzanian teachers
+- Features: Lesson Plans, Schemes, Notes, Templates, Dictation, File uploads
+- Tiers: Free (10/month), Standard (50), Professional (unlimited), Master (unlimited + referrals)
+- Supports English, Swahili, Arabic, French, Turkish"""
 
-ABOUT MI-LESSONPLAN APP (answer these if asked):
-- Mi-LessonPlan helps teachers create AI-powered lesson plans and schemes of work
-- Features: Lesson Plan creation (Tanzania Mainland & Zanzibar syllabi), Scheme of Work generation, Notes, Templates, Dictation (text-to-speech), File uploads
-- Subscription tiers: Free (10 lessons/month), Standard (50/month), Professional (unlimited), Master (unlimited + referral earnings)
-- Teachers can share lesson plans and schemes via shareable links (with optional pricing)
-- WhatsApp sharing is available for all shared links
-- The app supports English, Swahili, Arabic, French, and Turkish for dictation
-- Files can be downloaded as PDF
-
-LESSON PLAN GUIDANCE:
-When helping with lesson plans, consider:
-- Grade level determines complexity (Standard 1-3: play-based, songs, games; Standard 4-7: group work, projects; Form 1-4: analysis, research; Form 5-6: critical thinking, independent work)
-- Each lesson should have: Introduction (5-10 min), New Knowledge/Main Activity (20-25 min), Reinforcement (10 min), Assessment (5-10 min)
-- For Arabic subject: write ALL content in Arabic script
-- For Kiswahili subject: write content in Kiswahili
-- Always include: learning objectives, teaching activities, resources needed, assessment methods
-
-SCHEME OF WORK GUIDANCE:
-When helping with schemes, consider:
-- Standard structure: 12 columns (Main Competence, Specific Competences, Learning Activities, Specific Activities, Month, Week, Periods, Methods, Resources, Assessment, References, Remarks)
-- Typical term: 12-16 weeks
-- Full year: 36-40 weeks across 3 terms
-- Each row = 1 week of teaching
-- Topics should progress logically from simple to complex"""
-
-    # Add current context if available
     if any(context.values()):
         ctx_parts = []
         if context.get("syllabus"): ctx_parts.append(f"Syllabus: {context['syllabus']}")
         if context.get("subject"): ctx_parts.append(f"Subject: {context['subject']}")
-        if context.get("grade"): ctx_parts.append(f"Grade/Class: {context['grade']}")
+        if context.get("grade"): ctx_parts.append(f"Grade: {context['grade']}")
         if context.get("topic"): ctx_parts.append(f"Topic: {context['topic']}")
-        if context.get("current_page"): ctx_parts.append(f"User is on: {context['current_page']} page")
+        if context.get("current_page"): ctx_parts.append(f"Page: {context['current_page']}")
         if ctx_parts:
-            system_prompt += f"\n\nCURRENT USER CONTEXT:\n" + "\n".join(ctx_parts)
+            system_prompt += f"\n\nCONTEXT:\n" + "\n".join(ctx_parts)
 
-    # Build messages array with conversation history
     messages = [{"role": "system", "content": system_prompt}]
-    for msg in history[-10:]:  # Keep last 10 messages for context
+    for msg in history[-10:]:
         role = "assistant" if msg.get("role") == "binti" else "user"
         messages.append({"role": role, "content": msg.get("text", "")})
     messages.append({"role": "user", "content": request.message})
 
+    # Create a chat task for async processing
+    chat_id = f"binti_{uuid.uuid4().hex[:12]}"
+    await db.binti_tasks.insert_one({
+        "chat_id": chat_id,
+        "user_id": user.user_id,
+        "status": "generating",
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+
+    background_tasks.add_task(_background_binti_chat, chat_id, api_key, messages)
+    return {"chat_id": chat_id, "status": "generating"}
+
+
+@api_router.get("/binti-chat/{chat_id}/status")
+async def get_binti_status(chat_id: str, user: User = Depends(get_current_user)):
+    """Poll Binti chat response status"""
+    task = await db.binti_tasks.find_one(
+        {"chat_id": chat_id, "user_id": user.user_id},
+        {"_id": 0}
+    )
+    if not task:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    return task
+
+
+async def _background_binti_chat(chat_id: str, api_key: str, messages: list):
+    """Background task for Binti chat"""
     try:
-        async with httpx.AsyncClient(timeout=45.0) as client:
+        async with httpx.AsyncClient(timeout=120.0) as client:
             resp = await client.post(
                 "https://api.deepseek.com/v1/chat/completions",
                 headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
                 json={"model": "deepseek-chat", "messages": messages, "temperature": 0.7, "max_tokens": 2048}
             )
             if resp.status_code != 200:
-                logger.error(f"DeepSeek API error in Binti: {resp.status_code} - {resp.text[:200]}")
-                return {"message": "Samahani Mwalimu, I'm having a moment. Please try again."}
+                logger.error(f"DeepSeek Binti error: {resp.status_code}")
+                await db.binti_tasks.update_one(
+                    {"chat_id": chat_id},
+                    {"$set": {"status": "complete", "message": "Samahani Mwalimu, I'm having a moment. Please try again."}}
+                )
+                return
 
             data = resp.json()
             reply = data["choices"][0]["message"]["content"]
-            return {"message": reply}
-
+            await db.binti_tasks.update_one(
+                {"chat_id": chat_id},
+                {"$set": {"status": "complete", "message": reply}}
+            )
     except Exception as e:
-        logger.error(f"Binti chat error: {e}")
-        return {"message": "Samahani Mwalimu, I'm having trouble connecting. Please try again in a moment."}
+        logger.error(f"Binti background error: {e}")
+        await db.binti_tasks.update_one(
+            {"chat_id": chat_id},
+            {"$set": {"status": "complete", "message": "Samahani Mwalimu, I'm having trouble connecting. Please try again."}}
+        )
 
 class BintiRequest(BaseModel):
     message: str
@@ -1834,10 +1842,10 @@ class BintiRequest(BaseModel):
     conversation_history: Optional[List[Dict[str, str]]] = None
 
 @api_router.post("/binti")
-async def binti_unified(request: BintiRequest, user: User = Depends(get_current_user)):
+async def binti_unified(request: BintiRequest, background_tasks: BackgroundTasks, user: User = Depends(get_current_user)):
     """Legacy endpoint - redirects to binti-chat"""
     chat_req = BintiChatRequest(message=request.message, context=request.context, conversation_history=request.conversation_history)
-    result = await binti_chat(chat_req, user)
+    result = await binti_chat(chat_req, background_tasks, user)
     return {"type": "chat", **result}
 
 @api_router.post("/binti-public")
@@ -2946,6 +2954,7 @@ async def _background_generate_scheme(
     """Background task to generate scheme rows"""
     import json
     import re
+    import httpx
 
     try:
         headers = {
