@@ -3123,53 +3123,118 @@ IMPORTANT:
 - Make activities practical and age-appropriate
 - Return ONLY the JSON array, no other text"""
 
-        # Scale max_tokens based on row count (larger schemes need more tokens)
-        # DeepSeek API max is 8192 tokens
-        max_tokens = 4096 if num_rows <= 20 else 8192
-        
-        payload = {
-            "model": "deepseek-chat",
-            "messages": [
-                {
-                    "role": "system",
-                    "content": system_prompt
-                },
-                {
-                    "role": "user",
-                    "content": prompt
+        # For large row counts (>15), generate in chunks to avoid truncated JSON
+        if num_rows > 15:
+            all_rows = []
+            chunk_size = 12
+            num_chunks = (num_rows + chunk_size - 1) // chunk_size
+            
+            for chunk_idx in range(num_chunks):
+                start_row = chunk_idx * chunk_size + 1
+                end_row = min((chunk_idx + 1) * chunk_size, num_rows)
+                rows_in_chunk = end_row - start_row + 1
+                
+                # Build chunk-specific prompt
+                chunk_context = f"\nThis is batch {chunk_idx + 1} of {num_chunks}. Generate rows for weeks {start_row} to {end_row} ({rows_in_chunk} rows)."
+                if chunk_idx > 0:
+                    # Tell it to continue from where the last chunk ended
+                    last_topic = all_rows[-1].get("main", "") if all_rows else ""
+                    chunk_context += f"\nContinue from the previous topic: '{last_topic[:60]}'. Progress to more advanced topics."
+                
+                chunk_prompt = prompt.replace(
+                    f"Generate EXACTLY {num_rows}",
+                    f"Generate EXACTLY {rows_in_chunk}"
+                ).replace(
+                    f"{num_rows} صفًا",
+                    f"{rows_in_chunk} صفًا"  
+                ) + chunk_context
+                
+                chunk_payload = {
+                    "model": "deepseek-chat",
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": chunk_prompt}
+                    ],
+                    "temperature": 0.7,
+                    "max_tokens": 4096
                 }
-            ],
-            "temperature": 0.7,
-            "max_tokens": max_tokens
-        }
+                
+                async with httpx.AsyncClient(timeout=120.0) as client:
+                    response = await client.post(
+                        "https://api.deepseek.com/v1/chat/completions",
+                        headers=headers,
+                        json=chunk_payload
+                    )
+                    
+                    if response.status_code != 200:
+                        logger.error(f"DeepSeek chunk {chunk_idx+1} error: {response.status_code}")
+                        continue
+                    
+                    data = response.json()
+                    response_text = data["choices"][0]["message"]["content"]
+                    
+                    clean = response_text.strip()
+                    if clean.startswith("```"):
+                        clean = clean.split("\n", 1)[1] if "\n" in clean else clean[3:]
+                        clean = clean.rsplit("```", 1)[0]
+                    clean = clean.strip()
+                    
+                    json_match = re.search(r'\[[\s\S]*\]', clean)
+                    if json_match:
+                        chunk_rows = json.loads(json_match.group())
+                    else:
+                        chunk_rows = json.loads(clean)
+                    
+                    if isinstance(chunk_rows, list):
+                        # Renumber weeks
+                        for j, row in enumerate(chunk_rows):
+                            row_num = start_row + j
+                            if language == 'arabic':
+                                row["week"] = f"الأسبوع {row_num}"
+                            else:
+                                row["week"] = f"Week {row_num}"
+                        all_rows.extend(chunk_rows)
+                
+                logger.info(f"Scheme chunk {chunk_idx+1}/{num_chunks} done: {len(all_rows)} rows so far")
+            
+            rows = all_rows
+        else:
+            # Single call for small row counts
+            payload = {
+                "model": "deepseek-chat",
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": prompt}
+                ],
+                "temperature": 0.7,
+                "max_tokens": 4096
+            }
 
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            response = await client.post(
-                "https://api.deepseek.com/v1/chat/completions",
-                headers=headers,
-                json=payload
-            )
-            
-            if response.status_code != 200:
-                logger.error(f"DeepSeek API error: {response.status_code} - {response.text}")
-                raise HTTPException(status_code=500, detail="AI service failed to generate scheme")
-            
-            data = response.json()
-            response_text = data["choices"][0]["message"]["content"]
-            
-            # Clean the response
-            clean = response_text.strip()
-            if clean.startswith("```"):
-                clean = clean.split("\n", 1)[1] if "\n" in clean else clean[3:]
-                clean = clean.rsplit("```", 1)[0]
-            clean = clean.strip()
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                response = await client.post(
+                    "https://api.deepseek.com/v1/chat/completions",
+                    headers=headers,
+                    json=payload
+                )
+                
+                if response.status_code != 200:
+                    logger.error(f"DeepSeek API error: {response.status_code} - {response.text}")
+                    raise Exception("AI service failed to generate scheme")
+                
+                data = response.json()
+                response_text = data["choices"][0]["message"]["content"]
+                
+                clean = response_text.strip()
+                if clean.startswith("```"):
+                    clean = clean.split("\n", 1)[1] if "\n" in clean else clean[3:]
+                    clean = clean.rsplit("```", 1)[0]
+                clean = clean.strip()
 
-            # Try to extract JSON from the response
-            json_match = re.search(r'\[[\s\S]*\]', clean)
-            if json_match:
-                rows = json.loads(json_match.group())
-            else:
-                rows = json.loads(clean)
+                json_match = re.search(r'\[[\s\S]*\]', clean)
+                if json_match:
+                    rows = json.loads(json_match.group())
+                else:
+                    rows = json.loads(clean)
         if not isinstance(rows, list):
             raise ValueError("Expected JSON array")
 
