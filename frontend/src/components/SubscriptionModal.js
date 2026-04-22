@@ -52,6 +52,7 @@ const SubscriptionModal = ({ isOpen, onClose }) => {
       badge: 'Elite',
       features: [
         'Everything in Premium',
+        'Binti Hamdani+ (AI Test Generator)',
         'Refer & Earn access',
         'Dedicated support',
         'Priority feature requests'

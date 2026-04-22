@@ -75,6 +75,7 @@ const PaymentSettings = () => {
       period: '/month',
       features: [
         'Everything in Premium',
+        'Binti Hamdani+ (AI Test Generator)',
         'Refer & Earn access',
         'Dedicated support',
       ]
@@ -95,11 +96,6 @@ const PaymentSettings = () => {
   };
 
   const handleSubscribeClick = async (planId) => {
-    // Don't process for Master plan since it's "Coming Soon"
-    if (planId === 'master') {
-      return;
-    }
-    
     setSubscribing(planId);
     
     try {
@@ -210,11 +206,6 @@ const PaymentSettings = () => {
                   Current Plan
                 </div>
               ) : plan.id !== 'free' ? (
-                plan.id === 'master' ? (
-                  <div className="w-full py-2.5 bg-gray-100 text-gray-500 rounded-lg font-medium text-center cursor-not-allowed">
-                    Coming Soon
-                  </div>
-                ) : (
                   <button
                     onClick={() => handleSubscribeClick(plan.id)}
                     disabled={subscribing === plan.id}
@@ -227,7 +218,6 @@ const PaymentSettings = () => {
                       <>Upgrade</>
                     )}
                   </button>
-                )
               ) : null}
             </div>
           );
