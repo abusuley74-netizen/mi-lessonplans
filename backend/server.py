@@ -2951,7 +2951,7 @@ async def _background_generate_scheme(
     task_id: str, syllabus: str, subject: str, grade: str, 
     term: str, topics: str, num_rows: int, api_key: str
 ):
-    """Background task to generate scheme rows"""
+    """Background task to generate scheme rows — term-aware with month ranges"""
     import json
     import re
     import httpx
@@ -2962,283 +2962,132 @@ async def _background_generate_scheme(
             'Authorization': f'Bearer {api_key}'
         }
 
-        # Detect language based on subject
         language = detect_language(subject)
         
-        # Language-specific system prompts for scheme generation
+        # Term-to-month mapping
+        term_lower = term.lower().strip() if term else ""
+        if "2" in term_lower or "ii" in term_lower:
+            months_en = "July, August, September, October, November"
+            months_ar = "يوليو، أغسطس، سبتمبر، أكتوبر، نوفمبر"
+            term_label_en = "Term 2 (July - November)"
+            term_label_ar = "الفصل الدراسي الثاني (يوليو - نوفمبر)"
+        else:
+            months_en = "January, February, March, April, May, June"
+            months_ar = "يناير، فبراير، مارس، أبريل، مايو، يونيو"
+            term_label_en = "Term 1 (January - June)"
+            term_label_ar = "الفصل الدراسي الأول (يناير - يونيو)"
+
+        # Topics guidance
+        topics_section_en = ""
+        topics_section_ar = ""
+        if topics.strip():
+            topic_list = [t.strip() for t in topics.strip().split('\n') if t.strip()]
+            topics_section_en = f"\n\nTopics to cover in ORDER across the weeks (distribute evenly):\n" + "\n".join(f"{i+1}. {t}" for i, t in enumerate(topic_list))
+            topics_section_ar = f"\n\nالمواضيع التي يجب تغطيتها بالترتيب عبر الأسابيع (وزعها بالتساوي):\n" + "\n".join(f"{i+1}. {t}" for i, t in enumerate(topic_list))
+
+        # System prompts
         scheme_system_prompts = {
-            'swahili': """Wewe ni mtaalamu wa mipango ya kazi ya Tanzania. Jibu kwa KISWAHILI SANIFU tu. Toa maelezo halisi na mazoezi halisi. Jibu kwa JSON halali tu.""",
-            
-            'arabic': """أنت خبير في تخطيط العمل في تنزانيا. يجب عليك الرد باللغة العربية الفصحى فقط. لا تستخدم أي كلمة إنجليزية مطلقاً. كل المحتوى يجب أن يكون بالعربية بما في ذلك الأنشطة والموارد والتقييم. قدم تفاصيل حقيقية وتمارين عملية. ارجع بصيغة JSON صالحة فقط.""",
-            
-            'french': """Vous êtes un expert en planification du travail en Tanzanie. Répondez uniquement en FRANÇAIS. Fournissez des détails réels et des exercices pratiques. Répondez uniquement avec du JSON valide.""",
-            
-            'english': """You are an expert Tanzanian education curriculum designer specializing in Scheme of Work planning. You know both Zanzibar and Tanzania Mainland syllabus formats deeply. Always respond with valid JSON only."""
+            'swahili': "Wewe ni mtaalamu wa mipango ya kazi ya Tanzania. Jibu kwa KISWAHILI SANIFU tu. Jibu kwa JSON halali tu.",
+            'arabic': "أنت خبير في تخطيط العمل في تنزانيا. يجب عليك الرد باللغة العربية الفصحى فقط. لا تستخدم أي كلمة إنجليزية مطلقاً. ارجع بصيغة JSON صالحة فقط.",
+            'french': "Vous êtes un expert en planification du travail en Tanzanie. Répondez uniquement en FRANÇAIS avec du JSON valide.",
+            'english': "You are an expert Tanzanian education curriculum designer. Always respond with valid JSON only."
         }
-        
         system_prompt = scheme_system_prompts.get(language, scheme_system_prompts['english'])
-        
-        # Build topics guidance section
-        topics_ar = f"\n\nالمواضيع التي يجب تغطيتها بالترتيب:\n{topics}\nيجب أن تغطي الصفوف هذه المواضيع بالتسلسل عبر الأسابيع." if topics.strip() else ""
-        topics_en = f"\n\nTopics/Syllabus Guide (cover these topics in order across the weeks):\n{topics}" if topics.strip() else ""
-        
-        # Generate language-specific content instructions
+
+        # Build the prompt based on language
+        json_template = """[
+  {{
+    "main": "Main Competence",
+    "specific": "Specific Competences",
+    "activities": "Learning Activities",
+    "specificActivities": "Specific Activities",
+    "month": "Month name",
+    "week": "Week N",
+    "periods": "Number of periods",
+    "methods": "Teaching Methods",
+    "resources": "Teaching Resources",
+    "assessment": "Assessment Tools",
+    "references": "References",
+    "remarks": ""
+  }}
+]"""
+
         if language == 'arabic':
-            # For Arabic subjects, generate ALL content in Arabic
-            if syllabus == "Zanzibar":
-                prompt = f"""أنشئ خطة عمل للمنهج الزنجباري:
+            prompt = f"""أنشئ خطة عمل {'للمنهج الزنجباري' if syllabus == 'Zanzibar' else 'لمنهج البر التنزاني'}:
 - المادة: {subject}
 - الصف: {grade}
-- الفصل الدراسي: {term or "الفصل الأول"}
-- عدد الصفوف: {num_rows}{topics_ar}
+- الفصل الدراسي: {term_label_ar}
+- الأشهر: {months_ar}
+- عدد الصفوف المطلوب: {num_rows}{topics_section_ar}
 
-أنشئ بالضبط {num_rows} صفًا من الكفاءات. يمثل كل صف أسبوعًا/موضوعًا في الخطة.
-ارجع بمصفوفة JSON حيث يحتوي كل عنصر على هذه المفاتيح بالضبط:
-[
-  {{
-    "main": "الكفاءة الرئيسية - مجال الكفاءة الواسع",
-    "specific": "الكفاءات المحددة - الكفاءات التفصيلية التي يجب تحقيقها",
-    "activities": "أنشطة التعلم - ما سيفعله الطلاب",
-    "specificActivities": "الأنشطة المحددة - المهام التفصيلية للطلاب",
-    "month": "اسم الشهر (مثال: يناير، فبراير)",
-    "week": "رقم الأسبوع (مثال: الأسبوع 1، الأسبوع 2)",
-    "periods": "عدد الحصص (مثال: 4، 6)",
-    "methods": "طرق التدريس والتعلم (مثال: المناقشة، العمل الجماعي، العرض التوضيحي)",
-    "resources": "موارد التدريس والتعلم (مثال: الكتب المدرسية، الرسوم البيانية، النماذج)",
-    "assessment": "أدوات التقييم (مثال: الأسئلة الشفهية، الاختبار الكتابي، المحفظة)",
-    "references": "المراجع (مثال: صفحة المنهج، فصل الكتاب المدرسي)",
-    "remarks": ""
-  }}
-]
+أنشئ بالضبط {num_rows} صفًا. وزعها على الأشهر ({months_ar}).
+كل صف يمثل أسبوعًا واحدًا. ارجع بمصفوفة JSON بهذه المفاتيح:
+{json_template}
 
 هام:
-- يجب أن يكون المحتوى مناسبًا لمستوى {grade} في تنزانيا
-- التقدم من المواضيع الأبسط إلى الأكثر تعقيدًا عبر الأسابيع
-- استخدم مواضيع المنهج التنزاني الواقعية للمادة {subject}
-- وزع على أشهر الفصل الدراسي بشكل واقعي
-- اجعل الأنشطة عملية ومناسبة للعمر
-- لا تكتب أي كلمة بالإنجليزية. كل المحتوى يجب أن يكون بالعربية فقط
-- ارجع بمصفوفة JSON فقط، بدون أي نص آخر"""
-            else:
-                prompt = f"""أنشئ خطة عمل لمنهج البر التنزاني:
-- المادة: {subject}
-- الصف: {grade}
-- الفصل الدراسي: {term or "الفصل الأول"}
-- عدد الصفوف: {num_rows}{topics_ar}
-
-أنشئ بالضبط {num_rows} صفًا من الكفاءات. يمثل كل صف أسبوعًا/موضوعًا في الخطة.
-ارجع بمصفوفة JSON حيث يحتوي كل عنصر على هذه المفاتيح بالضبط:
-[
-  {{
-    "main": "الكفاءة الرئيسية - مجال الكفاءة الواسع",
-    "specific": "الكفاءة المحددة - الكفاءات التفصيلية",
-    "activities": "النشاط الرئيسي - النشاط التعليمي الرئيسي",
-    "specificActivities": "النشاط المحدد - المهام التفصيلية",
-    "month": "اسم الشهر (مثال: يناير، فبراير)",
-    "week": "الأسبوع (مثال: الأسبوع 1، الأسبوع 2)",
-    "periods": "عدد الحصص (مثال: 4، 6)",
-    "methods": "طرق التدريس والتعلم (مثال: المناقشة، العمل الجماعي، العرض التوضيحي)",
-    "resources": "موارد التدريس والتعلم (مثال: الكتب المدرسية، الرسوم البيانية، النماذج)",
-    "assessment": "أدوات التقييم (مثال: الأسئلة الشفهية، الاختبار الكتابي)",
-    "references": "المراجع (مثال: صفحة المنهج، فصل الكتاب المدرسي)",
-    "remarks": ""
-  }}
-]
-
-هام:
-- يجب أن يكون المحتوى مناسبًا لمستوى {grade} في تنزانيا
-- التقدم من المواضيع الأبسط إلى الأكثر تعقيدًا عبر الأسابيع
-- استخدم مواضيع المنهج التنزاني الواقعية للمادة {subject}
-- وزع على أشهر الفصل الدراسي بشكل واقعي
-- اجعل الأنشطة عملية ومناسبة للعمر
-- لا تكتب أي كلمة بالإنجليزية. كل المحتوى يجب أن يكون بالعربية فقط
-- ارجع بمصفوفة JSON فقط، بدون أي نص آخر"""
+- وزع الصفوف على الأشهر بشكل واقعي (4-5 أسابيع لكل شهر)
+- التقدم من الأبسط إلى الأكثر تعقيدًا
+- لا تكتب أي كلمة بالإنجليزية. كل المحتوى بالعربية فقط
+- ارجع بمصفوفة JSON فقط"""
         else:
-            # For other languages, use the original prompts
-            if syllabus == "Zanzibar":
-                prompt = f"""Generate a Scheme of Work for the ZANZIBAR syllabus:
+            sw_note = "\n- Use Swahili terms where appropriate (Mainland uses bilingual terms)" if syllabus != "Zanzibar" else ""
+            prompt = f"""Generate a Scheme of Work for the {syllabus} syllabus:
 - Subject: {subject}
 - Class: {grade}
-- Term: {term or "Term 1"}
-- Number of rows: {num_rows}{topics_en}
+- Term: {term_label_en}
+- Months: {months_en}
+- Number of rows: {num_rows}{topics_section_en}
 
-Generate EXACTLY {num_rows} competency rows. Each row represents a week/topic in the scheme.
-Return a JSON array where each element has these exact keys:
-[
-  {{
-    "main": "Main Competence - the broad competence area",
-    "specific": "Specific Competences - detailed competences to be achieved",
-    "activities": "Learning Activities - what students will do",
-    "specificActivities": "Specific Activities - detailed student tasks",
-    "month": "Month name (e.g., January, February)",
-    "week": "Week number (e.g., Week 1, Week 2)",
-    "periods": "Number of periods (e.g., 4, 6)",
-    "methods": "Teaching and Learning Methods (e.g., Discussion, Group work, Demonstration)",
-    "resources": "Teaching and Learning Resources (e.g., Textbooks, Charts, Models)",
-    "assessment": "Assessment Tools (e.g., Oral questions, Written test, Portfolio)",
-    "references": "References (e.g., Syllabus page, Textbook chapter)",
-    "remarks": ""
-  }}
-]
+Generate EXACTLY {num_rows} rows. Distribute across the months ({months_en}).
+Each row = 1 week. Return a JSON array with these keys:
+{json_template}
 
 IMPORTANT:
-- Content MUST be appropriate for {grade} level in Tanzania
-- Progress from simpler to more complex topics across weeks
+- Distribute rows across months realistically (4-5 weeks per month)
+- Progress from simpler to more complex topics{sw_note}
 - Use realistic Tanzanian curriculum topics for {subject}
-- Distribute across months of the term realistically
-- Make activities practical and age-appropriate
 - Return ONLY the JSON array, no other text"""
+
+        # Single call — num_rows is capped at ~20 per term so this fits in 4096 tokens
+        payload = {
+            "model": "deepseek-chat",
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": 0.7,
+            "max_tokens": 8192
+        }
+
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(
+                "https://api.deepseek.com/v1/chat/completions",
+                headers=headers,
+                json=payload
+            )
+            
+            if response.status_code != 200:
+                logger.error(f"DeepSeek scheme error: {response.status_code} - {response.text[:200]}")
+                raise Exception("AI service failed")
+            
+            data = response.json()
+            response_text = data["choices"][0]["message"]["content"]
+            
+            clean = response_text.strip()
+            if clean.startswith("```"):
+                clean = clean.split("\n", 1)[1] if "\n" in clean else clean[3:]
+                clean = clean.rsplit("```", 1)[0]
+            clean = clean.strip()
+
+            json_match = re.search(r'\[[\s\S]*\]', clean)
+            if json_match:
+                rows = json.loads(json_match.group())
             else:
-                prompt = f"""Generate a Scheme of Work for the TANZANIA MAINLAND syllabus:
-- Subject: {subject}
-- Class: {grade}
-- Term: {term or "Term 1"}
-- Number of rows: {num_rows}{topics_en}
+                rows = json.loads(clean)
 
-Generate EXACTLY {num_rows} competency rows. Each row represents a week/topic in the scheme.
-Return a JSON array where each element has these exact keys:
-[
-  {{
-    "main": "Umahiri Mkuu (Main Competence) - the broad competence area",
-    "specific": "Umahiri Mahususi (Specific Competence) - detailed competences",
-    "activities": "Shughuli Kuu (Main Activity) - main learning activity",
-    "specificActivities": "Shughuli Mahususi (Specific Activity) - detailed tasks",
-    "month": "Month name (e.g., Januari, Februari)",
-    "week": "Wiki ya (Week number, e.g., Wiki 1, Wiki 2)",
-    "periods": "Number of periods (e.g., 4, 6)",
-    "methods": "Teaching & Learning Methods (e.g., Majadiliano, Kazi ya vikundi, Maonyesho)",
-    "resources": "Teaching & Learning Resources (e.g., Vitabu, Chati, Modeli)",
-    "assessment": "Assessment Tools (e.g., Maswali ya mdomo, Mtihani wa maandishi)",
-    "references": "References (e.g., Mtaala uk., Kitabu sura)",
-    "remarks": ""
-  }}
-]
-
-IMPORTANT:
-- Content MUST be appropriate for {grade} level in Tanzania
-- Use Swahili terms where culturally appropriate (Mainland format uses bilingual terms)
-- Progress from simpler to more complex topics across weeks
-- Use realistic Tanzanian curriculum topics for {subject}
-- Distribute across months of the term realistically
-- Make activities practical and age-appropriate
-- Return ONLY the JSON array, no other text"""
-
-        # For large row counts (>15), generate in chunks to avoid truncated JSON
-        if num_rows > 15:
-            all_rows = []
-            chunk_size = 12
-            num_chunks = (num_rows + chunk_size - 1) // chunk_size
-            
-            for chunk_idx in range(num_chunks):
-                start_row = chunk_idx * chunk_size + 1
-                end_row = min((chunk_idx + 1) * chunk_size, num_rows)
-                rows_in_chunk = end_row - start_row + 1
-                
-                # Build chunk-specific prompt
-                chunk_context = f"\nThis is batch {chunk_idx + 1} of {num_chunks}. Generate rows for weeks {start_row} to {end_row} ({rows_in_chunk} rows)."
-                if chunk_idx > 0:
-                    # Tell it to continue from where the last chunk ended
-                    last_topic = all_rows[-1].get("main", "") if all_rows else ""
-                    chunk_context += f"\nContinue from the previous topic: '{last_topic[:60]}'. Progress to more advanced topics."
-                
-                chunk_prompt = prompt.replace(
-                    f"Generate EXACTLY {num_rows}",
-                    f"Generate EXACTLY {rows_in_chunk}"
-                ).replace(
-                    f"{num_rows} صفًا",
-                    f"{rows_in_chunk} صفًا"  
-                ) + chunk_context
-                
-                chunk_payload = {
-                    "model": "deepseek-chat",
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": chunk_prompt}
-                    ],
-                    "temperature": 0.7,
-                    "max_tokens": 4096
-                }
-                
-                async with httpx.AsyncClient(timeout=120.0) as client:
-                    response = await client.post(
-                        "https://api.deepseek.com/v1/chat/completions",
-                        headers=headers,
-                        json=chunk_payload
-                    )
-                    
-                    if response.status_code != 200:
-                        logger.error(f"DeepSeek chunk {chunk_idx+1} error: {response.status_code}")
-                        continue
-                    
-                    data = response.json()
-                    response_text = data["choices"][0]["message"]["content"]
-                    
-                    clean = response_text.strip()
-                    if clean.startswith("```"):
-                        clean = clean.split("\n", 1)[1] if "\n" in clean else clean[3:]
-                        clean = clean.rsplit("```", 1)[0]
-                    clean = clean.strip()
-                    
-                    json_match = re.search(r'\[[\s\S]*\]', clean)
-                    if json_match:
-                        chunk_rows = json.loads(json_match.group())
-                    else:
-                        chunk_rows = json.loads(clean)
-                    
-                    if isinstance(chunk_rows, list):
-                        # Renumber weeks
-                        for j, row in enumerate(chunk_rows):
-                            row_num = start_row + j
-                            if language == 'arabic':
-                                row["week"] = f"الأسبوع {row_num}"
-                            else:
-                                row["week"] = f"Week {row_num}"
-                        all_rows.extend(chunk_rows)
-                
-                logger.info(f"Scheme chunk {chunk_idx+1}/{num_chunks} done: {len(all_rows)} rows so far")
-            
-            rows = all_rows
-        else:
-            # Single call for small row counts
-            payload = {
-                "model": "deepseek-chat",
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": prompt}
-                ],
-                "temperature": 0.7,
-                "max_tokens": 4096
-            }
-
-            async with httpx.AsyncClient(timeout=120.0) as client:
-                response = await client.post(
-                    "https://api.deepseek.com/v1/chat/completions",
-                    headers=headers,
-                    json=payload
-                )
-                
-                if response.status_code != 200:
-                    logger.error(f"DeepSeek API error: {response.status_code} - {response.text}")
-                    raise Exception("AI service failed to generate scheme")
-                
-                data = response.json()
-                response_text = data["choices"][0]["message"]["content"]
-                
-                clean = response_text.strip()
-                if clean.startswith("```"):
-                    clean = clean.split("\n", 1)[1] if "\n" in clean else clean[3:]
-                    clean = clean.rsplit("```", 1)[0]
-                clean = clean.strip()
-
-                json_match = re.search(r'\[[\s\S]*\]', clean)
-                if json_match:
-                    rows = json.loads(json_match.group())
-                else:
-                    rows = json.loads(clean)
         if not isinstance(rows, list):
             raise ValueError("Expected JSON array")
 
-        # Ensure all rows have required keys
         required_keys = ["main", "specific", "activities", "specificActivities", "month", "week", "periods", "methods", "resources", "assessment", "references", "remarks"]
         sanitized = []
         for row in rows[:num_rows]:
@@ -3247,7 +3096,6 @@ IMPORTANT:
                 sanitized_row[k] = str(row.get(k, "")).strip()
             sanitized.append(sanitized_row)
 
-        # Save result to task
         await db.scheme_tasks.update_one(
             {"task_id": task_id},
             {"$set": {
