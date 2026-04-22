@@ -71,12 +71,12 @@ const SchemeOfWorkForm = () => {
   const [fillingRows, setFillingRows] = useState(new Set());
   const [savedMsg, setSavedMsg] = useState('');
   const [savedSchemeId, setSavedSchemeId] = useState(null);
-  const [numRows, setNumRows] = useState(35);
+  const [numRows] = useState(25);
   const [topics, setTopics] = useState('');
   const [formData, setFormData] = useState({
     school: '', teacher: '', subject: '',
     year: new Date().getFullYear(), term: '', class: '',
-    competencies: Array(35).fill(null).map(() => makeEmptyRow())
+    competencies: Array(25).fill(null).map(() => makeEmptyRow())
   });
   const [currentPage, setCurrentPage] = useState(0);
   const rowsPerPage = 15;
@@ -484,16 +484,7 @@ const SchemeOfWorkForm = () => {
       <div className="ai-generate-bar" data-testid="scheme-ai-bar">
         <div className="ai-bar-left">
           <Sparkles className="ai-icon" />
-          <span className="ai-label">AI Auto-Fill</span>
-          <div className="ai-rows-selector">
-            <label>Rows:</label>
-            <select value={numRows} onChange={(e) => setNumRows(parseInt(e.target.value))}
-              disabled={generating} data-testid="scheme-num-rows">
-              {[20, 25, 30, 35, 40, 45, 50, 55, 60].map(n => (
-                <option key={n} value={n}>{n}</option>
-              ))}
-            </select>
-          </div>
+          <span className="ai-label">AI Auto-Fill (25 rows)</span>
         </div>
         <button
           onClick={handleAIGenerate}
