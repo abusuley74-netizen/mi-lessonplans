@@ -1864,6 +1864,7 @@ If the user's message is casual chat (not asking for a test), respond conversati
     await db.binti_plus_tasks.insert_one({
         "task_id": task_id,
         "user_id": user.user_id,
+        "syllabus": syllabus,
         "status": "generating",
         "created_at": datetime.now(timezone.utc).isoformat()
     })
@@ -1925,6 +1926,30 @@ async def _background_binti_plus(task_id: str, api_key: str, messages: list):
             }
             if test_html:
                 update["test_content"] = test_html
+                
+                # Auto-save test to tests collection for My Files
+                # Extract title from the user's last message
+                user_msg = ""
+                for m in reversed(messages):
+                    if m["role"] == "user":
+                        user_msg = m["content"]
+                        break
+                
+                # Get user_id from the task doc
+                task_doc = await db.binti_plus_tasks.find_one({"task_id": task_id}, {"_id": 0, "user_id": 1, "syllabus": 1})
+                if task_doc:
+                    test_id = f"test_{uuid.uuid4().hex[:12]}"
+                    test_doc = {
+                        "test_id": test_id,
+                        "user_id": task_doc["user_id"],
+                        "title": user_msg[:100] if user_msg else "Generated Test",
+                        "syllabus": task_doc.get("syllabus", "Tanzania Mainland"),
+                        "content_html": test_html,
+                        "created_at": datetime.now(timezone.utc).isoformat(),
+                    }
+                    await db.tests.insert_one(test_doc)
+                    update["test_id"] = test_id
+                    logger.info(f"Test auto-saved: {test_id}")
 
             await db.binti_plus_tasks.update_one(
                 {"task_id": task_id},
@@ -1941,6 +1966,77 @@ async def _background_binti_plus(task_id: str, api_key: str, messages: list):
 
 
 # Binti Hamdani AI Chat Assistant
+
+# ==================== TESTS (My Files) ====================
+
+@api_router.get("/tests")
+async def get_tests(user: User = Depends(get_current_user)):
+    """List all saved tests for the user"""
+    tests = await db.tests.find(
+        {"user_id": user.user_id},
+        {"_id": 0, "content_html": 0}
+    ).sort("created_at", -1).to_list(100)
+    return {"tests": tests}
+
+
+@api_router.get("/tests/{test_id}/view")
+async def view_test(test_id: str, user: User = Depends(get_current_user)):
+    """View test HTML content"""
+    test = await db.tests.find_one(
+        {"test_id": test_id, "user_id": user.user_id},
+        {"_id": 0}
+    )
+    if not test:
+        raise HTTPException(status_code=404, detail="Test not found")
+    return Response(content=test.get("content_html", ""), media_type="text/html")
+
+
+@api_router.get("/tests/{test_id}/export")
+async def export_test_pdf(test_id: str, user: User = Depends(get_current_user)):
+    """Export test as PDF"""
+    test = await db.tests.find_one(
+        {"test_id": test_id, "user_id": user.user_id},
+        {"_id": 0}
+    )
+    if not test:
+        raise HTTPException(status_code=404, detail="Test not found")
+    
+    html = test.get("content_html", "")
+    full_html = f"""<!DOCTYPE html><html><head>
+        <style>
+            body {{ font-family: 'Times New Roman', serif; font-size: 12pt; line-height: 1.6; margin: 2cm; color: #000; }}
+            h1 {{ text-align: center; font-size: 14pt; text-transform: uppercase; }}
+            h2 {{ text-align: center; font-size: 13pt; }}
+            h3 {{ font-size: 12pt; font-weight: bold; text-transform: uppercase; margin-top: 16px; }}
+            table {{ width: 100%; border-collapse: collapse; }}
+            th, td {{ border: 1px solid #000; padding: 4px 8px; font-size: 11pt; }}
+            @page {{ size: A4; margin: 2cm; }}
+        </style>
+    </head><body>{html}</body></html>"""
+    
+    try:
+        from weasyprint import HTML
+        pdf_bytes = HTML(string=full_html).write_pdf()
+        title = test.get("title", "test")[:50].replace(" ", "_")
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": safe_content_disposition(f"{title}.pdf")}
+        )
+    except Exception as e:
+        logger.error(f"Test PDF export error: {e}")
+        raise HTTPException(status_code=500, detail="PDF generation failed")
+
+
+@api_router.delete("/tests/{test_id}")
+async def delete_test(test_id: str, user: User = Depends(get_current_user)):
+    """Delete a saved test"""
+    result = await db.tests.delete_one({"test_id": test_id, "user_id": user.user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Test not found")
+    return {"message": "Test deleted"}
+
+
 class BintiChatRequest(BaseModel):
     message: str
     context: Optional[Dict[str, Any]] = None

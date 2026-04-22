@@ -6,7 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import './BintiHamdaniPlus.css';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
-const BINTI_ICON = 'https://customer-assets.emergentagent.com/job_mi-learning-hub/artifacts/7qqip1h1_binti%20hamdani.avif';
+const BINTI_ICON = 'https://customer-assets.emergentagent.com/job_mi-learning-hub/artifacts/3d06zcsy_binti%20og.webp';
 
 const SUBJECTS_MAINLAND = [
   'English Language', 'Kiswahili', 'Mathematics', 'Biology', 'Chemistry', 'Physics',

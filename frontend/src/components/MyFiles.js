@@ -62,6 +62,7 @@ const MyFiles = () => {
   const [uploads, setUploads] = useState([]);
   const [schemes, setSchemes] = useState([]);
   const [templates, setTemplates] = useState([]);
+  const [tests, setTests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
@@ -78,21 +79,22 @@ const MyFiles = () => {
 
   const fetchAllFiles = useCallback(async () => {
     try {
-      const [lessonsRes, notesRes, dictationsRes, uploadsRes, schemesRes, templatesRes] = await Promise.all([
+      const [lessonsRes, notesRes, dictationsRes, uploadsRes, schemesRes, templatesRes, testsRes] = await Promise.all([
         axios.get(`${API_URL}/api/lessons`),
         axios.get(`${API_URL}/api/notes`),
         axios.get(`${API_URL}/api/dictations`),
         axios.get(`${API_URL}/api/uploads`),
         axios.get(`${API_URL}/api/schemes`),
         axios.get(`${API_URL}/api/templates`),
+        axios.get(`${API_URL}/api/tests`),
       ]);
       setLessons(lessonsRes.data.lessons || []);
       setNotes(notesRes.data.notes || []);
       setDictations(dictationsRes.data.dictations || []);
       setUploads(uploadsRes.data.uploads || []);
       setSchemes(schemesRes.data.schemes || []);
-      // Only show user-saved templates (not defaults)
       setTemplates((templatesRes.data.templates || []).filter(t => !t.is_default));
+      setTests(testsRes.data.tests || []);
     } catch (error) {
       console.error('Error fetching files:', error);
     } finally {
@@ -157,6 +159,14 @@ const MyFiles = () => {
     setConfirmDelete(null);
   };
 
+  const handleDeleteTest = async (testId) => {
+    try {
+      await axios.delete(`${API_URL}/api/tests/${testId}`);
+      setTests(tests.filter(t => t.test_id !== testId));
+    } catch (error) { console.error('Error deleting test:', error); }
+    setConfirmDelete(null);
+  };
+
   const executeDelete = () => {
     if (!confirmDelete) return;
     const { type, id } = confirmDelete;
@@ -166,6 +176,7 @@ const MyFiles = () => {
     else if (type === 'upload') handleDeleteUpload(id);
     else if (type === 'scheme') handleDeleteScheme(id);
     else if (type === 'template') handleDeleteTemplate(id);
+    else if (type === 'test') handleDeleteTest(id);
   };
 
   const handlePlayDictation = async (dictation) => {
@@ -343,9 +354,10 @@ const MyFiles = () => {
     ...uploads.map(u => ({ ...u, _type: 'upload', _name: u.name, _date: u.created_at })),
     ...schemes.map(s => ({ ...s, _type: 'scheme', _name: `${s.subject || 'Scheme'} - ${s.syllabus}`, _date: s.created_at })),
     ...templates.map(t => ({ ...t, _type: 'template', _name: t.name || t.content?.title || 'Template', _date: t.updated_at || t.created_at })),
+    ...tests.map(t => ({ ...t, _type: 'test', _name: t.title || 'Exam Paper', _date: t.created_at })),
   ].filter(file => {
     const matchesSearch = (file._name || '').toLowerCase().includes(searchTerm.toLowerCase());
-    const typeMap = { lessons: 'lesson', notes: 'note', dictations: 'dictation', uploads: 'upload', schemes: 'scheme', templates: 'template' };
+    const typeMap = { lessons: 'lesson', notes: 'note', dictations: 'dictation', uploads: 'upload', schemes: 'scheme', templates: 'template', tests: 'test' };
     const matchesType = filterType === 'all' || file._type === (typeMap[filterType] || filterType);
     return matchesSearch && matchesType;
   }).sort((a, b) => new Date(b._date) - new Date(a._date));
@@ -548,6 +560,40 @@ const MyFiles = () => {
       );
     }
 
+    // Test / Exam Paper
+    if (file._type === 'test') {
+      return (
+        <div key={file.test_id} className="bg-white border border-[#E4DFD5] rounded-xl p-5 hover:shadow-lg transition-shadow overflow-hidden" data-testid={`file-test-${file.test_id}`}>
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <FileText className="w-4 h-4 text-[#8B5CF6] flex-shrink-0" />
+              <span className="text-xs px-2.5 py-1 rounded-full font-medium bg-purple-100 text-purple-700 flex-shrink-0">Exam</span>
+              <span className="text-xs text-[#7A8A76] truncate">{file.syllabus}</span>
+            </div>
+            <button onClick={() => setConfirmDelete({ type: 'test', id: file.test_id, name: file.title })} className="text-[#7A8A76] hover:text-[#D95D39] flex-shrink-0"><Trash2 className="w-4 h-4" /></button>
+          </div>
+          <h3 className="font-heading font-semibold text-[#1A2E16] mb-2 line-clamp-2">{file.title}</h3>
+          <div className="pt-3 border-t border-[#E4DFD5]">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-[#7A8A76] flex-shrink-0">{new Date(file.created_at).toLocaleDateString()}</span>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button onClick={() => fetchAndView(`${API_URL}/api/tests/${file.test_id}/view`, setViewHtml)} className="flex items-center gap-1 text-xs text-[#2D5A27] font-medium hover:text-[#21441C]" data-testid={`view-test-${file.test_id}`}>
+                  <Eye className="w-3.5 h-3.5" />View
+                </button>
+                <button onClick={() => fetchAndDownload(`${API_URL}/api/tests/${file.test_id}/export`, `${(file.title || 'exam').substring(0,30)}.pdf`, `test-${file.test_id}`, setDownloadingFiles)} className="flex items-center gap-1 text-xs text-[#8E44AD] font-medium hover:text-[#6C3483] disabled:opacity-50" data-testid={`download-test-${file.test_id}`} disabled={downloadingFiles[`test-${file.test_id}`]}>
+                  {downloadingFiles[`test-${file.test_id}`] ? (
+                    <><div className="w-3.5 h-3.5 border-2 border-[#8E44AD] border-t-transparent rounded-full animate-spin" />Loading</>
+                  ) : (
+                    <><Download className="w-3.5 h-3.5" />PDF</>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     // Scheme of Work
     return (
       <div key={file.scheme_id} className="bg-white border border-[#E4DFD5] rounded-xl p-5 hover:shadow-lg transition-shadow overflow-hidden" data-testid={`file-scheme-${file.scheme_id}`}>
@@ -597,7 +643,7 @@ const MyFiles = () => {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-6 gap-4 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-4 mb-6">
         <div className="bg-white border border-[#E4DFD5] rounded-xl p-4" data-testid="stat-lessons">
           <p className="text-2xl font-bold text-[#1A2E16]">{lessons.length}</p>
           <p className="text-sm text-[#7A8A76]">Lesson Plans</p>
@@ -605,6 +651,10 @@ const MyFiles = () => {
         <div className="bg-white border border-[#E4DFD5] rounded-xl p-4" data-testid="stat-schemes">
           <p className="text-2xl font-bold text-[#1A2E16]">{schemes.length}</p>
           <p className="text-sm text-[#7A8A76]">Schemes</p>
+        </div>
+        <div className="bg-white border border-[#E4DFD5] rounded-xl p-4" data-testid="stat-tests">
+          <p className="text-2xl font-bold text-[#8B5CF6]">{tests.length}</p>
+          <p className="text-sm text-[#7A8A76]">Exams</p>
         </div>
         <div className="bg-white border border-[#E4DFD5] rounded-xl p-4" data-testid="stat-notes">
           <p className="text-2xl font-bold text-[#1A2E16]">{notes.length}</p>
@@ -639,6 +689,7 @@ const MyFiles = () => {
           <option value="notes">Notes</option>
           <option value="dictations">Dictations</option>
           <option value="templates">Templates</option>
+          <option value="tests">Exams</option>
           <option value="uploads">Uploads</option>
         </select>
       </div>
