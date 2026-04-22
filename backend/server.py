@@ -1036,7 +1036,7 @@ PLAN_FEATURES = {
     "free": {"my-files", "profile-settings", "payment-settings", "my-activities"},
     "basic": {"my-files", "profile-settings", "payment-settings", "my-activities", "create-notes", "shared-links"},
     "premium": {"my-files", "profile-settings", "payment-settings", "my-activities", "create-notes", "shared-links", "upload-materials", "scheme-of-work", "templates", "dictation"},
-    "master": {"my-files", "profile-settings", "payment-settings", "my-activities", "create-notes", "shared-links", "upload-materials", "scheme-of-work", "templates", "dictation", "refer-and-earn"},
+    "master": {"my-files", "profile-settings", "payment-settings", "my-activities", "create-notes", "shared-links", "upload-materials", "scheme-of-work", "templates", "dictation", "refer-and-earn", "binti-plus"},
 }
 
 def _get_user_plan(user_doc: dict) -> str:
@@ -1730,6 +1730,215 @@ async def get_lesson_status(lesson_id: str, user: User = Depends(get_current_use
     if not lesson:
         raise HTTPException(status_code=404, detail="Lesson not found")
     return lesson
+
+# ==================== BINTI HAMDANI+ (Test Generator - Master Plan) ====================
+
+class BintiPlusRequest(BaseModel):
+    message: str
+    syllabus: Optional[str] = "Tanzania Mainland"
+    conversation_history: Optional[List[Dict[str, str]]] = None
+
+
+NECTA_EXAM_FORMATS = """
+NECTA CSEE STANDARD EXAM FORMAT (effective 2023):
+- 1 paper, 3 hours, 100 marks total
+- Section A: Q1 = 10 multiple-choice items (1 mark each = 10 marks), Q2 = 6 matching items (1 mark each = 6 marks). Total: 16 marks. ALL compulsory.
+- Section B: 6 short-answer questions, 9 marks each = 54 marks. ALL compulsory.
+- Section C: 3 essay questions, answer 2, 15 marks each = 30 marks.
+
+NECTA PSLE (Standard 7) FORMAT:
+- Sections A, B, C. Total 45-50 questions.
+- Section A: Multiple choice (shade answer sheet with HB pencil)
+- Section B: Fill in blanks / short answers
+- Section C: Essay / composition
+- Time: 1:30 to 2 hours depending on subject
+- Marks: 50 total typically
+
+FONT & LAYOUT RULES (follow exactly):
+- Font: Times New Roman, 12pt body
+- Header: School name centered, bold, UPPERCASE, 14pt
+- Sub-header: Subject, Class, Term, Date, Time, Total Marks - centered, 13pt
+- Instructions box: bordered, italic
+- Section headers: BOLD, UPPERCASE, underlined
+- Questions numbered: 1, 2, 3...  Sub-questions: (a), (b), (c)...
+- Mark allocation shown in brackets at end: (5 marks)
+- Line spacing: 1.5
+- Margins: 2cm all sides
+"""
+
+ZEC_EXAM_FORMATS = """
+ZEC (Zanzibar) EXAM FORMAT:
+- Similar structure to NECTA but follows Zanzibar Ministry of Education guidelines
+- Papers follow BMZ (Baraza la Mitihani Zanzibar) format
+- Section A: Objective questions (multiple choice, matching, true/false)
+- Section B: Short answer / structured questions
+- Section C: Essay questions
+- For Arabic/Islamic subjects: Questions in Arabic script
+- For primary (Std 4, 7): Simpler format, fewer sections
+- Total marks: Usually 40-100 depending on level
+
+FONT & LAYOUT RULES (follow exactly):
+- Font: Times New Roman, 12pt body
+- Header: ZANZIBAR EXAMINATIONS COUNCIL (or school name), centered, bold, 14pt
+- Sub-header: Subject, Form/Standard, Term, Date, Time allowed
+- Instructions in Swahili and English for bilingual papers
+- For Arabic subjects: Right-to-left layout
+"""
+
+
+@api_router.post("/binti-plus/generate")
+async def binti_plus_generate(request: BintiPlusRequest, background_tasks: BackgroundTasks, user: User = Depends(get_current_user)):
+    """Binti Hamdani+ - AI Test Generator (Master Plan only)"""
+    # For now, allow demo access (remove restriction for preview testing)
+    # In production, uncomment: 
+    # if user.subscription_plan not in ['master', 'professional']:
+    #     raise HTTPException(status_code=403, detail="Binti Hamdani+ is for Master Plan subscribers only")
+
+    api_key = os.environ.get("DEEPSEEK_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="AI not configured")
+
+    syllabus = request.syllabus or "Tanzania Mainland"
+    history = request.conversation_history or []
+    exam_format = NECTA_EXAM_FORMATS if "Mainland" in syllabus else ZEC_EXAM_FORMATS
+
+    system_prompt = f"""You are Binti Hamdani+, an advanced Tanzanian exam paper creator. You create COMPLETE, PRINT-READY examination papers following official formats.
+
+PERSONALITY:
+- You respond in Swahili when spoken to in Swahili, English when spoken in English.
+- You understand Swahili jokes, compliments, and insults. If insulted, respond calmly with humor like "Hehe Mwalimu, maneno mazuri lakini tufanye kazi kwanza!" If complimented, say "Asante Mwalimu! Sasa tuandike mtihani mzuri."
+- You make light jokes but always steer back to test generation.
+- You call users "Mwalimu" (teacher).
+
+EXAM FORMAT KNOWLEDGE:
+{exam_format}
+
+OUTPUT FORMAT:
+When generating a test, return TWO parts separated by ===TEST_CONTENT===:
+1. First part: A brief conversational message to Mwalimu (2-3 sentences)
+2. After the separator: The COMPLETE exam paper in clean HTML format
+
+The HTML exam paper MUST follow this EXACT structure:
+<h1>[SCHOOL NAME / INSTITUTION]</h1>
+<h2>[SUBJECT] - [CLASS/FORM]</h2>
+<p style="text-align:center">[Term] Examination [Year]</p>
+<p style="text-align:center">Time: [X] Hours &nbsp;&nbsp;&nbsp; Total Marks: [X]</p>
+<hr/>
+<div style="border:1px solid #000;padding:10px;margin:12px 0;font-style:italic">
+<strong>Instructions:</strong><br/>
+1. This paper consists of sections A, B and C.<br/>
+2. Answer ALL questions in sections A and B, and TWO questions from section C.<br/>
+3. Write your answers in the spaces provided.<br/>
+4. Cellular phones and unauthorized materials are NOT allowed.
+</div>
+
+<h3>SECTION A (X Marks)</h3>
+... questions with proper numbering, sub-questions (a)(b)(c), mark allocations ...
+
+<h3>SECTION B (X Marks)</h3>
+... short answer questions ...
+
+<h3>SECTION C (X Marks)</h3>
+... essay questions ...
+
+CRITICAL RULES:
+- Use Times New Roman styling throughout
+- Every question MUST have marks shown: (X marks)
+- Section marks must add up to the total
+- Questions must be curriculum-appropriate for the level
+- For Kiswahili papers: write questions in Kiswahili
+- For Arabic papers: write in Arabic script
+- Make questions challenging but fair, matching NECTA/ZEC difficulty
+- Include variety: recall, understanding, application, analysis questions
+- For Science/Math: include diagrams described in text, calculations, formulas
+
+If the user's message is casual chat (not asking for a test), respond conversationally but remind them about test generation."""
+
+    messages = [{"role": "system", "content": system_prompt}]
+    for msg in history[-10:]:
+        role = "assistant" if msg.get("role") == "binti" else "user"
+        messages.append({"role": role, "content": msg.get("text", "")})
+    messages.append({"role": "user", "content": request.message})
+
+    task_id = f"bplus_{uuid.uuid4().hex[:12]}"
+    await db.binti_plus_tasks.insert_one({
+        "task_id": task_id,
+        "user_id": user.user_id,
+        "status": "generating",
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+
+    background_tasks.add_task(_background_binti_plus, task_id, api_key, messages)
+    return {"task_id": task_id, "status": "generating"}
+
+
+@api_router.get("/binti-plus/{task_id}/status")
+async def get_binti_plus_status(task_id: str, user: User = Depends(get_current_user)):
+    """Poll Binti Hamdani+ task status"""
+    task = await db.binti_plus_tasks.find_one(
+        {"task_id": task_id, "user_id": user.user_id},
+        {"_id": 0}
+    )
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return task
+
+
+async def _background_binti_plus(task_id: str, api_key: str, messages: list):
+    """Background task for Binti+ test generation"""
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            resp = await client.post(
+                "https://api.deepseek.com/v1/chat/completions",
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                json={"model": "deepseek-chat", "messages": messages, "temperature": 0.7, "max_tokens": 8192}
+            )
+            if resp.status_code != 200:
+                logger.error(f"Binti+ DeepSeek error: {resp.status_code}")
+                await db.binti_plus_tasks.update_one(
+                    {"task_id": task_id},
+                    {"$set": {"status": "failed", "error": "AI service error"}}
+                )
+                return
+
+            data = resp.json()
+            reply = data["choices"][0]["message"]["content"]
+
+            # Split response into message and test content
+            if "===TEST_CONTENT===" in reply:
+                parts = reply.split("===TEST_CONTENT===", 1)
+                message = parts[0].strip()
+                test_html = parts[1].strip()
+                # Clean markdown code fences if present
+                if test_html.startswith("```"):
+                    test_html = test_html.split("\n", 1)[1] if "\n" in test_html else test_html[3:]
+                    test_html = test_html.rsplit("```", 1)[0]
+                test_html = test_html.strip()
+            else:
+                message = reply
+                test_html = None
+
+            update = {
+                "status": "complete",
+                "message": message,
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }
+            if test_html:
+                update["test_content"] = test_html
+
+            await db.binti_plus_tasks.update_one(
+                {"task_id": task_id},
+                {"$set": update}
+            )
+            logger.info(f"Binti+ generation complete: {task_id}")
+
+    except Exception as e:
+        logger.error(f"Binti+ background error: {e}")
+        await db.binti_plus_tasks.update_one(
+            {"task_id": task_id},
+            {"$set": {"status": "failed", "error": str(e)}}
+        )
+
 
 # Binti Hamdani AI Chat Assistant
 class BintiChatRequest(BaseModel):

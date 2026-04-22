@@ -20,6 +20,7 @@ import SchemeOfWorkForm from '../components/SchemeOfWorkForm';
 import Templates from '../components/Templates';
 import MySharedLinks from '../components/MySharedLinks';
 import TeacherReferAndEarn from '../components/TeacherReferAndEarn';
+import BintiHamdaniPlus from '../components/BintiHamdaniPlus';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -63,6 +64,7 @@ const MyHub = () => {
     { id: 'my-files', label: 'My Files', icon: FolderOpen },
     { id: 'shared-links', label: 'Shared Links', icon: Link2 },
     { id: 'scheme-of-work', label: 'Scheme of Work', icon: Calendar },
+    { id: 'binti-plus', label: 'Binti Hamdani+', icon: Crown },
     { id: 'refer-and-earn', label: 'Refer & Earn', icon: Gift },
     { id: 'my-activities', label: 'My Activities', icon: BarChart3 },
     { id: 'payment-settings', label: 'Payment Settings', icon: CreditCard },
@@ -89,6 +91,7 @@ const MyHub = () => {
       case 'payment-settings': return <PaymentSettings />;
       case 'profile-settings': return <ProfileSettings />;
       case 'scheme-of-work': return <SchemeOfWorkForm />;
+      case 'binti-plus': return <BintiHamdaniPlus />;
       case 'templates': return <Templates />;
       case 'refer-and-earn': return <TeacherReferAndEarn currentUser={user} />;
       default: return <MyFiles />;

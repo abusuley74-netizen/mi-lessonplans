@@ -1,0 +1,481 @@
+/* ============ Binti Hamdani+ Full Page ============ */
+.binti-plus-container {
+  display: grid;
+  grid-template-columns: 420px 1fr;
+  height: calc(100vh - 70px);
+  background: #f8f6f1;
+  gap: 0;
+}
+
+/* ---- Chat Panel ---- */
+.binti-plus-chat {
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border-right: 1px solid #e4dfd5;
+  overflow: hidden;
+}
+
+.binti-plus-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: linear-gradient(135deg, #1A2E16 0%, #2D5A27 100%);
+  flex-shrink: 0;
+}
+
+.binti-plus-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid rgba(255,255,255,0.3);
+  flex-shrink: 0;
+  background: #fff;
+}
+
+.binti-plus-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.binti-plus-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.binti-plus-title h2 {
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.binti-plus-badge {
+  display: inline-block;
+  background: #FFD700;
+  color: #1A2E16;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 8px;
+  border-radius: 10px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.binti-plus-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.binti-plus-syllabus-select {
+  background: rgba(255,255,255,0.15);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.25);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  outline: none;
+}
+
+.binti-plus-syllabus-select option {
+  background: #1A2E16;
+  color: #fff;
+}
+
+.binti-plus-clear {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.7);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.binti-plus-clear:hover {
+  background: rgba(255,255,255,0.1);
+  color: #fff;
+}
+
+/* Quick Subjects */
+.binti-plus-subjects {
+  display: flex;
+  gap: 6px;
+  padding: 8px 12px;
+  overflow-x: auto;
+  flex-shrink: 0;
+  border-bottom: 1px solid #f0ede6;
+}
+
+.binti-plus-subjects::-webkit-scrollbar { height: 3px; }
+.binti-plus-subjects::-webkit-scrollbar-thumb { background: #d4cfc4; border-radius: 3px; }
+
+.binti-subject-chip {
+  white-space: nowrap;
+  background: #f5f2eb;
+  color: #4a5b46;
+  border: 1px solid #e4dfd5;
+  border-radius: 14px;
+  padding: 3px 10px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.binti-subject-chip:hover {
+  background: #2D5A27;
+  color: #fff;
+  border-color: #2D5A27;
+}
+
+/* Messages */
+.binti-plus-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.binti-msg {
+  display: flex;
+  gap: 8px;
+  max-width: 95%;
+}
+
+.binti-msg-user {
+  align-self: flex-end;
+  flex-direction: row-reverse;
+}
+
+.binti-msg-binti {
+  align-self: flex-start;
+}
+
+.binti-msg-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: #f5f2eb;
+  border: 1px solid #e4dfd5;
+}
+
+.binti-msg-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.binti-bubble-user {
+  background: #2D5A27;
+  color: #fff;
+  border-radius: 16px 16px 4px 16px;
+  padding: 10px 14px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.binti-bubble-user p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.binti-bubble-binti {
+  background: #f8f6f1;
+  color: #1A2E16;
+  border-radius: 16px 16px 16px 4px;
+  padding: 10px 14px;
+  font-size: 13px;
+  line-height: 1.6;
+  border: 1px solid #ece8df;
+}
+
+.binti-bubble-binti strong {
+  color: #2D5A27;
+}
+
+/* Input Area */
+.binti-plus-input-area {
+  padding: 10px 12px;
+  border-top: 1px solid #e4dfd5;
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  flex-shrink: 0;
+  background: #fff;
+}
+
+.binti-plus-input {
+  flex: 1;
+  resize: none;
+  border: 1px solid #e4dfd5;
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-family: inherit;
+  line-height: 1.4;
+  outline: none;
+  min-height: 44px;
+  max-height: 100px;
+  transition: border-color 0.2s;
+}
+
+.binti-plus-input:focus {
+  border-color: #2D5A27;
+  box-shadow: 0 0 0 3px rgba(45,90,39,0.08);
+}
+
+.binti-plus-send {
+  width: 44px;
+  height: 44px;
+  background: #2D5A27;
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.2s;
+}
+
+.binti-plus-send:hover:not(:disabled) {
+  background: #21441C;
+  transform: scale(1.05);
+}
+
+.binti-plus-send:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ---- Preview Panel ---- */
+.binti-plus-preview {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #eceae4;
+}
+
+.binti-preview-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px;
+  background: #fff;
+  border-bottom: 1px solid #e4dfd5;
+  flex-shrink: 0;
+}
+
+.binti-preview-toolbar h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #1A2E16;
+  margin: 0;
+}
+
+.binti-preview-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.binti-preview-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  background: #2D5A27;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.binti-preview-btn:hover {
+  background: #21441C;
+}
+
+/* Paper */
+.binti-preview-paper {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+  display: flex;
+  justify-content: center;
+}
+
+.binti-preview-paper > div {
+  background: #fff;
+  width: 100%;
+  max-width: 800px;
+  padding: 40px 48px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+  border-radius: 4px;
+  font-family: 'Times New Roman', Times, serif;
+  font-size: 12pt;
+  line-height: 1.7;
+  color: #000;
+}
+
+.binti-preview-paper h1 {
+  text-align: center;
+  font-size: 14pt;
+  text-transform: uppercase;
+  margin: 0 0 2px;
+  font-weight: 700;
+}
+
+.binti-preview-paper h2 {
+  text-align: center;
+  font-size: 13pt;
+  margin: 0 0 2px;
+  font-weight: 700;
+}
+
+.binti-preview-paper h3 {
+  font-size: 12pt;
+  font-weight: 700;
+  text-transform: uppercase;
+  margin: 16px 0 8px;
+  border-bottom: 1px solid #ccc;
+  padding-bottom: 4px;
+}
+
+.binti-preview-paper p {
+  margin: 6px 0;
+}
+
+.binti-preview-paper ol, .binti-preview-paper ul {
+  margin-left: 24px;
+}
+
+.binti-preview-paper li {
+  margin-bottom: 8px;
+}
+
+.binti-preview-paper hr {
+  border: none;
+  border-top: 2px solid #000;
+  margin: 16px 0;
+}
+
+.binti-preview-paper table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0;
+}
+
+.binti-preview-paper th, .binti-preview-paper td {
+  border: 1px solid #000;
+  padding: 4px 8px;
+  text-align: left;
+  font-size: 11pt;
+}
+
+/* Empty State */
+.binti-preview-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  text-align: center;
+}
+
+.binti-empty-icon {
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  object-fit: cover;
+  opacity: 0.3;
+  margin-bottom: 20px;
+  filter: grayscale(100%);
+}
+
+.binti-preview-empty h3 {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1A2E16;
+  margin: 0 0 8px;
+}
+
+.binti-preview-empty p {
+  font-size: 13px;
+  color: #7a8a76;
+  max-width: 380px;
+  line-height: 1.5;
+  margin: 0 0 20px;
+}
+
+.binti-empty-examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+.binti-empty-examples button {
+  background: #fff;
+  border: 1px solid #d4cfc4;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 12px;
+  color: #2D5A27;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-weight: 500;
+}
+
+.binti-empty-examples button:hover {
+  background: #2D5A27;
+  color: #fff;
+  border-color: #2D5A27;
+}
+
+/* ---- Responsive ---- */
+@media (max-width: 900px) {
+  .binti-plus-container {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr auto;
+  }
+  .binti-plus-preview {
+    display: none;
+  }
+  .binti-plus-container.show-preview .binti-plus-chat {
+    display: none;
+  }
+  .binti-plus-container.show-preview .binti-plus-preview {
+    display: flex;
+  }
+}
+
+@media (max-width: 480px) {
+  .binti-plus-header {
+    padding: 10px 12px;
+  }
+  .binti-plus-avatar {
+    width: 36px;
+    height: 36px;
+  }
+  .binti-plus-title h2 {
+    font-size: 14px;
+  }
+}
