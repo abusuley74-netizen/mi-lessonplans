@@ -2230,6 +2230,21 @@ async def get_plans():
         ]
     }
 
+
+@api_router.post("/subscription/demo-upgrade")
+async def demo_upgrade(request: Request, user: User = Depends(get_current_user)):
+    """Demo upgrade — bypasses payment for preview testing"""
+    data = await request.json()
+    plan_id = data.get("plan_id")
+    if plan_id not in ("basic", "premium", "master"):
+        raise HTTPException(status_code=400, detail="Invalid plan")
+    await db.users.update_one(
+        {"user_id": user.user_id},
+        {"$set": {"subscription_plan": plan_id}}
+    )
+    return {"success": True, "plan": plan_id}
+
+
 @api_router.post("/subscription/checkout")
 async def subscription_checkout(request: Request, user: User = Depends(get_current_user)):
     data = await request.json()

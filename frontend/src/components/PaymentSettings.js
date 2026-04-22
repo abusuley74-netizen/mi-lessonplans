@@ -98,6 +98,21 @@ const PaymentSettings = () => {
   const handleSubscribeClick = async (planId) => {
     setSubscribing(planId);
     
+    // Demo upgrade — bypasses payment for testing
+    try {
+      const demoRes = await axios.post(
+        `${API_URL}/api/subscription/demo-upgrade`,
+        { plan_id: planId }
+      );
+      if (demoRes.data.success) {
+        toast.success(`Upgraded to ${planId}! Refreshing...`);
+        setTimeout(() => window.location.reload(), 1000);
+        return;
+      }
+    } catch {
+      // Fall through to real checkout
+    }
+
     try {
       const response = await axios.post(
         `${API_URL}/api/subscription/checkout`,
