@@ -1,196 +1,49 @@
-import React, { useRef, useState } from 'react';
-import { Printer, Download, Share2, Check, Image as ImageIcon } from 'lucide-react';
-import { toast } from 'sonner';
-import { authFetch } from '../services/api';
+import React, { useRef } from 'react';
+import { Check } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const LessonPreview = ({ lessonData }) => {
   const printRef = useRef();
-  const [downloadingImage, setDownloadingImage] = useState(false);
+  const navigate = useNavigate();
 
-  const handlePrint = () => {
-    window.print();
-  };
-
-  const handleDownload = () => {
-    const content = generateTextContent();
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${lessonData.subject}_${lessonData.topic}_lesson_plan.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  const handleImageDownload = async () => {
-    if (!lessonData.lesson_id) {
-      toast.error('Lesson ID not found');
-      return;
-    }
-
-    setDownloadingImage(true);
-    try {
-      const API_URL = process.env.REACT_APP_BACKEND_URL;
-      const response = await authFetch(`${API_URL}/api/lessons/${lessonData.lesson_id}/export/image`);
-      
-      if (!response.ok) {
-        throw new Error('Image download failed');
-      }
-      
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${lessonData.subject}_${lessonData.topic}_lesson.png`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      
-      toast.success('Image downloaded successfully!');
-    } catch (error) {
-      console.error('Image download error:', error);
-      toast.error('Failed to download image');
-    } finally {
-      setDownloadingImage(false);
-    }
-  };
-
-  const handleShare = async () => {
-    const shareData = {
-      title: `${lessonData.subject} Lesson Plan: ${lessonData.topic}`,
-      text: `Check out this lesson plan for ${lessonData.subject} - ${lessonData.topic}`,
-      url: window.location.href,
-    };
-
-    if (navigator.share) {
-      try {
-        await navigator.share(shareData);
-      } catch (err) {
-        console.log('Share cancelled');
-      }
-    } else {
-      // Fallback: copy to clipboard
-      await navigator.clipboard.writeText(`${shareData.title}\n${shareData.text}\n${shareData.url}`);
-      toast.success('Lesson plan info copied to clipboard!');
-    }
-  };
-
-  const generateTextContent = () => {
-    let text = `LESSON PLAN\n`;
-    text += `============\n\n`;
-    text += `Syllabus: ${lessonData.syllabus}\n`;
-    text += `Subject: ${lessonData.subject}\n`;
-    text += `Grade: ${lessonData.grade}\n`;
-    text += `Topic: ${lessonData.topic}\n`;
-    text += `Date: ${new Date(lessonData.created_at).toLocaleDateString()}\n\n`;
-    
-    const content = lessonData.content;
-    
-    if (lessonData.syllabus === 'Zanzibar') {
-      text += `GENERAL LEARNING OUTCOME:\n${content.generalOutcome || ''}\n\n`;
-      text += `MAIN TOPIC: ${content.mainTopic || ''}\n`;
-      text += `SUB TOPIC: ${content.subTopic || ''}\n\n`;
-      text += `SPECIFIC LEARNING OUTCOME:\n${content.specificOutcome || ''}\n\n`;
-      text += `LEARNING RESOURCES:\n${content.learningResources || ''}\n\n`;
-      text += `REFERENCES:\n${content.references || ''}\n\n`;
-      
-      if (content.introductionActivities) {
-        text += `INTRODUCTION (${content.introductionActivities.time}):\n`;
-        text += `Teaching Activities: ${content.introductionActivities.teachingActivities}\n`;
-        text += `Learning Activities: ${content.introductionActivities.learningActivities}\n`;
-        text += `Assessment: ${content.introductionActivities.assessment}\n\n`;
-      }
-      
-      if (content.newKnowledgeActivities) {
-        text += `BUILDING NEW KNOWLEDGE (${content.newKnowledgeActivities.time}):\n`;
-        text += `Teaching Activities: ${content.newKnowledgeActivities.teachingActivities}\n`;
-        text += `Learning Activities: ${content.newKnowledgeActivities.learningActivities}\n`;
-        text += `Assessment: ${content.newKnowledgeActivities.assessment}\n\n`;
-      }
-      
-      text += `TEACHER'S EVALUATION:\n${content.teacherEvaluation || ''}\n\n`;
-      text += `PUPIL'S WORK:\n${content.pupilWork || ''}\n\n`;
-      text += `REMARKS:\n${content.remarks || ''}\n`;
-    } else {
-      text += `MAIN COMPETENCE:\n${content.mainCompetence || ''}\n\n`;
-      text += `SPECIFIC COMPETENCE:\n${content.specificCompetence || ''}\n\n`;
-      text += `MAIN ACTIVITY:\n${content.mainActivity || ''}\n\n`;
-      text += `SPECIFIC ACTIVITY:\n${content.specificActivity || ''}\n\n`;
-      text += `TEACHING RESOURCES:\n${content.teachingResources || ''}\n\n`;
-      text += `REFERENCES:\n${content.references || ''}\n\n`;
-      
-      if (content.stages) {
-        Object.entries(content.stages).forEach(([stage, data]) => {
-          text += `${stage.toUpperCase()} (${data.time}):\n`;
-          text += `Teaching Activities: ${data.teachingActivities}\n`;
-          text += `Learning Activities: ${data.learningActivities}\n`;
-          text += `Assessment: ${data.assessment}\n\n`;
-        });
-      }
-      
-      text += `REMARKS:\n${content.remarks || ''}\n`;
-    }
-    
-    return text;
-  };
+  if (!lessonData || !lessonData.content || Object.keys(lessonData.content).length === 0) return null;
 
   const content = lessonData.content;
 
   return (
     <div className="bg-white border border-[#E4DFD5] rounded-xl shadow-sm overflow-hidden">
-      {/* Header Actions */}
+      {/* Header */}
       <div className="bg-[#F2EFE8] p-4 flex items-center justify-between border-b border-[#E4DFD5] no-print">
         <h3 className="font-heading font-semibold text-[#1A2E16]">Lesson Plan Preview</h3>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handlePrint}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-white border border-[#E4DFD5] rounded-lg text-[#4A5B46] hover:bg-[#FDFBF7] transition-colors"
-            data-testid="print-btn"
-          >
-            <Printer className="w-4 h-4" />
-            Print
-          </button>
-          <button
-            onClick={handleDownload}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-white border border-[#E4DFD5] rounded-lg text-[#4A5B46] hover:bg-[#FDFBF7] transition-colors"
-            data-testid="download-btn"
-          >
-            <Download className="w-4 h-4" />
-            Download
-          </button>
-          {/* Image download button for Arabic lessons */}
-          {lessonData.subject && (lessonData.subject.toLowerCase().includes('arabic') || lessonData.subject.includes('اللغة العربية') || lessonData.subject.includes('عربي')) && (
-            <button
-              onClick={handleImageDownload}
-              disabled={downloadingImage}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-white border border-[#E4DFD5] rounded-lg text-[#D95D39] hover:bg-[#FDFBF7] hover:text-[#B8431F] transition-colors disabled:opacity-50"
-              data-testid="image-download-btn"
-            >
-              {downloadingImage ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-[#D95D39] border-t-transparent rounded-full animate-spin" />
-                  Loading
-                </>
-              ) : (
-                <>
-                  <ImageIcon className="w-4 h-4" />
-                  Image
-                </>
-              )}
-            </button>
-          )}
-          <button
-            onClick={handleShare}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-[#2D5A27] text-white rounded-lg hover:bg-[#21441C] transition-colors"
-            data-testid="share-btn"
-          >
-            <Share2 className="w-4 h-4" />
-            Share
-          </button>
-        </div>
+        <button
+          onClick={() => navigate('/myhub')}
+          className="go-to-myhub-blink"
+          data-testid="go-to-myhub-btn"
+        >
+          Now go to MyHub
+        </button>
+        <style>{`
+          .go-to-myhub-blink {
+            padding: 8px 20px;
+            font-size: 14px;
+            font-weight: 700;
+            color: #fff;
+            background: #2D5A27;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            animation: myhubBlink 1.2s ease-in-out infinite;
+            transition: transform 0.2s;
+          }
+          .go-to-myhub-blink:hover {
+            transform: scale(1.05);
+            background: #21441C;
+          }
+          @keyframes myhubBlink {
+            0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(45,90,39,0.5); }
+            50% { opacity: 0.7; box-shadow: 0 0 16px 4px rgba(45,90,39,0.4); }
+          }
+        `}</style>
       </div>
 
       {/* Content */}
